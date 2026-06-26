@@ -20,6 +20,7 @@ let state = {
     let wallpaperOffsetY = 50;
     let wallpaperPanStart = null;
     let wallpaperPanOffset = null;
+    let predictionRequestId = 0;
 
     let originalViewportHeight = window.innerHeight;
     const GEMINI_MODEL_CANDIDATES = [
@@ -355,9 +356,66 @@ let state = {
 
       const aiBtn = document.createElement('button');
       aiBtn.className = 'char-ai-btn';
-      aiBtn.onclick = function() { openModal('aiConfigModal'); };
+      aiBtn.type = 'button';
+      aiBtn.title = 'タップでAI予測を再生成 / 長押しでAPIキー設定';
       aiBtn.innerHTML = '🤖';
+      initAiButtonActions(aiBtn);
       container.appendChild(aiBtn);
+    }
+
+    function initAiButtonActions(aiBtn) {
+      let longPressTimer = null;
+      let didLongPress = false;
+
+      const clearTimer = () => {
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      };
+
+      aiBtn.addEventListener('pointerdown', function(e) {
+        e.preventDefault();
+        didLongPress = false;
+        clearTimer();
+        longPressTimer = setTimeout(() => {
+          didLongPress = true;
+          openModal('aiConfigModal');
+        }, 550);
+      });
+
+      aiBtn.addEventListener('pointerup', function(e) {
+        e.preventDefault();
+        clearTimer();
+        if (!didLongPress) refreshAiPredictionsFromButton();
+      });
+
+      aiBtn.addEventListener('pointercancel', clearTimer);
+      aiBtn.addEventListener('pointerleave', clearTimer);
+      aiBtn.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+      });
+      aiBtn.onclick = function(e) {
+        e.preventDefault();
+      };
+    }
+
+    function refreshAiPredictionsFromButton() {
+      const project = state.projects[state.currentProjectId];
+      state.aiToggle = true;
+      document.getElementById('aiToggle').checked = true;
+      predictedTalks = [];
+      predictionRequestId++;
+      saveState();
+      renderTimeline();
+
+      if (!state.apiKey) {
+        openModal('aiConfigModal');
+        return;
+      }
+      if (project && project.talks.length > 0) {
+        callGeminiApiForPrediction({ append: false, count: 3 });
+      }
     }
 
     function selectChar(element, name) {
@@ -655,7 +713,10 @@ let state = {
     }
 
     /* 🎯 【構造修正】Gemini 1.5 FlashのJSON構造に対応*/
-    async function callGeminiApiForPrediction() {
+    async function callGeminiApiForPrediction(options = {}) {
+      const append = !!options.append;
+      const count = Math.max(1, Math.min(3, options.count || 3));
+      const requestId = ++predictionRequestId;
       if (!state.aiToggle) return;
       if (!state.apiKey) {
         console.log("APIキーが未入力です。");
@@ -674,6 +735,9 @@ let state = {
 
       const recentTalks = project.talks.slice(-15);
       const contextText = recentTalks.map(t => `[${t.charName}]: ${t.text}`).join("\n");
+      const keptPredictionText = append && predictedTalks.length > 0
+        ? predictedTalks.map(t => `[${t.charName}]: ${t.text}`).join("\n")
+        : "なし";
 
       const prompt = `あなたはチャット形式の台本作成アシスタントです。
 これまでの台本の流れを読み取り、自然に続く返信をちょうど3件だけ予測してください。
@@ -695,7 +759,13 @@ ${charNames.join(', ')}
 ]
 
 これまでの台本:
-${contextText}`;
+${contextText}
+
+画面に残っている予測候補:
+${keptPredictionText}
+
+今回必要な追加予測数: ${count}件
+すでに画面に残っている予測候補は作り直さず、その続きを${count}件だけ出してください。`;
 
       try {
         const data = await requestGeminiPrediction(prompt);
@@ -705,32 +775,47 @@ ${contextText}`;
         const parsed = parsePredictionItems(rawText);
         if (!Array.isArray(parsed)) throw new Error("AI応答がJSON配列ではありません。");
 
-        const validNames = new Set(charNames);
-        predictedTalks = parsed
-          .filter(item => item && typeof item.charName === 'string' && typeof item.text === 'string')
-          .map(item => ({
-            charName: validNames.has(item.charName) ? item.charName : (project.characters[0]?.name || currentCharacter),
-            text: item.text.trim()
-          }))
-          .filter(item => item.text)
-          .slice(0, 3);
+        if (requestId !== predictionRequestId) return;
+
+        const newPredictions = normalizePredictionItems(parsed, charNames, project)
+          .filter(item => !predictedTalks.some(existing => existing.charName === item.charName && existing.text === item.text))
+          .slice(0, count);
+
+        predictedTalks = append
+          ? predictedTalks.concat(newPredictions).slice(0, 3)
+          : newPredictions.slice(0, 3);
 
         if (predictedTalks.length === 0) {
           throw new Error("表示できる予測セリフがありませんでした。");
         }
       } catch (e) {
+        if (requestId !== predictionRequestId) return;
         console.error("Gemini prediction error:", e);
-        predictedTalks = [
-          {
-            charName: "システム警告",
-            text: `予測に失敗しました: ${e.message}`,
-            isSystem: true
-          }
-        ];
+        if (!append || predictedTalks.length === 0) {
+          predictedTalks = [
+            {
+              charName: "システム警告",
+              text: `予測に失敗しました: ${e.message}`,
+              isSystem: true
+            }
+          ];
+        }
       } finally {
+        if (requestId !== predictionRequestId) return;
         if (loader) loader.classList.add('hidden');
         renderTimeline();
       }
+    }
+
+    function normalizePredictionItems(items, charNames, project) {
+      const validNames = new Set(charNames);
+      return items
+        .filter(item => item && typeof item.charName === 'string' && typeof item.text === 'string')
+        .map(item => ({
+          charName: validNames.has(item.charName) ? item.charName : (project.characters[0]?.name || currentCharacter),
+          text: item.text.trim()
+        }))
+        .filter(item => item.text);
     }
 
     async function requestGeminiPrediction(prompt) {
@@ -899,21 +984,22 @@ ${contextText}`;
 
     function acceptAiPrediction(untilIndex) {
       const project = state.projects[state.currentProjectId];
-      for (let i = 0; i <= untilIndex; i++) {
-        const prediction = predictedTalks[i];
-        if (prediction && !prediction.isSystem && prediction.charName !== "システム警告") {
-          project.talks.push({
-            charName: prediction.charName,
-            text: prediction.text
-          });
-        }
+      const prediction = predictedTalks[untilIndex];
+      if (prediction && !prediction.isSystem && prediction.charName !== "システム警告") {
+        project.talks.push({
+          charName: prediction.charName,
+          text: prediction.text
+        });
       }
-      predictedTalks = [];
+      predictedTalks.splice(untilIndex, 1);
       saveState();
       renderTimeline();
       updateMetaStats();
 
-      callGeminiApiForPrediction();
+      const missingCount = Math.max(0, 3 - predictedTalks.length);
+      if (missingCount > 0) {
+        callGeminiApiForPrediction({ append: true, count: missingCount });
+      }
     }
 
     function openEditTalkModal(index) {
