@@ -21,6 +21,8 @@ let state = {
     let wallpaperPanStart = null;
     let wallpaperPanOffset = null;
     let predictionRequestId = 0;
+    let aiStatusMessage = "";
+    let aiStatusType = "info";
 
     let originalViewportHeight = window.innerHeight;
     const GEMINI_MODEL_CANDIDATES = [
@@ -404,12 +406,15 @@ let state = {
       const project = state.projects[state.currentProjectId];
       state.aiToggle = true;
       document.getElementById('aiToggle').checked = true;
-      predictedTalks = [];
       predictionRequestId++;
+      aiStatusMessage = "AIが予測を更新中...";
+      aiStatusType = "info";
       saveState();
       renderTimeline();
 
       if (!state.apiKey) {
+        aiStatusMessage = "";
+        renderTimeline();
         openModal('aiConfigModal');
         return;
       }
@@ -676,9 +681,9 @@ let state = {
 
       // 3. ローディング表記の制御
       const predicting = document.createElement('div');
-      predicting.className = 'predicting-msg hidden';
+      predicting.className = `predicting-msg ${aiStatusMessage ? '' : 'hidden'} ${aiStatusType === 'error' ? 'error' : ''}`;
       predicting.id = 'aiPredicting';
-      predicting.innerText = '🔮 Geminiが次回の展開を予測中...';
+      predicting.innerText = aiStatusMessage || 'AIが予測を更新中...';
       timeline.appendChild(predicting);
       
       updateSelectedTalkCount();
@@ -726,8 +731,13 @@ let state = {
       const project = state.projects[state.currentProjectId];
       if (!project || project.talks.length === 0) return;
 
+      aiStatusMessage = append ? "AIが続きを補充中..." : "AIが予測を更新中...";
+      aiStatusType = "info";
       const loader = document.getElementById('aiPredicting');
-      if (loader) loader.classList.remove('hidden');
+      if (loader) {
+        loader.innerText = aiStatusMessage;
+        loader.classList.remove('hidden', 'error');
+      }
       scrollToBottom();
 
       const charNames = project.characters.map(c => c.name);
@@ -740,22 +750,24 @@ let state = {
         : "なし";
 
       const prompt = `あなたはチャット形式の台本作成アシスタントです。
-これまでの台本の流れを読み取り、自然に続く返信をちょうど3件だけ予測してください。
+これまでの台本の流れを読み取り、自然に続く返信を予測してください。
 
-条件:
-- 返信は必ず以下の利用可能キャラクター名のいずれかを charName に入れてください。
-- 余計な説明、挨拶、Markdown、コードフェンスは出力しないでください。
-- 出力は必ずJSON配列だけにしてください。
-- text はそのまま台本に使える短めのセリフにしてください。
+厳守ルール:
+- 出力はJSON配列だけにしてください。説明文、挨拶、Markdown、コードフェンスは禁止です。
+- JSON配列の要素数は必ず ${count} 件にしてください。
+- 各要素は {"charName":"キャラクター名","text":"セリフ"} の形だけにしてください。
+- charName は必ず以下の利用可能キャラクター名のいずれかにしてください。
+- text はそのまま台本に使える短い1行のセリフにしてください。
+- text 内に改行を入れないでください。
+- text 内に引用符や記号が必要な場合は、JSONとして正しくエスケープしてください。
+- 途中で文章を切らず、必ず閉じ括弧 ] まで出力してください。
 
 利用可能キャラクター:
 ${charNames.join(', ')}
 
-出力形式:
+出力例:
 [
-  {"charName":"キャラクター名","text":"セリフ1"},
-  {"charName":"キャラクター名","text":"セリフ2"},
-  {"charName":"キャラクター名","text":"セリフ3"}
+  {"charName":"キャラクター名","text":"セリフ"}
 ]
 
 これまでの台本:
@@ -781,28 +793,24 @@ ${keptPredictionText}
           .filter(item => !predictedTalks.some(existing => existing.charName === item.charName && existing.text === item.text))
           .slice(0, count);
 
-        predictedTalks = append
+        const nextPredictions = append
           ? predictedTalks.concat(newPredictions).slice(0, 3)
           : newPredictions.slice(0, 3);
 
-        if (predictedTalks.length === 0) {
+        if (nextPredictions.length === 0) {
           throw new Error("表示できる予測セリフがありませんでした。");
         }
+
+        predictedTalks = nextPredictions;
+        aiStatusMessage = "";
+        aiStatusType = "info";
       } catch (e) {
         if (requestId !== predictionRequestId) return;
         console.error("Gemini prediction error:", e);
-        if (!append || predictedTalks.length === 0) {
-          predictedTalks = [
-            {
-              charName: "システム警告",
-              text: `予測に失敗しました: ${e.message}`,
-              isSystem: true
-            }
-          ];
-        }
+        aiStatusMessage = "予測の更新に失敗しました。もう一度お試しください。";
+        aiStatusType = "error";
       } finally {
         if (requestId !== predictionRequestId) return;
-        if (loader) loader.classList.add('hidden');
         renderTimeline();
       }
     }
@@ -812,8 +820,8 @@ ${keptPredictionText}
       return items
         .filter(item => item && typeof item.charName === 'string' && typeof item.text === 'string')
         .map(item => ({
-          charName: validNames.has(item.charName) ? item.charName : (project.characters[0]?.name || currentCharacter),
-          text: item.text.trim()
+          charName: validNames.has(item.charName.trim()) ? item.charName.trim() : (project.characters[0]?.name || currentCharacter),
+          text: cleanupPredictionValue(item.text)
         }))
         .filter(item => item.text);
     }
@@ -874,6 +882,7 @@ ${keptPredictionText}
       try {
         return JSON.parse(jsonText);
       } catch (error) {
+        console.warn("Gemini raw response could not be parsed as JSON:", text);
         const repaired = parseLoosePredictionItems(jsonText);
         if (repaired.length > 0) return repaired;
         throw error;
@@ -978,6 +987,7 @@ ${keptPredictionText}
 
       const start = cleaned.indexOf('[');
       const end = cleaned.lastIndexOf(']');
+      if (start !== -1 && (end === -1 || end <= start)) return cleaned.slice(start);
       if (start === -1 || end === -1 || end <= start) return cleaned;
       return cleaned.slice(start, end + 1);
     }

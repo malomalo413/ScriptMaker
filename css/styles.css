@@ -498,6 +498,11 @@
       animation: pulse 1.5s infinite;
       margin: 8px 0;
     }
+    .predicting-msg.error {
+      color: #dc2626;
+      animation: none;
+      opacity: 0.9;
+    }
     @keyframes pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
 
     /* ==========================================
