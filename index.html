@@ -32,6 +32,7 @@
   </div>
 
   <div id="editorView" class="editor-view hidden">
+    <div id="editorWallpaperLayer" class="editor-wallpaper-layer"></div>
     <div class="nav-bar">
       <button class="back-btn" onclick="goBack()">←</button>
       <div class="project-title" id="projectTitle">プロジェクト名</div>
@@ -133,7 +134,7 @@
           <span>画像サイズ</span>
           <span id="wallpaperSizeVal" style="font-weight:bold; color:var(--primary-color);">100%</span>
         </label>
-        <input type="range" id="wallpaperSizeSlider" min="50" max="250" value="100" step="2" oninput="updateWallpaperPreviewStyle()">
+        <input type="range" id="wallpaperSizeSlider" min="100" max="250" value="100" step="2" oninput="updateWallpaperPreviewStyle()">
       </div>
       <div class="modal-actions">
         <button class="btn-modal-cancel" onclick="clearWallpaper()">削除</button>

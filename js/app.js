@@ -167,7 +167,7 @@ let state = {
       const wallpaper = project?.wallpaper || {};
 
       selectedWallpaperBase64 = wallpaper.image || "";
-      wallpaperSize = wallpaper.size || 100;
+      wallpaperSize = Math.max(100, wallpaper.size || 100);
       wallpaperOffsetX = wallpaper.offsetX ?? 50;
       wallpaperOffsetY = wallpaper.offsetY ?? 50;
       wallpaperPanStart = null;
@@ -232,22 +232,23 @@ let state = {
     }
 
     function applyProjectWallpaper() {
-      const timeline = document.getElementById('talkTimeline');
+      const wallpaperLayer = document.getElementById('editorWallpaperLayer');
       const project = state.projects[state.currentProjectId];
       const wallpaper = project?.wallpaper;
 
-      if (!timeline || !wallpaper?.image) {
-        timeline.style.backgroundImage = "";
-        timeline.style.backgroundSize = "";
-        timeline.style.backgroundPosition = "";
-        timeline.style.backgroundRepeat = "";
+      if (!wallpaperLayer || !wallpaper?.image) {
+        if (wallpaperLayer) {
+          wallpaperLayer.style.backgroundImage = "";
+          wallpaperLayer.style.transform = "";
+          wallpaperLayer.style.backgroundPosition = "";
+        }
         return;
       }
 
-      timeline.style.backgroundImage = `url(${wallpaper.image})`;
-      timeline.style.backgroundSize = `${wallpaper.size || 100}%`;
-      timeline.style.backgroundPosition = `${wallpaper.offsetX ?? 50}% ${wallpaper.offsetY ?? 50}%`;
-      timeline.style.backgroundRepeat = "no-repeat";
+      const scale = Math.max(1, (wallpaper.size || 100) / 100);
+      wallpaperLayer.style.backgroundImage = `url(${wallpaper.image})`;
+      wallpaperLayer.style.backgroundPosition = `${wallpaper.offsetX ?? 50}% ${wallpaper.offsetY ?? 50}%`;
+      wallpaperLayer.style.transform = `scale(${scale})`;
     }
 
     function openProject(id) {
