@@ -1,9 +1,9 @@
-const CACHE_NAME = 'script-assistant-pwa-v4';
+const CACHE_NAME = 'script-assistant-pwa-v5';
 const APP_SHELL = [
   './',
   './index.html',
-  './css/styles.css',
-  './js/app.js',
+  './css/styles.css?v=5',
+  './js/app.js?v=5',
   './manifest.json',
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',
@@ -38,6 +38,17 @@ self.addEventListener('fetch', event => {
 
   if (requestUrl.origin !== location.origin) {
     event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
+    return;
+  }
+
+  if (['script', 'style', 'worker'].includes(event.request.destination)) {
+    event.respondWith(
+      fetch(event.request).then(response => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+        return response;
+      }).catch(() => caches.match(event.request))
+    );
     return;
   }
 

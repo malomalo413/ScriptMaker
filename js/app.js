@@ -22,6 +22,11 @@ let state = {
     let wallpaperPanOffset = null;
 
     let originalViewportHeight = window.innerHeight;
+    const GEMINI_MODEL_CANDIDATES = [
+      'gemini-2.5-flash',
+      'gemini-flash-latest',
+      'gemini-3.5-flash'
+    ];
 
     window.onload = function() {
       const saved = localStorage.getItem('script_assistant_data_v21');
@@ -73,6 +78,7 @@ let state = {
     function saveAiConfig() {
       state.apiKey = document.getElementById('apiKey').value.trim();
       state.aiToggle = document.getElementById('aiToggle').checked;
+      predictedTalks = [];
       saveState();
       updateAiStatus();
       closeModal('aiConfigModal');
@@ -81,6 +87,8 @@ let state = {
       const project = state.projects[state.currentProjectId];
       if (state.aiToggle && state.apiKey && project && project.talks.length > 0) {
         callGeminiApiForPrediction();
+      } else {
+        renderTimeline();
       }
     }
 
@@ -658,30 +666,7 @@ ${charNames.join(', ')}
 ${contextText}`;
 
       try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${encodeURIComponent(state.apiKey)}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: prompt }]
-              }
-            ],
-            generationConfig: {
-              temperature: 0.8,
-              maxOutputTokens: 512,
-              responseMimeType: "application/json"
-            }
-          })
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error?.message || `HTTPエラー: ${response.status}`);
-        }
-
-        const data = await response.json();
+        const data = await requestGeminiPrediction(prompt);
         const rawText = data.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("").trim();
         if (!rawText) throw new Error("AIから空の応答が返りました。");
 
@@ -714,6 +699,46 @@ ${contextText}`;
         if (loader) loader.classList.add('hidden');
         renderTimeline();
       }
+    }
+
+    async function requestGeminiPrediction(prompt) {
+      let lastError = null;
+
+      for (const model of GEMINI_MODEL_CANDIDATES) {
+        try {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(state.apiKey)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                {
+                  role: "user",
+                  parts: [{ text: prompt }]
+                }
+              ],
+              generationConfig: {
+                temperature: 0.8,
+                maxOutputTokens: 512,
+                responseMimeType: "application/json"
+              }
+            })
+          });
+
+          if (response.ok) return response.json();
+
+          const errorData = await response.json().catch(() => ({}));
+          const message = errorData.error?.message || `HTTP error: ${response.status}`;
+          lastError = new Error(message);
+
+          const canTryNextModel = response.status === 404 || /not found|not supported|model/i.test(message);
+          if (!canTryNextModel) break;
+        } catch (error) {
+          lastError = error;
+          break;
+        }
+      }
+
+      throw lastError || new Error("Gemini API request failed.");
     }
 
     function extractJsonArrayText(text) {
@@ -1295,7 +1320,9 @@ ${contextText}`;
     }
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
-    navigator.serviceWorker.register('./service-worker.js').catch(function(error) {
+    navigator.serviceWorker.register('./service-worker.js').then(function(registration) {
+      registration.update();
+    }).catch(function(error) {
       console.warn('Service worker registration failed:', error);
     });
   });
