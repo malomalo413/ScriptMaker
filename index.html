@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>チャット型台本作成アシスタント</title>
+  <meta name="description" content="スマホで使えるチャット型台本作成アプリ">
+  <meta name="theme-color" content="#3b82f6">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="台本作成">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="./assets/icons/icon-512.png">
+  <link rel="stylesheet" href="./css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
+  <script src="./js/app.js" defer></script>
+</head>
+<body>
+<div id="openingView" class="opening-view">
+    <div class="opening-overlay"></div>
+    <div class="opening-content">
+      <div class="top-tabs">
+        <button class="tab-btn active">プロジェクト</button>
+        <button class="tab-btn">出力</button>
+      </div>
+      <div class="project-list" id="projectList"></div>
+      <button class="create-btn" onclick="openCreateProjectModal()">+ 新規プロジェクト作成</button>
+    </div>
+  </div>
+
+  <div id="editorView" class="editor-view hidden">
+    <div class="nav-bar">
+      <button class="back-btn" onclick="goBack()">←</button>
+      <div class="project-title" id="projectTitle">プロジェクト名</div>
+      <div class="nav-actions">
+        <button class="nav-btn btn-nav-save" onclick="saveDataAlert()">保存</button>
+        <button class="nav-btn btn-nav-export" onclick="exportDataAlert()">出力</button>
+        <button class="nav-btn btn-nav-wallpaper" onclick="openWallpaperModal()">壁紙</button>
+        <button class="nav-btn btn-nav-mode" id="modeToggleBtn" onclick="toggleEditMode()">編集</button>
+      </div>
+    </div>
+
+    <div class="header-scroll-area">
+      <div class="meta-stats" id="metaStats">
+        <div class="count-controls">
+          <label><input type="checkbox" id="excludePunctuationCheck">句読点を除く</label>
+          <label><input type="checkbox" id="excludeCustomCheck">カスタム</label>
+          <input type="text" id="customExcludeChars" placeholder="除外する文字">
+        </div>
+        <div class="count-output" id="countOutput"></div>
+      </div>
+      <div class="batch-edit-bar" id="batchEditBar">
+        <span id="selectedTalkCount">0件選択中</span>
+        <div class="batch-edit-actions">
+          <button class="btn-batch-clear" onclick="clearTalkSelection()">選択解除</button>
+          <button class="btn-batch-delete" onclick="deleteSelectedTalks()">削除</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="talk-timeline" id="talkTimeline"></div>
+
+    <div class="bottom-input-bar" id="bottomInputBar">
+      <div class="char-selector-container" id="charSelectorContainer"></div>
+      <div class="input-row">
+        <textarea class="input-speech" id="inputSpeech" placeholder="セリフを入力..." rows="1"></textarea>
+        <button class="send-btn" onclick="sendMessage()">送信</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="trashZone" class="trash-zone">
+    🗑️
+    <span>削除</span>
+  </div>
+
+  <div id="projectModal" class="custom-modal hidden">
+    <div class="modal-content">
+      <h4>新規プロジェクト作成</h4>
+      <input type="text" id="newProjectName" placeholder="プロジェクト名を入力...">
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" onclick="closeModal('projectModal')">キャンセル</button>
+        <button class="btn-modal-confirm" onclick="confirmCreateProject()">決定</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="charModal" class="custom-modal hidden">
+    <div class="modal-content">
+      <h4 id="charModalTitle">キャラクター追加</h4>
+      <div class="modal-row">
+        <input type="text" id="newCharName" placeholder="キャラクター名を入力...">
+      </div>
+      
+      <div class="file-input-row" id="pinchTouchArea">
+        <label class="file-label" for="newCharAvatar">画像を選択</label>
+        <input type="file" id="newCharAvatar" accept="image/*" style="display:none;" onchange="previewAvatar(this)">
+        <div id="avatarPreview" class="avatar-preview-box"></div>
+      </div>
+
+      <div class="modal-row-inline">
+        <input type="checkbox" id="charRoundCheck" checked onchange="updatePreviewStyle()">
+        <label for="charRoundCheck">アバターを円形（丸型）に収める</label>
+      </div>
+      <div class="modal-row">
+        <label style="display:flex; justify-content:space-between; color:#64748b; font-size:12px;">
+          <span>画像周辺を2本指でピンチして拡大縮小</span>
+          <span id="zoomVal" style="font-weight:bold; color:var(--primary-color);">100%</span>
+        </label>
+        <input type="range" id="charZoomSlider" min="50" max="300" value="100" step="2" oninput="updatePreviewStyle()">
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" onclick="closeModal('charModal')">キャンセル</button>
+        <button class="btn-modal-confirm" id="charConfirmBtn" type="button" ontouchstart="confirmSaveCharacter(); return false;" onpointerdown="confirmSaveCharacter(); return false;" onclick="confirmSaveCharacter(); return false;">決定</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="wallpaperModal" class="custom-modal hidden">
+    <div class="modal-content">
+      <h4>トーク画面の壁紙設定</h4>
+      <div class="file-input-row">
+        <label class="file-label" for="wallpaperInput">壁紙画像を選択</label>
+        <input type="file" id="wallpaperInput" accept="image/*" style="display:none;" onchange="previewWallpaper(this)">
+        <div id="wallpaperPreview" class="wallpaper-preview-box"></div>
+      </div>
+      <div class="modal-row">
+        <label style="display:flex; justify-content:space-between; color:#64748b; font-size:12px;">
+          <span>画像サイズ</span>
+          <span id="wallpaperSizeVal" style="font-weight:bold; color:var(--primary-color);">100%</span>
+        </label>
+        <input type="range" id="wallpaperSizeSlider" min="50" max="250" value="100" step="2" oninput="updateWallpaperPreviewStyle()">
+      </div>
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" onclick="clearWallpaper()">削除</button>
+        <button class="btn-modal-cancel" onclick="closeModal('wallpaperModal')">キャンセル</button>
+        <button class="btn-modal-confirm" id="wallpaperConfirmBtn" type="button" ontouchstart="confirmWallpaper(); return false;" onpointerdown="confirmWallpaper(); return false;" onclick="confirmWallpaper(); return false;">決定</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="aiConfigModal" class="custom-modal hidden">
+    <div class="modal-content">
+      <h4>🤖 AIシナリオ自動予測設定</h4>
+      <div class="modal-row-inline">
+        <input type="checkbox" id="aiToggle" checked onchange="updateAiStatus()">
+        <label for="aiToggle">自動予測展開を有効化</label>
+      </div>
+      <div class="modal-row">
+        <label>Gemini API Key:</label>
+        <input type="password" id="apiKey" placeholder="AI StudioのAPIキーを入力">
+      </div>
+      <div class="modal-actions">
+        <button class="btn-modal-confirm" onclick="saveAiConfig()">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="editTalkModal" class="custom-modal hidden">
+    <div class="modal-content">
+      <h4>セリフを修正:</h4>
+      <input type="text" id="editTalkInput">
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" onclick="closeModal('editTalkModal')">キャンセル</button>
+        <button class="btn-modal-confirm" onclick="confirmEditTalk()">決定</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
