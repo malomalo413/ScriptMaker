@@ -38,8 +38,8 @@ let state = {
         state.projects["p_default"] = {
           title: "チャットプロジェクト",
           characters: [
-            { name: "らん", avatar: "", isRound: true, zoom: 100 },
-            { name: "キャラ2", avatar: "", isRound: true, zoom: 100 }
+            { name: "らん", avatar: "", isRound: true, zoom: 100, isProtagonist: true },
+            { name: "キャラ2", avatar: "", isRound: true, zoom: 100, isProtagonist: false }
           ],
           talks: [
             { charName: "らん", text: "セリフを長押し（0.4秒）すると、画面下の中央にゴミ箱が現れます！" },
@@ -50,6 +50,8 @@ let state = {
         state.aiToggle = true;
         saveState();
       }
+
+      normalizeProjectData();
 
       document.getElementById('apiKey').value = state.apiKey;
       document.getElementById('aiToggle').checked = state.aiToggle;
@@ -63,6 +65,20 @@ let state = {
       initWallpaperModalActions();
       initWallpaperPan();
     };
+
+    function normalizeProjectData() {
+      Object.values(state.projects || {}).forEach(project => {
+        if (!Array.isArray(project.characters)) project.characters = [];
+        project.characters.forEach((char, index) => {
+          if (char.isProtagonist === undefined) {
+            char.isProtagonist = index === 0;
+          }
+        });
+        if (!project.characters.some(char => char.isProtagonist) && project.characters[0]) {
+          project.characters[0].isProtagonist = true;
+        }
+      });
+    }
 
     function saveState() {
       try {
@@ -155,8 +171,8 @@ let state = {
       state.projects[id] = {
         title: name,
         characters: [
-          { name: "らん", avatar: "", isRound: true, zoom: 100 },
-          { name: "キャラ2", avatar: "", isRound: true, zoom: 100 }
+          { name: "らん", avatar: "", isRound: true, zoom: 100, isProtagonist: true },
+          { name: "キャラ2", avatar: "", isRound: true, zoom: 100, isProtagonist: false }
         ],
         talks: []
       };
@@ -377,6 +393,8 @@ let state = {
       document.getElementById('newCharName').value = "";
       document.getElementById('newCharName').disabled = false;
       document.getElementById('charRoundCheck').checked = true;
+      const project = state.projects[state.currentProjectId];
+      document.getElementById('charProtagonistCheck').checked = !project.characters.some(c => c.isProtagonist);
       document.getElementById('charZoomSlider').value = 100;
       const preview = document.getElementById('avatarPreview');
       preview.style.backgroundImage = "";
@@ -396,6 +414,7 @@ let state = {
       
       selectedAvatarBase64 = char.avatar || "";
       document.getElementById('charRoundCheck').checked = char.isRound !== false;
+      document.getElementById('charProtagonistCheck').checked = !!char.isProtagonist;
       document.getElementById('charZoomSlider').value = char.zoom || 100;
 
       const preview = document.getElementById('avatarPreview');
@@ -451,6 +470,7 @@ let state = {
 
       const project = state.projects[state.currentProjectId];
       const isRound = document.getElementById('charRoundCheck').checked;
+      const isProtagonist = document.getElementById('charProtagonistCheck').checked;
       const zoom = parseInt(document.getElementById('charZoomSlider').value);
 
       if (editingCharName === null) {
@@ -458,7 +478,8 @@ let state = {
           alert("同名のキャラクターが既に存在します。");
           return;
         }
-        project.characters.push({ name: name, avatar: selectedAvatarBase64, isRound: isRound, zoom: zoom, offsetX: avatarOffsetX, offsetY: avatarOffsetY });
+        if (isProtagonist) project.characters.forEach(c => c.isProtagonist = false);
+        project.characters.push({ name: name, avatar: selectedAvatarBase64, isRound: isRound, zoom: zoom, offsetX: avatarOffsetX, offsetY: avatarOffsetY, isProtagonist: isProtagonist });
         currentCharacter = name;
       } else {
         const char = project.characters.find(c => c.name === editingCharName);
@@ -477,9 +498,15 @@ let state = {
           char.name = name;
           char.avatar = selectedAvatarBase64;
           char.isRound = isRound;
+          char.isProtagonist = isProtagonist;
           char.zoom = zoom;
           char.offsetX = avatarOffsetX;
           char.offsetY = avatarOffsetY;
+          if (isProtagonist) {
+            project.characters.forEach(c => {
+              if (c !== char) c.isProtagonist = false;
+            });
+          }
           if (currentCharacter === editingCharName) {
             currentCharacter = name;
           }
@@ -492,6 +519,11 @@ let state = {
       saveState();
     }
 
+    function isProtagonistTalk(project, charName) {
+      const char = project.characters.find(c => c.name === charName);
+      return !!char?.isProtagonist;
+    }
+
     function renderTimeline() {
       const timeline = document.getElementById('talkTimeline');
       timeline.innerHTML = '';
@@ -501,7 +533,7 @@ let state = {
       // 1. 確定済みのトークを描画
       project.talks.forEach((talk, index) => {
         const isScene = talk.charName === '情景描写';
-        const isRight = (talk.charName !== 'らん' && !isScene);
+        const isRight = isProtagonistTalk(project, talk.charName) && !isScene;
         const bubble = document.createElement('div');
         bubble.className = `chat-bubble ${isScene ? 'scene' : (isRight ? 'right' : 'left')}`;
         bubble.dataset.index = index;
@@ -550,7 +582,7 @@ let state = {
       if (state.aiToggle && predictedTalks.length > 0) {
         predictedTalks.forEach((talk, idx) => {
           const isScene = talk.charName === '情景描写';
-          const isRight = (talk.charName !== 'らん' && !isScene);
+          const isRight = isProtagonistTalk(project, talk.charName) && !isScene;
           const bubble = document.createElement('div');
           bubble.className = `chat-bubble ${isScene ? 'scene' : (isRight ? 'right' : 'left')} ai-predicted`;
 
@@ -670,8 +702,7 @@ ${contextText}`;
         const rawText = data.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("").trim();
         if (!rawText) throw new Error("AIから空の応答が返りました。");
 
-        const jsonText = extractJsonArrayText(rawText);
-        const parsed = JSON.parse(jsonText);
+        const parsed = parsePredictionItems(rawText);
         if (!Array.isArray(parsed)) throw new Error("AI応答がJSON配列ではありません。");
 
         const validNames = new Set(charNames);
@@ -692,7 +723,8 @@ ${contextText}`;
         predictedTalks = [
           {
             charName: "システム警告",
-            text: `予測に失敗しました: ${e.message}`
+            text: `予測に失敗しました: ${e.message}`,
+            isSystem: true
           }
         ];
       } finally {
@@ -719,7 +751,18 @@ ${contextText}`;
               generationConfig: {
                 temperature: 0.8,
                 maxOutputTokens: 512,
-                responseMimeType: "application/json"
+                responseMimeType: "application/json",
+                responseSchema: {
+                  type: "ARRAY",
+                  items: {
+                    type: "OBJECT",
+                    properties: {
+                      charName: { type: "STRING" },
+                      text: { type: "STRING" }
+                    },
+                    required: ["charName", "text"]
+                  }
+                }
               }
             })
           });
@@ -741,6 +784,107 @@ ${contextText}`;
       throw lastError || new Error("Gemini API request failed.");
     }
 
+    function parsePredictionItems(text) {
+      const jsonText = extractJsonArrayText(text);
+      try {
+        return JSON.parse(jsonText);
+      } catch (error) {
+        const repaired = parseLoosePredictionItems(jsonText);
+        if (repaired.length > 0) return repaired;
+        throw error;
+      }
+    }
+
+    function parseLoosePredictionItems(text) {
+      const items = [];
+      const blocks = extractObjectBlocks(text);
+      blocks.forEach(block => {
+        const charName = readJsonishStringValue(block, 'charName');
+        const itemText = readJsonishStringValue(block, 'text');
+        if (charName && itemText) {
+          items.push({
+            charName: cleanupPredictionValue(charName),
+            text: cleanupPredictionValue(itemText)
+          });
+        }
+      });
+      return items;
+    }
+
+    function extractObjectBlocks(text) {
+      const blocks = [];
+      let depth = 0;
+      let start = -1;
+      let inString = false;
+      let escaped = false;
+
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (inString) {
+          if (escaped) {
+            escaped = false;
+          } else if (ch === '\\') {
+            escaped = true;
+          } else if (ch === '"') {
+            inString = false;
+          }
+          continue;
+        }
+        if (ch === '"') {
+          inString = true;
+        } else if (ch === '{') {
+          if (depth === 0) start = i;
+          depth++;
+        } else if (ch === '}') {
+          depth--;
+          if (depth === 0 && start !== -1) {
+            blocks.push(text.slice(start, i + 1));
+            start = -1;
+          }
+        }
+      }
+
+      if (blocks.length === 0) {
+        const roughBlocks = text.match(/\{[\s\S]*?(?=\}\s*,|\}\s*\]|$)/g) || [];
+        return roughBlocks.map(block => block.endsWith('}') ? block : block + '}');
+      }
+      return blocks;
+    }
+
+    function readJsonishStringValue(block, key) {
+      const keyIndex = block.indexOf(`"${key}"`);
+      if (keyIndex === -1) return "";
+      const colonIndex = block.indexOf(':', keyIndex);
+      if (colonIndex === -1) return "";
+      const quoteIndex = block.indexOf('"', colonIndex);
+      if (quoteIndex === -1) return "";
+
+      let result = "";
+      let escaped = false;
+      for (let i = quoteIndex + 1; i < block.length; i++) {
+        const ch = block[i];
+        if (escaped) {
+          result += ch;
+          escaped = false;
+          continue;
+        }
+        if (ch === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (ch === '"') {
+          const rest = block.slice(i + 1).trimStart();
+          if (rest.startsWith(',') || rest.startsWith('}')) return result;
+        }
+        result += ch;
+      }
+      return result;
+    }
+
+    function cleanupPredictionValue(value) {
+      return value.replace(/\s+/g, ' ').trim();
+    }
+
     function extractJsonArrayText(text) {
       let cleaned = text.trim();
       if (cleaned.startsWith("```")) {
@@ -757,7 +901,7 @@ ${contextText}`;
       const project = state.projects[state.currentProjectId];
       for (let i = 0; i <= untilIndex; i++) {
         const prediction = predictedTalks[i];
-        if (prediction && prediction.charName !== "システム警告") {
+        if (prediction && !prediction.isSystem && prediction.charName !== "システム警告") {
           project.talks.push({
             charName: prediction.charName,
             text: prediction.text

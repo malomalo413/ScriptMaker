@@ -1,9 +1,9 @@
-const CACHE_NAME = 'script-assistant-pwa-v5';
+const CACHE_NAME = 'script-assistant-pwa-v6';
 const APP_SHELL = [
   './',
   './index.html',
-  './css/styles.css?v=5',
-  './js/app.js?v=5',
+  './css/styles.css?v=6',
+  './js/app.js?v=6',
   './manifest.json',
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',

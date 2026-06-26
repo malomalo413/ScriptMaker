@@ -14,9 +14,9 @@
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="./assets/icons/icon-512.png">
-  <link rel="stylesheet" href="./css/styles.css?v=5">
+  <link rel="stylesheet" href="./css/styles.css?v=6">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
-  <script src="./js/app.js?v=5" defer></script>
+  <script src="./js/app.js?v=6" defer></script>
 </head>
 <body>
 <div id="openingView" class="opening-view">
@@ -105,6 +105,10 @@
       <div class="modal-row-inline">
         <input type="checkbox" id="charRoundCheck" checked onchange="updatePreviewStyle()">
         <label for="charRoundCheck">アバターを円形（丸型）に収める</label>
+      </div>
+      <div class="modal-row-inline">
+        <input type="checkbox" id="charProtagonistCheck">
+        <label for="charProtagonistCheck">主人公として右側に表示する</label>
       </div>
       <div class="modal-row">
         <label style="display:flex; justify-content:space-between; color:#64748b; font-size:12px;">
