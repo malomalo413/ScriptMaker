@@ -1,4 +1,4 @@
-const CACHE_NAME = 'script-assistant-pwa-v2';
+const CACHE_NAME = 'script-assistant-pwa-v3';
 const APP_SHELL = [
   './',
   './index.html',
@@ -52,3 +52,4 @@ self.addEventListener('fetch', event => {
     })
   );
 });
+

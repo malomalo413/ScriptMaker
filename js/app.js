@@ -76,7 +76,12 @@ let state = {
       saveState();
       updateAiStatus();
       closeModal('aiConfigModal');
-      alert("AI設定とAPIキーを本体に保存しました。");
+      alert("AI設定とAPIキーを保存しました。");
+
+      const project = state.projects[state.currentProjectId];
+      if (state.aiToggle && state.apiKey && project && project.talks.length > 0) {
+        callGeminiApiForPrediction();
+      }
     }
 
     function renderProjectList() {
@@ -540,7 +545,7 @@ let state = {
           const isRight = (talk.charName !== 'らん' && !isScene);
           const bubble = document.createElement('div');
           bubble.className = `chat-bubble ${isScene ? 'scene' : (isRight ? 'right' : 'left')} ai-predicted`;
-          
+
           bubble.onclick = function() {
             acceptAiPrediction(idx);
           };
@@ -617,42 +622,43 @@ let state = {
         return;
       }
 
+      const project = state.projects[state.currentProjectId];
+      if (!project || project.talks.length === 0) return;
+
       const loader = document.getElementById('aiPredicting');
       if (loader) loader.classList.remove('hidden');
       scrollToBottom();
 
-      const project = state.projects[state.currentProjectId];
       const charNames = project.characters.map(c => c.name);
-      charNames.push("情景描写");
+      if (!charNames.includes("情景描写")) charNames.push("情景描写");
 
       const recentTalks = project.talks.slice(-15);
-      let contextText = "";
-      recentTalks.forEach(t => {
-        contextText += `[${t.charName}]: ${t.text}\n`;
-      });
+      const contextText = recentTalks.map(t => `[${t.charName}]: ${t.text}`).join("\n");
 
-      const prompt = `あなたは優秀な台本作成アシスタントです。
-これまでのチャット型台本の流れを読み取り、それに続く「自然な会話のやり取り」をちょうど3回分予測して出力してください。
+      const prompt = `あなたはチャット形式の台本作成アシスタントです。
+これまでの台本の流れを読み取り、自然に続く返信をちょうど3件だけ予測してください。
 
-【ルール】
-・以下の利用可能キャラクターリストに存在する名前のみを必ず主語 [キャラクター名] として使用してください。
-利用可能キャラクター: ${charNames.join(', ')}
+条件:
+- 返信は必ず以下の利用可能キャラクター名のいずれかを charName に入れてください。
+- 余計な説明、挨拶、Markdown、コードフェンスは出力しないでください。
+- 出力は必ずJSON配列だけにしてください。
+- text はそのまま台本に使える短めのセリフにしてください。
 
-・返却フォーマットは、解析しやすいように必ず以下のJSON配列形式（テキストのみ）で一言一句違えずに返してください。余計な挨拶や解説、マークダウンのコードフェンスは絶対に含めないでください。
+利用可能キャラクター:
+${charNames.join(', ')}
 
+出力形式:
 [
-  {"charName": "キャラクター名", "text": "セリフ内容1"},
-  {"charName": "キャラクター名", "text": "セリフ内容2"},
-  {"charName": "キャラクター名", "text": "セリフ内容3"}
+  {"charName":"キャラクター名","text":"セリフ1"},
+  {"charName":"キャラクター名","text":"セリフ2"},
+  {"charName":"キャラクター名","text":"セリフ3"}
 ]
 
-【これまでの台本の流れ】
-${contextText}
-`;
+これまでの台本:
+${contextText}`;
 
       try {
-        // APIリクエストを送信（contents -> role, parts 構造）
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(state.apiKey)}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -661,55 +667,75 @@ ${contextText}
                 role: "user",
                 parts: [{ text: prompt }]
               }
-            ]
+            ],
+            generationConfig: {
+              temperature: 0.8,
+              maxOutputTokens: 512,
+              responseMimeType: "application/json"
+            }
           })
         });
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error?.message || `HTTPエラー Status: ${response.status}`);
+          throw new Error(errorData.error?.message || `HTTPエラー: ${response.status}`);
         }
 
         const data = await response.json();
-        
-        if (!data.candidates || data.candidates.length === 0) {
-          throw new Error("AIからの応答が空でした。安全フィルターに接触した可能性があります。");
-        }
+        const rawText = data.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("").trim();
+        if (!rawText) throw new Error("AIから空の応答が返りました。");
 
-        let aiResultText = data.candidates[0].content.parts[0].text.trim();
-        
-        if (aiResultText.startsWith("```")) {
-          aiResultText = aiResultText.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
-        }
+        const jsonText = extractJsonArrayText(rawText);
+        const parsed = JSON.parse(jsonText);
+        if (!Array.isArray(parsed)) throw new Error("AI応答がJSON配列ではありません。");
 
-        const parsed = JSON.parse(aiResultText);
-        if (Array.isArray(parsed)) {
-          predictedTalks = parsed.slice(0, 3);
-        } else {
-          throw new Error("JSON形式が配列ではありませんでした。");
+        const validNames = new Set(charNames);
+        predictedTalks = parsed
+          .filter(item => item && typeof item.charName === 'string' && typeof item.text === 'string')
+          .map(item => ({
+            charName: validNames.has(item.charName) ? item.charName : (project.characters[0]?.name || currentCharacter),
+            text: item.text.trim()
+          }))
+          .filter(item => item.text)
+          .slice(0, 3);
+
+        if (predictedTalks.length === 0) {
+          throw new Error("表示できる予測セリフがありませんでした。");
         }
       } catch (e) {
-        console.error("Geminiエラーログ:", e);
-        // 🎯 ユーザーに具体的なエラー原因を提示するデバッグUI
+        console.error("Gemini prediction error:", e);
         predictedTalks = [
-          { 
+          {
             charName: "システム警告",
-            text: `⚠️ 予測失敗: ${e.message}\n\n【確認項目】\n・APIキーの周りに余計なスペースがありませんか？\n・支払いや無料枠の上限制限がかかっていませんか？` 
+            text: `予測に失敗しました: ${e.message}`
           }
         ];
       } finally {
         if (loader) loader.classList.add('hidden');
-        renderTimeline(); 
+        renderTimeline();
       }
+    }
+
+    function extractJsonArrayText(text) {
+      let cleaned = text.trim();
+      if (cleaned.startsWith("```")) {
+        cleaned = cleaned.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
+      }
+
+      const start = cleaned.indexOf('[');
+      const end = cleaned.lastIndexOf(']');
+      if (start === -1 || end === -1 || end <= start) return cleaned;
+      return cleaned.slice(start, end + 1);
     }
 
     function acceptAiPrediction(untilIndex) {
       const project = state.projects[state.currentProjectId];
       for (let i = 0; i <= untilIndex; i++) {
-        if (predictedTalks[i] && predictedTalks[i].charName !== "システム警告") {
+        const prediction = predictedTalks[i];
+        if (prediction && prediction.charName !== "システム警告") {
           project.talks.push({
-            charName: predictedTalks[i].charName,
-            text: predictedTalks[i].text
+            charName: prediction.charName,
+            text: prediction.text
           });
         }
       }
@@ -717,7 +743,7 @@ ${contextText}
       saveState();
       renderTimeline();
       updateMetaStats();
-      
+
       callGeminiApiForPrediction();
     }
 
