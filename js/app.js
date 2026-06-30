@@ -299,7 +299,9 @@ let state = {
         currentCharacter = '情景描写';
       }
 
-      predictedTalks = []; 
+      predictedTalks = [];
+      editingTalkIndex = null;
+      updateInlineEditState();
       applyProjectWallpaper();
       renderCharSelector();
       renderTimeline();
@@ -316,6 +318,8 @@ let state = {
       document.getElementById('modeToggleBtn').innerText = '編集';
       document.getElementById('modeToggleBtn').classList.remove('editing');
       predictedTalks = [];
+      editingTalkIndex = null;
+      updateInlineEditState();
       renderProjectList();
     }
 
@@ -433,6 +437,7 @@ let state = {
       document.querySelectorAll('.char-icon-btn').forEach(b => b.classList.remove('active'));
       element.classList.add('active');
       currentCharacter = name;
+      if (editingTalkIndex !== null) updateInlineEditState();
 
       if (shouldKeepKeyboard) {
         setTimeout(() => input.focus({ preventScroll: true }), 0);
@@ -606,7 +611,7 @@ let state = {
         const isScene = talk.charName === '情景描写';
         const isRight = isProtagonistTalk(project, talk.charName) && !isScene;
         const bubble = document.createElement('div');
-        bubble.className = `chat-bubble ${isScene ? 'scene' : (isRight ? 'right' : 'left')}`;
+        bubble.className = `chat-bubble ${isScene ? 'scene' : (isRight ? 'right' : 'left')}${editingTalkIndex === index ? ' inline-edit-target' : ''}`;
         bubble.dataset.index = index;
 
         bubble.onpointerup = function(e) {
@@ -708,18 +713,32 @@ let state = {
       if (!text) return;
 
       const project = state.projects[state.currentProjectId];
-      project.talks.push({ charName: currentCharacter, text: text });
+      if (!project) return;
 
+      if (editingTalkIndex !== null) {
+        if (editingTalkIndex < 0 || editingTalkIndex >= project.talks.length) {
+          cancelInlineTalkEdit();
+          return;
+        }
+        project.talks[editingTalkIndex] = { charName: currentCharacter, text: text };
+        predictedTalks = [];
+        saveState();
+        finishInlineTalkEdit();
+        renderTimeline();
+        updateMetaStats();
+        scrollToBottom();
+        callGeminiApiForPrediction();
+        return;
+      }
+
+      project.talks.push({ charName: currentCharacter, text: text });
       predictedTalks = [];
 
       saveState();
       renderTimeline();
       updateMetaStats();
-      
-      input.value = '';
-      input.style.height = '42px';
+      clearInputSpeech();
       scrollToBottom();
-      
       callGeminiApiForPrediction();
     }
 
@@ -1025,25 +1044,69 @@ ${keptPredictionText}
     }
 
     function openEditTalkModal(index) {
-      editingTalkIndex = index;
+      startInlineTalkEdit(index);
+    }
+
+    function startInlineTalkEdit(index) {
       const project = state.projects[state.currentProjectId];
-      const input = document.getElementById('editTalkInput');
-      input.value = project.talks[index].text;
-      openModal('editTalkModal');
+      if (!project || index < 0 || index >= project.talks.length) return;
+
+      const talk = project.talks[index];
+      editingTalkIndex = index;
+      currentCharacter = talk.charName;
+      const input = document.getElementById('inputSpeech');
+      input.value = talk.text;
+      resizeInputSpeech(input);
+      updateInlineEditState();
+      renderCharSelector();
+      renderTimeline();
       input.focus({ preventScroll: true });
       const end = input.value.length;
       input.setSelectionRange(end, end);
+      setTimeout(scrollToBottom, 50);
+    }
+
+    function finishInlineTalkEdit() {
+      editingTalkIndex = null;
+      clearInputSpeech();
+      updateInlineEditState();
+    }
+
+    function cancelInlineTalkEdit() {
+      editingTalkIndex = null;
+      clearInputSpeech();
+      updateInlineEditState();
+      renderTimeline();
+    }
+
+    function clearInputSpeech() {
+      const input = document.getElementById('inputSpeech');
+      input.value = '';
+      input.style.height = '42px';
+    }
+
+    function resizeInputSpeech(input) {
+      input.style.height = '42px';
+      let newHeight = input.scrollHeight;
+      if (newHeight < 42) newHeight = 42;
+      if (newHeight > 120) newHeight = 120;
+      input.style.height = newHeight + 'px';
+    }
+
+    function updateInlineEditState() {
+      const status = document.getElementById('inlineEditStatus');
+      const label = document.getElementById('inlineEditLabel');
+      const sendButton = document.getElementById('sendButton');
+      if (!status || !label || !sendButton) return;
+      const isEditing = editingTalkIndex !== null;
+      status.classList.toggle('hidden', !isEditing);
+      document.body.classList.toggle('inline-talk-editing', isEditing);
+      sendButton.innerText = isEditing ? '\u66f4\u65b0' : '\u9001\u4fe1';
+      if (isEditing) label.innerText = currentCharacter + '\u306e\u30bb\u30ea\u30d5\u3092\u7de8\u96c6\u4e2d';
     }
 
     function confirmEditTalk() {
-      const newText = document.getElementById('editTalkInput').value.trim();
-      if (!newText) return;
-      const project = state.projects[state.currentProjectId];
-      project.talks[editingTalkIndex].text = newText;
-      saveState();
-      renderTimeline();
-      updateMetaStats();
-      closeModal('editTalkModal');
+      sendMessage();
     }
 
     function toggleEditMode() {
@@ -1448,12 +1511,7 @@ ${keptPredictionText}
       });
 
       inputSpeech.addEventListener('input', function() {
-        this.style.height = '42px'; 
-        let newHeight = this.scrollHeight;
-        if (newHeight < 42) newHeight = 42;
-        if (newHeight > 120) newHeight = 120; 
-        this.style.height = newHeight + 'px';
-        
+        resizeInputSpeech(this);
         scrollToBottom(); 
       });
     }

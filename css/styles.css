@@ -446,6 +446,10 @@
       width: fit-content;
       max-width: 100%;
     }
+    .chat-bubble.inline-edit-target .message-text {
+      outline: 2px solid #f97316;
+      outline-offset: 2px;
+    }
 
     body.edit-mode-active .chat-bubble:not(.ai-predicted) {
       cursor: pointer;
@@ -627,6 +631,28 @@
       gap: 8px;
       flex-shrink: 0;
       transition: transform 0.15s ease-out;
+    }
+    .inline-edit-status {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 7px 9px;
+      border-radius: 8px;
+      background: #fff7ed;
+      color: #9a3412;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .inline-edit-status button {
+      border: none;
+      border-radius: 6px;
+      padding: 5px 8px;
+      background: #fed7aa;
+      color: #9a3412;
+      font-weight: bold;
+      cursor: pointer;
+      flex-shrink: 0;
     }
     .input-row { display: flex; gap: 8px; align-items: flex-end; }
     
