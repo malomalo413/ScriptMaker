@@ -1278,7 +1278,62 @@ ${keptPredictionText}
     }
 
     function saveDataAlert() { alert("データを完全に内部保存しました。"); }
-    function exportDataAlert() { alert("台本データの出力を開始します。"); }
+    function exportDataAlert() {
+      const input = document.getElementById('inputSpeech');
+      if (input) input.blur();
+      document.body.classList.remove('keyboard-focused');
+      const project = state.projects[state.currentProjectId];
+      if (!project) return;
+
+      const output = document.getElementById('outputText');
+      if (output) output.value = buildOutputText(project);
+      openModal('outputModal');
+      setTimeout(forceResizeViewport, 50);
+    }
+
+    function buildOutputText(project) {
+      return project.talks.map(talk => {
+        if (talk.charName === '\u60c5\u666f\u63cf\u5199') {
+          return '\u3010\u60c5\u666f\u63cf\u5199\u3011\n' + talk.text;
+        }
+        return talk.charName + '\uff1a' + talk.text;
+      }).join('\n\n');
+    }
+
+    async function copyOutputText() {
+      const output = document.getElementById('outputText');
+      if (!output) return;
+      const text = output.value;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          output.focus();
+          output.select();
+          document.execCommand('copy');
+        }
+        alert('\u53f0\u672c\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f\u3002');
+      } catch (error) {
+        console.error('Copy failed:', error);
+        alert('\u30b3\u30d4\u30fc\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002\u30c6\u30ad\u30b9\u30c8\u3092\u9078\u629e\u3057\u3066\u30b3\u30d4\u30fc\u3057\u3066\u304f\u3060\u3055\u3044\u3002');
+      }
+    }
+
+    function downloadOutputText() {
+      const project = state.projects[state.currentProjectId];
+      const output = document.getElementById('outputText');
+      if (!project || !output) return;
+      const blob = new Blob([output.value], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const safeTitle = (project.title || 'script').replace(/[\\/:*?"<>|]/g, '_');
+      link.href = url;
+      link.download = safeTitle + '.txt';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
 
     /* ==========================================
        👑 ドラッグ＆ドロップ削除設定
