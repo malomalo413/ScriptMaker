@@ -21,6 +21,9 @@ let state = {
     let wallpaperPanStart = null;
     let wallpaperPanOffset = null;
     let predictionRequestId = 0;
+    let isSortingTalks = false;
+    let pendingTimelineRender = false;
+    let suppressTalkClickUntil = 0;
     let aiStatusMessage = "";
     let aiStatusType = "info";
 
@@ -588,6 +591,11 @@ let state = {
     }
 
     function renderTimeline() {
+      if (isSortingTalks) {
+        pendingTimelineRender = true;
+        return;
+      }
+
       const timeline = document.getElementById('talkTimeline');
       timeline.innerHTML = '';
       const project = state.projects[state.currentProjectId];
@@ -602,12 +610,16 @@ let state = {
         bubble.dataset.index = index;
 
         bubble.onpointerup = function(e) {
+          if (Date.now() < suppressTalkClickUntil || isSortingTalks) return;
           if (e.pointerType === 'touch') {
             e.preventDefault();
             openEditTalkModal(index);
           }
         };
-        bubble.onclick = function() { openEditTalkModal(index); };
+        bubble.onclick = function() {
+          if (Date.now() < suppressTalkClickUntil || isSortingTalks) return;
+          openEditTalkModal(index);
+        };
 
         let avatarHtml = '';
         if (!isScene) {
@@ -1214,61 +1226,99 @@ ${keptPredictionText}
         return;
       }
 
+      const timeline = document.getElementById('talkTimeline');
       const trashZone = document.getElementById('trashZone');
       let draggingItem = null;
 
-      Sortable.create(document.getElementById('talkTimeline'), {
-        group: 'talks',
-        animation: 150,
-        handle: '.chat-bubble:not(.ai-predicted)', 
-        filter: '#aiPredicting, .ai-predicted',
-        delay: 400,            
-        delayOnTouchOnly: true, 
-        
+      if (timeline._sortable) {
+        timeline._sortable.destroy();
+      }
+
+      timeline._sortable = Sortable.create(timeline, {
+        animation: 180,
+        draggable: '.chat-bubble:not(.ai-predicted)',
+        filter: '#aiPredicting, .ai-predicted, .talk-select, .talk-edit-tools, .talk-edit-tools *',
+        preventOnFilter: false,
+        delay: 400,
+        delayOnTouchOnly: true,
+        touchStartThreshold: 5,
+        fallbackTolerance: 4,
+        fallbackOnBody: true,
+        forceFallback: true,
+        ghostClass: 'talk-sortable-ghost',
+        chosenClass: 'talk-sortable-chosen',
+        dragClass: 'talk-sortable-drag',
+        swapThreshold: 0.65,
+        invertSwap: false,
+
         onStart: function(evt) {
+          isSortingTalks = true;
+          pendingTimelineRender = false;
+          predictionRequestId++;
           draggingItem = evt.item;
           if (draggingItem) lockDragShape(draggingItem);
+          document.body.classList.add('talk-sorting-active');
           trashZone.classList.add('visible');
         },
+
         onMove: function(evt, originalEvent) {
           updateDragShrink(originalEvent, trashZone, draggingItem);
+          return true;
         },
-        onEnd: function (evt) {
-          const droppedOnTrash = evt.to === trashZone;
-          const deleted = deleteDraggedTalkIfOverTrash(evt, trashZone, draggingItem) ||
-            (droppedOnTrash && deleteDraggedTalkByItem(draggingItem));
-          resetDragShrink(draggingItem);
+
+        onEnd: function(evt) {
+          const item = draggingItem || evt.item;
+          resetDragShrink(item);
           draggingItem = null;
+          document.body.classList.remove('talk-sorting-active');
           trashZone.classList.remove('visible');
           trashZone.classList.remove('hover');
-          
-          if (deleted || droppedOnTrash) return;
+          isSortingTalks = false;
+          suppressTalkClickUntil = Date.now() + 350;
+
+          if (deleteDraggedTalkIfOverTrash(evt, trashZone, item)) {
+            pendingTimelineRender = false;
+            return;
+          }
 
           const project = state.projects[state.currentProjectId];
-          const newTalks = [];
-          document.querySelectorAll('#talkTimeline .chat-bubble:not(.ai-predicted)').forEach(el => {
-            const idx = parseInt(el.dataset.index);
-            if (!isNaN(idx)) newTalks.push(project.talks[idx]);
-          });
-          project.talks = newTalks;
-          saveState();
+          if (!project) return;
+
+          const oldIndex = getTalkIndexFromItem(item);
+          const newIndex = getSortableTalkIndex(evt);
+          if (!Number.isInteger(oldIndex) || !Number.isInteger(newIndex) || oldIndex < 0 || oldIndex >= project.talks.length) {
+            pendingTimelineRender = false;
+            renderTimeline();
+            return;
+          }
+
+          if (oldIndex !== newIndex) {
+            const [movedTalk] = project.talks.splice(oldIndex, 1);
+            const safeNewIndex = Math.max(0, Math.min(newIndex, project.talks.length));
+            project.talks.splice(safeNewIndex, 0, movedTalk);
+            saveState();
+            updateMetaStats();
+          }
+
+          pendingTimelineRender = false;
           renderTimeline();
         }
       });
+    }
 
-      Sortable.create(trashZone, {
-        group: {
-          name: 'talks',
-          put: true,
-          pull: false
-        },
-        onAdd: function (evt) {
-          const itemEl = evt.item;
-          if (itemEl.parentNode) {
-            itemEl.parentNode.removeChild(itemEl);
-          }
-        }
-      });
+    function getTalkIndexFromItem(item) {
+      if (!item) return NaN;
+      const index = Number.parseInt(item.dataset.index, 10);
+      return Number.isNaN(index) ? NaN : index;
+    }
+
+    function getSortableTalkIndex(evt) {
+      if (Number.isInteger(evt.newDraggableIndex)) return evt.newDraggableIndex;
+      if (Number.isInteger(evt.newIndex)) {
+        const timelineItems = Array.from(document.querySelectorAll('#talkTimeline .chat-bubble:not(.ai-predicted)'));
+        return timelineItems.indexOf(evt.item);
+      }
+      return NaN;
     }
 
     function deleteDraggedTalkIfOverTrash(evt, trashZone, item) {
