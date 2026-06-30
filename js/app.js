@@ -1474,10 +1474,12 @@ ${keptPredictionText}
     function initKeyboardAvoidance() {
       const inputSpeech = document.getElementById('inputSpeech');
       const trashZone = document.getElementById('trashZone');
+      const timeline = document.getElementById('talkTimeline');
 
       inputSpeech.addEventListener('keydown', sendMessageOnEnter);
 
-      originalViewportHeight = window.innerHeight;
+      originalViewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      forceResizeViewport();
 
       if (window.visualViewport) {
         window.visualViewport.addEventListener('resize', forceResizeViewport);
@@ -1486,45 +1488,46 @@ ${keptPredictionText}
         window.addEventListener('resize', forceResizeViewport);
       }
 
+      // Body/page scrolling must not move the input area. Only the talk timeline scrolls.
+      document.addEventListener('touchmove', function(e) {
+        if (!document.body.classList.contains('keyboard-focused')) return;
+        if (timeline && timeline.contains(e.target)) return;
+        e.preventDefault();
+      }, { passive: false });
+
       inputSpeech.addEventListener('focus', () => {
         document.body.classList.add('keyboard-focused');
         trashZone.style.bottom = '80px';
-        
-        setTimeout(() => {
-          const currentHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-          if (originalViewportHeight - currentHeight < 80) {
-            document.body.classList.add('keyboard-no-resize'); 
-          }
-          scrollToBottom();
-        }, 250);
-
-        setTimeout(scrollToBottom, 50);
-        setTimeout(scrollToBottom, 150);
-        setTimeout(scrollToBottom, 450);
+        forceResizeViewport();
+        setTimeout(forceResizeViewport, 50);
+        setTimeout(forceResizeViewport, 180);
+        setTimeout(scrollToBottom, 260);
       });
 
       inputSpeech.addEventListener('blur', () => {
         document.body.classList.remove('keyboard-focused');
-        document.body.classList.remove('keyboard-no-resize'); 
         trashZone.style.bottom = '140px';
-        setTimeout(forceResizeViewport, 100);
+        setTimeout(forceResizeViewport, 80);
       });
 
       inputSpeech.addEventListener('input', function() {
         resizeInputSpeech(this);
-        scrollToBottom(); 
+        forceResizeViewport();
+        scrollToBottom();
       });
     }
 
     function forceResizeViewport() {
       const editorView = document.getElementById('editorView');
-      if (editorView.classList.contains('hidden')) return;
-      
-      if (!document.body.classList.contains('keyboard-no-resize')) {
-        const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-        document.body.style.height = vh + 'px';
-        editorView.style.height = vh + 'px';
-      }
+      if (!editorView || editorView.classList.contains('hidden')) return;
+
+      const viewport = window.visualViewport;
+      const vh = Math.max(1, Math.floor(viewport ? viewport.height : window.innerHeight));
+      document.documentElement.style.setProperty('--app-height', vh + 'px');
+      document.body.style.height = vh + 'px';
+      editorView.style.height = vh + 'px';
+      editorView.style.maxHeight = vh + 'px';
+      editorView.style.transform = '';
       scrollToBottom();
     }
 
