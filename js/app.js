@@ -1430,14 +1430,12 @@ ${keptPredictionText}
 
     function updateInlineEditState() {
       const status = document.getElementById('inlineEditStatus');
-      const label = document.getElementById('inlineEditLabel');
       const sendButton = document.getElementById('sendButton');
-      if (!status || !label || !sendButton) return;
+      if (!status || !sendButton) return;
       const isEditing = editingTalkIndex !== null;
       status.classList.toggle('hidden', !isEditing);
       document.body.classList.toggle('inline-talk-editing', isEditing);
       sendButton.innerText = isEditing ? '\u66f4\u65b0' : '\u9001\u4fe1';
-      if (isEditing) label.innerText = currentCharacter + '\u306e\u30bb\u30ea\u30d5\u3092\u7de8\u96c6\u4e2d';
     }
 
     function confirmEditTalk() {
