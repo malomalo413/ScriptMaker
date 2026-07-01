@@ -14,9 +14,9 @@
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="./assets/icons/icon-512.png">
-  <link rel="stylesheet" href="./css/styles.css?v=15">
+  <link rel="stylesheet" href="./css/styles.css?v=16">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
-  <script src="./js/app.js?v=15" defer></script>
+  <script src="./js/app.js?v=16" defer></script>
 </head>
 <body>
 <div id="openingView" class="opening-view">
@@ -25,6 +25,10 @@
       <div class="top-tabs">
         <button class="tab-btn active">プロジェクト</button>
         <button class="tab-btn">出力</button>
+      </div>
+      <div class="folder-toolbar">
+        <div class="folder-list" id="folderList"></div>
+        <button class="folder-create-btn" onclick="createFolder()">+ &#12501;&#12457;&#12523;&#12480;</button>
       </div>
       <div class="project-list" id="projectList"></div>
       <button class="create-btn" onclick="openCreateProjectModal()">+ 新規プロジェクト作成</button>
@@ -38,6 +42,8 @@
       <button class="back-btn" onclick="goBack()">←</button>
       <div class="project-title" id="projectTitle">プロジェクト名</div>
       <div class="nav-actions">
+        <button class="nav-btn nav-icon-btn" id="undoBtn" onclick="undoProjectAction()" title="Undo">&#8630;</button>
+        <button class="nav-btn nav-icon-btn" id="redoBtn" onclick="redoProjectAction()" title="Redo">&#8631;</button>
         <button class="nav-btn btn-nav-save" onclick="saveDataAlert()">保存</button>
         <button class="nav-btn btn-nav-export" onclick="exportDataAlert()">出力</button>
         <button class="nav-btn btn-nav-wallpaper" onclick="openWallpaperModal()">壁紙</button>
@@ -50,6 +56,8 @@
         <div class="count-controls">
           <label><input type="checkbox" id="excludePunctuationCheck">句読点を除く</label>
           <label><input type="checkbox" id="excludeCustomCheck">カスタム</label>
+          <label><input type="checkbox" id="showTalkNumbersCheck" checked>&#30058;&#21495;&#34920;&#31034;</label>
+          <label><input type="checkbox" id="outputTalkNumbersCheck">&#20986;&#21147;&#12395;&#30058;&#21495;</label>
           <input type="text" id="customExcludeChars" placeholder="除外する文字">
         </div>
         <div class="count-output" id="countOutput"></div>

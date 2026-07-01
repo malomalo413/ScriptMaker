@@ -30,6 +30,11 @@ let state = {
     let currentWallpaperKey = "";
     let activeWallpaperLayerIndex = 0;
     let sceneWallpaperRaf = 0;
+    const UNCLASSIFIED_FOLDER_ID = 'folder_uncategorized';
+    const MAX_HISTORY = 20;
+    let undoStacks = {};
+    let redoStacks = {};
+    let isApplyingHistory = false;
 
     let originalViewportHeight = window.innerHeight;
     const GEMINI_MODEL_CANDIDATES = [
@@ -75,15 +80,24 @@ let state = {
       initWallpaperModalActions();
       initWallpaperPan();
       initSceneWallpaperScroll();
+      initNumberSettingsControls();
     };
 
     function normalizeProjectData() {
+      if (!state.folders || typeof state.folders !== 'object') state.folders = {};
+      if (!state.folders[UNCLASSIFIED_FOLDER_ID]) state.folders[UNCLASSIFIED_FOLDER_ID] = { id: UNCLASSIFIED_FOLDER_ID, name: '\u672a\u5206\u985e' };
+      if (!state.currentFolderId || !state.folders[state.currentFolderId]) state.currentFolderId = UNCLASSIFIED_FOLDER_ID;
+      if (!state.settings || typeof state.settings !== 'object') state.settings = {};
+      if (state.settings.showTalkNumbers === undefined) state.settings.showTalkNumbers = true;
+      if (state.settings.outputTalkNumbers === undefined) state.settings.outputTalkNumbers = false;
+
       Object.values(state.projects || {}).forEach(project => {
         if (!Array.isArray(project.characters)) project.characters = [];
         project.characters.forEach((char, index) => {
           if (char.isProtagonist === undefined) char.isProtagonist = index === 0;
         });
         if (!project.characters.some(char => char.isProtagonist) && project.characters[0]) project.characters[0].isProtagonist = true;
+        if (!project.folderId || !state.folders[project.folderId]) project.folderId = UNCLASSIFIED_FOLDER_ID;
         ensureTalkIds(project);
         normalizeSceneWallpaperSettings(project);
       });
@@ -154,6 +168,111 @@ let state = {
       return project.sceneWallpaperSettings;
     }
 
+
+    function cloneProject(project) { return JSON.parse(JSON.stringify(project)); }
+    function getCurrentUndoStack() { const id = state.currentProjectId; if (!id) return []; if (!undoStacks[id]) undoStacks[id] = []; return undoStacks[id]; }
+    function getCurrentRedoStack() { const id = state.currentProjectId; if (!id) return []; if (!redoStacks[id]) redoStacks[id] = []; return redoStacks[id]; }
+    function pushUndoSnapshot() {
+      if (isApplyingHistory) return;
+      const project = state.projects[state.currentProjectId];
+      if (!project) return;
+      const stack = getCurrentUndoStack();
+      stack.push(cloneProject(project));
+      if (stack.length > MAX_HISTORY) stack.shift();
+      redoStacks[state.currentProjectId] = [];
+      updateHistoryButtons();
+    }
+    function restoreProjectSnapshot(snapshot) {
+      if (!snapshot || !state.currentProjectId) return;
+      isApplyingHistory = true;
+      state.projects[state.currentProjectId] = cloneProject(snapshot);
+      normalizeProjectData();
+      const project = state.projects[state.currentProjectId];
+      document.getElementById('projectTitle').innerText = project.title;
+      document.getElementById('projectTitle').onclick = renameCurrentProject;
+      updateHistoryButtons();
+      predictedTalks = [];
+      editingTalkIndex = null;
+      selectedTalkIndexes.clear();
+      updateInlineEditState();
+      applyProjectWallpaper(true);
+      renderCharSelector();
+      renderTimeline();
+      updateMetaStats();
+      saveState();
+      isApplyingHistory = false;
+      updateHistoryButtons();
+    }
+    function undoProjectAction() {
+      const project = state.projects[state.currentProjectId];
+      const undo = getCurrentUndoStack();
+      if (!project || undo.length === 0) return;
+      getCurrentRedoStack().push(cloneProject(project));
+      restoreProjectSnapshot(undo.pop());
+    }
+    function redoProjectAction() {
+      const project = state.projects[state.currentProjectId];
+      const redo = getCurrentRedoStack();
+      if (!project || redo.length === 0) return;
+      getCurrentUndoStack().push(cloneProject(project));
+      restoreProjectSnapshot(redo.pop());
+    }
+    function updateHistoryButtons() {
+      const undoBtn = document.getElementById('undoBtn');
+      const redoBtn = document.getElementById('redoBtn');
+      if (undoBtn) undoBtn.disabled = getCurrentUndoStack().length === 0;
+      if (redoBtn) redoBtn.disabled = getCurrentRedoStack().length === 0;
+    }
+    function renameCurrentProject() {
+      const project = state.projects[state.currentProjectId];
+      if (!project) return;
+      const name = prompt('\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u540d', project.title || '');
+      if (!name || name.trim() === project.title) return;
+      pushUndoSnapshot();
+      project.title = name.trim();
+      document.getElementById('projectTitle').innerText = project.title;
+      saveState();
+      updateHistoryButtons();
+    }
+    function createFolder() {
+      const name = prompt('\u30d5\u30a9\u30eb\u30c0\u540d');
+      if (!name || !name.trim()) return;
+      const id = 'folder_' + Date.now();
+      state.folders[id] = { id, name: name.trim() };
+      state.currentFolderId = id;
+      saveState();
+      renderProjectList();
+    }
+    function selectFolder(id) { if (!state.folders[id]) return; state.currentFolderId = id; saveState(); renderProjectList(); }
+    function renameFolder(event, id) {
+      event.stopPropagation();
+      if (id === UNCLASSIFIED_FOLDER_ID) return;
+      const folder = state.folders[id];
+      const name = prompt('\u30d5\u30a9\u30eb\u30c0\u540d', folder.name);
+      if (!name || !name.trim()) return;
+      folder.name = name.trim();
+      saveState();
+      renderProjectList();
+    }
+    function deleteFolder(event, id) {
+      event.stopPropagation();
+      if (id === UNCLASSIFIED_FOLDER_ID) return;
+      if (!confirm('\u3053\u306e\u30d5\u30a9\u30eb\u30c0\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f\n\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u306f\u672a\u5206\u985e\u306b\u79fb\u52d5\u3057\u307e\u3059\u3002')) return;
+      Object.values(state.projects).forEach(project => { if (project.folderId === id) project.folderId = UNCLASSIFIED_FOLDER_ID; });
+      delete state.folders[id];
+      if (state.currentFolderId === id) state.currentFolderId = UNCLASSIFIED_FOLDER_ID;
+      saveState();
+      renderProjectList();
+    }
+    function moveProjectToFolder(event, projectId) {
+      event.stopPropagation();
+      const project = state.projects[projectId];
+      if (!project) return;
+      project.folderId = event.target.value || UNCLASSIFIED_FOLDER_ID;
+      saveState();
+      renderProjectList();
+    }
+
     function saveState() {
       try {
         localStorage.setItem('script_assistant_data_v21', JSON.stringify(state));
@@ -184,20 +303,35 @@ let state = {
 
     function renderProjectList() {
       const list = document.getElementById('projectList');
+      const folderList = document.getElementById('folderList');
       list.innerHTML = '';
-      Object.keys(state.projects).forEach(id => {
+      if (folderList) {
+        folderList.innerHTML = '';
+        Object.values(state.folders || {}).forEach(folder => {
+          const count = Object.values(state.projects || {}).filter(project => (project.folderId || UNCLASSIFIED_FOLDER_ID) === folder.id).length;
+          const item = document.createElement('div');
+          item.className = 'folder-chip' + (state.currentFolderId === folder.id ? ' active' : '');
+          item.onclick = () => selectFolder(folder.id);
+          item.innerHTML = '<span>?? ' + escapeHtml(folder.name) + ' (' + count + ')</span>' + (folder.id === UNCLASSIFIED_FOLDER_ID ? '' : '<button onclick="renameFolder(event, \'' + folder.id + '\')">?</button><button onclick="deleteFolder(event, \'' + folder.id + '\')">?</button>');
+          folderList.appendChild(item);
+        });
+      }
+      const folderOptions = Object.values(state.folders || {}).map(folder => '<option value="' + folder.id + '">' + escapeHtml(folder.name) + '</option>').join('');
+      Object.keys(state.projects).filter(id => (state.projects[id].folderId || UNCLASSIFIED_FOLDER_ID) === state.currentFolderId).forEach(id => {
         const project = state.projects[id];
         const card = document.createElement('div');
         card.className = 'project-card';
-        card.innerHTML = `
-          <div class="project-info" onclick="openProject('${id}')">
-            <h3>${project.title}</h3>
-            <p>キャラクター: ${project.characters.length}人 / 台本: ${project.talks.length}行</p>
-          </div>
-          <button class="delete-project-btn" onclick="deleteProject(event, '${id}')">削除</button>
-        `;
+        card.innerHTML = '<div class="project-info" onclick="openProject(\'' + id + '\')"><h3>' + escapeHtml(project.title) + '</h3><p>??????: ' + project.characters.length + '? / ??: ' + project.talks.length + '?</p></div><div class="project-card-actions" onclick="event.stopPropagation()"><select onchange="moveProjectToFolder(event, \'' + id + '\')">' + folderOptions + '</select><button class="delete-project-btn" onclick="deleteProject(event, \'' + id + '\')">??</button></div>';
+        const select = card.querySelector('select');
+        if (select) select.value = project.folderId || UNCLASSIFIED_FOLDER_ID;
         list.appendChild(card);
       });
+      if (!list.children.length) {
+        const empty = document.createElement('div');
+        empty.className = 'project-empty';
+        empty.innerText = '?????????????????????';
+        list.appendChild(empty);
+      }
     }
 
     function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
@@ -248,7 +382,8 @@ let state = {
           { name: "らん", avatar: "", isRound: true, zoom: 100, isProtagonist: true },
           { name: "キャラ2", avatar: "", isRound: true, zoom: 100, isProtagonist: false }
         ],
-        talks: []
+        talks: [],
+        folderId: state.currentFolderId || UNCLASSIFIED_FOLDER_ID
       };
       saveState();
       renderProjectList();
@@ -317,6 +452,7 @@ let state = {
       const project = state.projects[state.currentProjectId];
       if (!project) return;
 
+      pushUndoSnapshot();
       project.wallpaper = selectedWallpaperBase64 ? {
         image: selectedWallpaperBase64,
         size: wallpaperSize,
@@ -338,6 +474,7 @@ let state = {
       const project = state.projects[state.currentProjectId];
       if (!project) return;
 
+      pushUndoSnapshot();
       project.wallpaper = null;
       selectedWallpaperBase64 = "";
       saveState();
@@ -879,6 +1016,7 @@ let state = {
       const isProtagonist = document.getElementById('charProtagonistCheck').checked;
       const zoom = parseInt(document.getElementById('charZoomSlider').value);
 
+      pushUndoSnapshot();
       if (editingCharName === null) {
         if (project.characters.some(c => c.name === name) || name === '情景描写') {
           alert("同名のキャラクターが既に存在します。");
@@ -930,6 +1068,8 @@ let state = {
       return !!char?.isProtagonist;
     }
 
+    function formatTalkNumber(index) { return String(index + 1).padStart(3, '0'); }
+
     function renderTimeline() {
       if (isSortingTalks) {
         pendingTimelineRender = true;
@@ -947,6 +1087,7 @@ let state = {
         const isRight = isProtagonistTalk(project, talk.charName) && !isScene;
         const bubble = document.createElement('div');
         bubble.className = `chat-bubble ${isScene ? 'scene' : (isRight ? 'right' : 'left')}${editingTalkIndex === index ? ' inline-edit-target' : ''}`;
+        if (state.settings?.showTalkNumbers !== false) bubble.classList.add('with-number');
         if (!talk.id) talk.id = createTalkId();
         bubble.dataset.index = index;
         bubble.dataset.talkId = talk.id;
@@ -980,6 +1121,7 @@ let state = {
 
         bubble.innerHTML = `
           <input type="checkbox" class="talk-select" ${selectedTalkIndexes.has(index) ? 'checked' : ''} onclick="toggleTalkSelection(event, ${index})">
+          ${state.settings?.showTalkNumbers !== false ? '<span class="talk-number">' + formatTalkNumber(index) + '</span>' : ''}
           ${avatarHtml}
           <div class="bubble-content">
             <span class="char-name">${talk.charName}</span>
@@ -1058,6 +1200,7 @@ let state = {
           cancelInlineTalkEdit();
           return;
         }
+        pushUndoSnapshot();
         project.talks[editingTalkIndex] = { ...project.talks[editingTalkIndex], charName: currentCharacter, text: text };
         predictedTalks = [];
         saveState();
@@ -1069,6 +1212,7 @@ let state = {
         return;
       }
 
+      pushUndoSnapshot();
       project.talks.push(createTalkRecord(currentCharacter, text));
       predictedTalks = [];
 
@@ -1365,6 +1509,7 @@ ${keptPredictionText}
       const project = state.projects[state.currentProjectId];
       const prediction = predictedTalks[untilIndex];
       if (prediction && !prediction.isSystem && prediction.charName !== "システム警告") {
+        pushUndoSnapshot();
         project.talks.push(createTalkRecord(prediction.charName, prediction.text));
       }
       predictedTalks.splice(untilIndex, 1);
@@ -1484,6 +1629,7 @@ ${keptPredictionText}
       if (selectedTalkIndexes.size === 0) return;
       const project = state.projects[state.currentProjectId];
       const removedIds = project.talks.filter((_, index) => selectedTalkIndexes.has(index)).map(talk => talk.id).filter(Boolean);
+      pushUndoSnapshot();
       project.talks = project.talks.filter((_, index) => !selectedTalkIndexes.has(index));
       removeTalkIdsFromSceneSettings(project, removedIds);
       selectedTalkIndexes.clear();
@@ -1496,6 +1642,7 @@ ${keptPredictionText}
     function deleteTalk(event, index) {
       event.stopPropagation();
       const project = state.projects[state.currentProjectId];
+      pushUndoSnapshot();
       const removed = project.talks[index];
       project.talks.splice(index, 1);
       removeTalkIdsFromSceneSettings(project, removed?.id ? [removed.id] : []);
@@ -1511,6 +1658,7 @@ ${keptPredictionText}
       const project = state.projects[state.currentProjectId];
       const original = project.talks[index];
       if (!original) return;
+      pushUndoSnapshot();
       project.talks.splice(index + 1, 0, createTalkRecord(original.charName, original.text));
       selectedTalkIndexes.clear();
       predictedTalks = [];
@@ -1525,6 +1673,7 @@ ${keptPredictionText}
       const targetIndex = index + direction;
       if (targetIndex < 0 || targetIndex >= project.talks.length) return;
 
+      pushUndoSnapshot();
       const [talk] = project.talks.splice(index, 1);
       project.talks.splice(targetIndex, 0, talk);
       selectedTalkIndexes.clear();
@@ -1543,11 +1692,19 @@ ${keptPredictionText}
       const punctuationCheck = document.getElementById('excludePunctuationCheck');
       const customCheck = document.getElementById('excludeCustomCheck');
       const customInput = document.getElementById('customExcludeChars');
-
-      [punctuationCheck, customCheck].forEach(el => {
-        el.addEventListener('change', updateMetaStats);
-      });
+      const showNumbers = document.getElementById('showTalkNumbersCheck');
+      const outputNumbers = document.getElementById('outputTalkNumbersCheck');
+      if (showNumbers) showNumbers.checked = state.settings?.showTalkNumbers !== false;
+      if (outputNumbers) outputNumbers.checked = !!state.settings?.outputTalkNumbers;
+      [punctuationCheck, customCheck].forEach(el => { el.addEventListener('change', updateMetaStats); });
       customInput.addEventListener('input', updateMetaStats);
+    }
+
+    function initNumberSettingsControls() {
+      const showNumbers = document.getElementById('showTalkNumbersCheck');
+      const outputNumbers = document.getElementById('outputTalkNumbersCheck');
+      if (showNumbers) showNumbers.addEventListener('change', function() { state.settings.showTalkNumbers = this.checked; saveState(); renderTimeline(); });
+      if (outputNumbers) outputNumbers.addEventListener('change', function() { state.settings.outputTalkNumbers = this.checked; saveState(); });
     }
 
     function getCountedText(text) {
@@ -1629,11 +1786,11 @@ ${keptPredictionText}
     }
 
     function buildOutputText(project) {
-      return project.talks.map(talk => {
-        if (talk.charName === '\u60c5\u666f\u63cf\u5199') {
-          return '\u3010\u60c5\u666f\u63cf\u5199\u3011\n' + talk.text;
-        }
-        return talk.charName + '\uff1a' + talk.text;
+      const includeNumbers = !!state.settings?.outputTalkNumbers;
+      return project.talks.map((talk, index) => {
+        const prefix = includeNumbers ? formatTalkNumber(index) + ' ' : '';
+        if (talk.charName === '\u60c5\u666f\u63cf\u5199') return prefix + '\u3010\u60c5\u666f\u63cf\u5199\u3011\n' + talk.text;
+        return prefix + talk.charName + '\uff1a' + talk.text;
       }).join('\n\n');
     }
 
@@ -1748,6 +1905,7 @@ ${keptPredictionText}
           }
 
           if (oldIndex !== newIndex) {
+            pushUndoSnapshot();
             const [movedTalk] = project.talks.splice(oldIndex, 1);
             const safeNewIndex = Math.max(0, Math.min(newIndex, project.talks.length));
             project.talks.splice(safeNewIndex, 0, movedTalk);
@@ -1789,6 +1947,7 @@ ${keptPredictionText}
       if (!project || idx >= project.talks.length) return false;
 
       item.dataset.deletedByTrash = 'true';
+      pushUndoSnapshot();
       const removed = project.talks[idx];
       project.talks.splice(idx, 1);
       removeTalkIdsFromSceneSettings(project, removed?.id ? [removed.id] : []);

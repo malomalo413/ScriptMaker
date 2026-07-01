@@ -1059,3 +1059,18 @@
         flex: 1;
       }
     }
+
+    .folder-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .folder-list { display: flex; gap: 8px; overflow-x: auto; flex: 1; padding-bottom: 2px; }
+    .folder-chip { display: flex; align-items: center; gap: 4px; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.7); border-radius: 999px; background: rgba(255,255,255,0.86); padding: 7px 9px; font-size: 12px; font-weight: 700; color: #334155; }
+    .folder-chip.active { background: #dbeafe; color: #1d4ed8; border-color: #93c5fd; }
+    .folder-chip button { border: none; background: rgba(255,255,255,0.75); color: inherit; border-radius: 999px; min-width: 22px; height: 22px; font-weight: 800; }
+    .folder-create-btn { border: none; border-radius: 9px; padding: 8px 10px; background: #10b981; color: white; font-weight: 700; flex-shrink: 0; }
+    .project-card-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .project-card-actions select { max-width: 110px; border: 1px solid var(--border-color); border-radius: 6px; padding: 6px; background: white; color: #334155; font-size: 12px; }
+    .project-empty { padding: 18px; border-radius: 12px; background: rgba(255,255,255,0.88); color: #64748b; text-align: center; font-weight: 700; }
+    .nav-icon-btn { width: 32px; padding: 6px 0; background: #e2e8f0; color: #334155; font-size: 15px; }
+    .nav-icon-btn:disabled { opacity: 0.35; }
+    .talk-number { align-self: flex-start; margin-top: 24px; min-width: 30px; padding: 2px 4px; border-radius: 5px; background: rgba(255,255,255,0.72); color: #64748b; font-size: 10px; font-weight: 800; text-align: center; pointer-events: none; }
+    .chat-bubble.scene .talk-number { margin-top: 6px; }
+    @media (max-width: 420px) { .project-card { align-items: stretch; flex-direction: column; gap: 10px; } .project-card-actions { justify-content: flex-end; } .nav-actions { gap: 4px; } .nav-icon-btn { width: 28px; } }
