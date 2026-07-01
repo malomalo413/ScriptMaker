@@ -915,26 +915,6 @@
       color: #b91c1c;
       font-weight: 700;
     }
-    .scene-range-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-    .scene-range-row label {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      color: #64748b;
-      font-size: 11px;
-      font-weight: 700;
-    }
-    .scene-range-row input {
-      padding: 8px 10px;
-      border: 1px solid var(--border-color);
-      border-radius: 7px;
-      font-size: 14px;
-      background: white;
-    }
     .scene-wallpaper-image-row {
       display: grid;
       grid-template-columns: 88px 1fr;
@@ -966,4 +946,122 @@
       font-size: 12px;
       text-align: center;
       background: #f8fafc;
+    }
+
+    .scene-talk-tools {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      color: #475569;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .scene-talk-tool-buttons {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .scene-talk-tool-buttons button {
+      border: none;
+      border-radius: 7px;
+      padding: 7px 9px;
+      background: #eef2ff;
+      color: #4338ca;
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .scene-talk-filters {
+      display: grid;
+      grid-template-columns: 1fr 0.82fr;
+      gap: 8px;
+    }
+    .scene-talk-filters input,
+    .scene-talk-filters select {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid var(--border-color);
+      border-radius: 7px;
+      padding: 8px 9px;
+      background: white;
+      color: #334155;
+      font-size: 13px;
+    }
+    .scene-talk-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 220px;
+      overflow-y: auto;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: white;
+      padding: 6px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .scene-talk-option {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 8px;
+      align-items: center;
+      min-height: 46px;
+      padding: 7px;
+      border-radius: 7px;
+      background: #f8fafc;
+      color: #334155;
+    }
+    .scene-talk-option input {
+      width: 20px;
+      height: 20px;
+      margin: 0;
+    }
+    .scene-talk-option span {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .scene-talk-option strong,
+    .scene-talk-option em,
+    .scene-talk-option small {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-style: normal;
+    }
+    .scene-talk-option strong {
+      font-size: 12px;
+      color: #334155;
+    }
+    .scene-talk-option em {
+      font-size: 13px;
+      color: #0f172a;
+    }
+    .scene-talk-option small {
+      font-size: 10px;
+      color: #d97706;
+    }
+    .scene-talk-owned {
+      background: #fff7ed;
+    }
+    .scene-talk-option.filtered-out {
+      display: none;
+    }
+    @media (max-width: 420px) {
+      .scene-wallpaper-head {
+        align-items: flex-start;
+      }
+      .scene-talk-filters {
+        grid-template-columns: 1fr;
+      }
+      .scene-talk-tools {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      .scene-talk-tool-buttons {
+        width: 100%;
+      }
+      .scene-talk-tool-buttons button {
+        flex: 1;
+      }
     }

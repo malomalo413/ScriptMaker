@@ -81,44 +81,71 @@ let state = {
       Object.values(state.projects || {}).forEach(project => {
         if (!Array.isArray(project.characters)) project.characters = [];
         project.characters.forEach((char, index) => {
-          if (char.isProtagonist === undefined) {
-            char.isProtagonist = index === 0;
-          }
+          if (char.isProtagonist === undefined) char.isProtagonist = index === 0;
         });
-        if (!project.characters.some(char => char.isProtagonist) && project.characters[0]) {
-          project.characters[0].isProtagonist = true;
-        }
+        if (!project.characters.some(char => char.isProtagonist) && project.characters[0]) project.characters[0].isProtagonist = true;
+        ensureTalkIds(project);
         normalizeSceneWallpaperSettings(project);
       });
     }
 
+    function createTalkId() {
+      return 'talk_' + Date.now() + '_' + Math.floor(Math.random() * 1000000);
+    }
+
+    function ensureTalkIds(project) {
+      if (!project) return;
+      if (!Array.isArray(project.talks)) project.talks = [];
+      const usedIds = new Set();
+      project.talks.forEach(talk => {
+        if (!talk.id || usedIds.has(talk.id)) talk.id = createTalkId();
+        usedIds.add(talk.id);
+      });
+    }
+
+    function createTalkRecord(charName, text) {
+      return { id: createTalkId(), charName, text };
+    }
 
     function normalizeSceneWallpaperSettings(project) {
       if (!project) return { enabled: false, scenes: [] };
+      ensureTalkIds(project);
       const current = project.sceneWallpaperSettings || {};
       const scenes = Array.isArray(current.scenes) ? current.scenes : [];
       project.sceneWallpaperSettings = {
         enabled: !!current.enabled,
-        scenes: scenes.map((scene, index) => normalizeSceneWallpaper(scene, index)).filter(Boolean)
+        scenes: scenes.map((scene, index) => normalizeSceneWallpaper(scene, index, project)).filter(Boolean)
       };
+      enforceUniqueSceneTalkSelections(project.sceneWallpaperSettings.scenes);
       return project.sceneWallpaperSettings;
     }
 
-    function normalizeSceneWallpaper(scene, index) {
+    function normalizeSceneWallpaper(scene, index, project) {
       if (!scene || typeof scene !== 'object') return null;
-      const start = Math.max(1, parseInt(scene.start, 10) || 1);
-      const endValue = parseInt(scene.end, 10);
-      const end = Math.max(start, endValue || start);
+      let talkIds = Array.isArray(scene.talkIds) ? scene.talkIds.filter(Boolean).map(String) : [];
+      if (talkIds.length === 0 && project && Array.isArray(project.talks) && (scene.start || scene.end)) {
+        const start = Math.max(1, parseInt(scene.start, 10) || 1);
+        const endValue = parseInt(scene.end, 10);
+        const end = Math.max(start, endValue || start);
+        talkIds = project.talks.slice(start - 1, end).map(talk => talk.id).filter(Boolean);
+      }
       return {
         id: scene.id || ('scene_' + Date.now() + '_' + index + '_' + Math.floor(Math.random() * 1000)),
         name: String(scene.name || '\u30b7\u30fc\u30f3' + (index + 1)),
-        start,
-        end,
+        talkIds,
         image: scene.image || "",
         size: Math.max(100, parseInt(scene.size, 10) || 100),
         offsetX: Number.isFinite(Number(scene.offsetX)) ? Number(scene.offsetX) : 50,
         offsetY: Number.isFinite(Number(scene.offsetY)) ? Number(scene.offsetY) : 50
       };
+    }
+
+    function enforceUniqueSceneTalkSelections(scenes) {
+      const ownerByTalkId = new Map();
+      scenes.forEach(scene => (scene.talkIds || []).forEach(talkId => ownerByTalkId.set(talkId, scene.id)));
+      scenes.forEach(scene => {
+        scene.talkIds = [...new Set(scene.talkIds || [])].filter(talkId => ownerByTalkId.get(talkId) === scene.id);
+      });
     }
 
     function getSceneWallpaperSettings(project) {
@@ -253,7 +280,7 @@ let state = {
       document.getElementById('wallpaperSizeSlider').value = wallpaperSize;
       const preview = document.getElementById('wallpaperPreview');
       preview.style.backgroundImage = selectedWallpaperBase64 ? 'url(' + selectedWallpaperBase64 + ')' : "";
-      editingSceneWallpapers = (sceneSettings.scenes || []).map((scene, index) => normalizeSceneWallpaper(scene, index)).filter(Boolean);
+      editingSceneWallpapers = (sceneSettings.scenes || []).map((scene, index) => normalizeSceneWallpaper(scene, index, project)).filter(Boolean);
       const toggle = document.getElementById('sceneWallpaperToggle');
       if (toggle) toggle.checked = !!sceneSettings.enabled;
       updateWallpaperPreviewStyle();
@@ -298,8 +325,9 @@ let state = {
       } : null;
       project.sceneWallpaperSettings = {
         enabled: !!document.getElementById('sceneWallpaperToggle')?.checked,
-        scenes: editingSceneWallpapers.map((scene, index) => normalizeSceneWallpaper(scene, index)).filter(Boolean)
+        scenes: editingSceneWallpapers.map((scene, index) => normalizeSceneWallpaper(scene, index, project)).filter(Boolean)
       };
+      enforceUniqueSceneTalkSelections(project.sceneWallpaperSettings.scenes);
 
       applyProjectWallpaper(true);
       closeModal('wallpaperModal');
@@ -391,9 +419,9 @@ let state = {
         setEditorWallpaper(project?.wallpaper || null, 'single:' + getWallpaperIdentity(project?.wallpaper), forceUpdate);
         return;
       }
-      const lineNumber = getCurrentTimelineLineNumber();
-      const scenes = settings.scenes.filter(scene => scene.image).slice().sort((a, b) => a.start - b.start || a.end - b.end);
-      const scene = scenes.find(item => lineNumber >= item.start && lineNumber <= item.end) || null;
+      const currentTalkId = getCurrentTimelineTalkId();
+      const scenes = settings.scenes.filter(scene => scene.image && Array.isArray(scene.talkIds) && scene.talkIds.length > 0).slice();
+      const scene = currentTalkId ? scenes.find(item => item.talkIds.includes(currentTalkId)) || null : null;
       if (!scene) {
         setEditorWallpaper(project?.wallpaper || null, 'scene-fallback:' + getWallpaperIdentity(project?.wallpaper), forceUpdate);
         return;
@@ -401,13 +429,13 @@ let state = {
       setEditorWallpaper(scene, 'scene:' + scene.id + ':' + getWallpaperIdentity(scene), forceUpdate);
     }
 
-    function getCurrentTimelineLineNumber() {
+    function getCurrentTimelineTalkId() {
       const timeline = document.getElementById('talkTimeline');
       const project = state.projects[state.currentProjectId];
-      if (!timeline || !project || !Array.isArray(project.talks) || project.talks.length === 0) return 1;
+      if (!timeline || !project || !Array.isArray(project.talks) || project.talks.length === 0) return null;
       const timelineRect = timeline.getBoundingClientRect();
       const bubbles = Array.from(timeline.querySelectorAll('.chat-bubble:not(.ai-predicted)'));
-      if (bubbles.length === 0) return 1;
+      if (bubbles.length === 0) return null;
       const anchorY = timelineRect.top + Math.min(90, Math.max(24, timelineRect.height * 0.18));
       let best = bubbles[0];
       let bestDistance = Infinity;
@@ -420,8 +448,7 @@ let state = {
           bestDistance = distance;
         }
       });
-      const index = parseInt(best.dataset.index, 10);
-      return Number.isFinite(index) ? index + 1 : 1;
+      return best.dataset.talkId || null;
     }
 
 
@@ -434,12 +461,14 @@ let state = {
 
     function renderSceneWallpaperList() {
       const list = document.getElementById('sceneWallpaperList');
-      if (!list) return;
+      const project = state.projects[state.currentProjectId];
+      if (!list || !project) return;
+      ensureTalkIds(project);
       list.innerHTML = '';
       if (!editingSceneWallpapers.length) {
         const empty = document.createElement('div');
         empty.className = 'scene-wallpaper-empty';
-        empty.innerHTML = '&#12471;&#12540;&#12531;&#12434;&#36861;&#21152;&#12377;&#12427;&#12392;&#12289;&#12475;&#12522;&#12501;&#31684;&#22258;&#12372;&#12392;&#12395;&#22721;&#32025;&#12434;&#22793;&#12360;&#12425;&#12428;&#12414;&#12377;&#12290;';
+        empty.innerHTML = '&#12471;&#12540;&#12531;&#12434;&#36861;&#21152;&#12377;&#12427;&#12392;&#12289;&#36984;&#25246;&#12375;&#12383;&#12475;&#12522;&#12501;&#12372;&#12392;&#12395;&#22721;&#32025;&#12434;&#20999;&#12426;&#26367;&#12360;&#12425;&#12428;&#12414;&#12377;&#12290;';
         list.appendChild(empty);
         return;
       }
@@ -447,27 +476,60 @@ let state = {
         const card = document.createElement('div');
         card.className = 'scene-wallpaper-card';
         const fileId = 'sceneWallpaperInput_' + scene.id;
+        const charOptions = ['<option value="">&#35441;&#32773;&#12391;&#32094;&#12426;&#36796;&#12415;</option>'].concat(project.characters.map(char => '<option value="' + escapeHtml(char.name) + '">' + escapeHtml(char.name) + '</option>')).join('');
         card.innerHTML =
           '<div class="scene-wallpaper-card-head">' +
             '<input type="text" value="' + escapeHtml(scene.name) + '" placeholder="&#12471;&#12540;&#12531;&#21517;" oninput="updateSceneWallpaperField(\'' + scene.id + '\', \'name\', this.value)">' +
             '<button type="button" class="btn-scene-delete" onclick="deleteSceneWallpaper(\'' + scene.id + '\')">&#21066;&#38500;</button>' +
           '</div>' +
-          '<div class="scene-range-row">' +
-            '<label>&#38283;&#22987;&#12475;&#12522;&#12501;&#30058;&#21495;<input type="number" min="1" value="' + scene.start + '" oninput="updateSceneWallpaperField(\'' + scene.id + '\', \'start\', this.value)"></label>' +
-            '<label>&#32066;&#20102;&#12475;&#12522;&#12501;&#30058;&#21495;<input type="number" min="1" value="' + scene.end + '" oninput="updateSceneWallpaperField(\'' + scene.id + '\', \'end\', this.value)"></label>' +
-          '</div>' +
           '<div class="scene-wallpaper-image-row">' +
             '<div class="scene-wallpaper-thumb" style="background-image:' + (scene.image ? 'url(' + scene.image + ')' : 'none') + '"></div>' +
             '<label class="scene-wallpaper-file-btn" for="' + fileId + '">&#22721;&#32025;&#30011;&#20687;&#12434;&#36984;&#25246;</label>' +
             '<input id="' + fileId + '" type="file" accept="image/*" style="display:none" onchange="previewSceneWallpaperImage(this, \'' + scene.id + '\')">' +
-          '</div>';
+          '</div>' +
+          '<div class="scene-talk-tools">' +
+            '<span id="sceneTalkCount_' + scene.id + '">' + getSceneTalkCountLabel(scene) + '</span>' +
+            '<div class="scene-talk-tool-buttons">' +
+              '<button type="button" onclick="selectAllSceneTalks(\'' + scene.id + '\')">&#20840;&#36984;&#25246;</button>' +
+              '<button type="button" onclick="clearSceneTalks(\'' + scene.id + '\')">&#36984;&#25246;&#35299;&#38500;</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="scene-talk-filters">' +
+            '<input type="search" id="sceneTalkSearch_' + scene.id + '" placeholder="&#26908;&#32034;" oninput="filterSceneTalkOptions(\'' + scene.id + '\')">' +
+            '<select id="sceneTalkChar_' + scene.id + '" onchange="filterSceneTalkOptions(\'' + scene.id + '\')">' + charOptions + '</select>' +
+          '</div>' +
+          '<div class="scene-talk-list" id="sceneTalkList_' + scene.id + '">' + renderSceneTalkOptions(scene, project) + '</div>';
         list.appendChild(card);
       });
     }
 
+    function renderSceneTalkOptions(scene, project) {
+      return project.talks.map((talk, index) => {
+        const checked = (scene.talkIds || []).includes(talk.id) ? 'checked' : '';
+        const owner = getSceneSelectionOwner(talk.id, scene.id);
+        const ownedClass = owner ? ' scene-talk-owned' : '';
+        const summary = escapeHtml((talk.text || '').replace(/\s+/g, ' ').slice(0, 42));
+        const charName = escapeHtml(talk.charName || '');
+        const ownerText = owner ? '<small>' + escapeHtml(owner.name) + '&#12391;&#36984;&#25246;&#20013;</small>' : '';
+        return '<label class="scene-talk-option' + ownedClass + '" data-talk-id="' + talk.id + '" data-char="' + charName + '" data-search="' + escapeHtml((talk.charName || '') + ' ' + (talk.text || '')) + '">' +
+          '<input type="checkbox" ' + checked + ' onchange="toggleSceneTalkSelection(\'' + scene.id + '\', \'' + talk.id + '\', this.checked)">' +
+          '<span><strong>' + (index + 1) + '. ' + charName + '</strong><em>' + summary + '</em>' + ownerText + '</span>' +
+        '</label>';
+      }).join('');
+    }
+
+    function getSceneSelectionOwner(talkId, currentSceneId) {
+      return editingSceneWallpapers.find(scene => scene.id !== currentSceneId && Array.isArray(scene.talkIds) && scene.talkIds.includes(talkId)) || null;
+    }
+
+    function getSceneTalkCountLabel(scene) {
+      const count = (scene.talkIds || []).length;
+      return '\u9078\u629e\u4e2d: ' + count + '\u4ef6';
+    }
+
     function addSceneWallpaper() {
       const nextIndex = editingSceneWallpapers.length + 1;
-      editingSceneWallpapers.push({ id: 'scene_' + Date.now() + '_' + Math.floor(Math.random() * 1000), name: '\u30b7\u30fc\u30f3' + nextIndex, start: Math.max(1, (nextIndex - 1) * 20 + 1), end: nextIndex * 20, image: '', size: 100, offsetX: 50, offsetY: 50 });
+      editingSceneWallpapers.push({ id: 'scene_' + Date.now() + '_' + Math.floor(Math.random() * 1000), name: '\u30b7\u30fc\u30f3' + nextIndex, talkIds: [], image: '', size: 100, offsetX: 50, offsetY: 50 });
       renderSceneWallpaperList();
       const toggle = document.getElementById('sceneWallpaperToggle');
       if (toggle) toggle.checked = true;
@@ -482,12 +544,60 @@ let state = {
     function updateSceneWallpaperField(id, field, value) {
       const scene = editingSceneWallpapers.find(item => item.id === id);
       if (!scene) return;
-      if (field === 'start' || field === 'end') {
-        scene[field] = Math.max(1, parseInt(value, 10) || 1);
-        if (scene.end < scene.start) scene.end = scene.start;
-      } else {
-        scene[field] = value;
-      }
+      scene[field] = value;
+    }
+
+    function toggleSceneTalkSelection(sceneId, talkId, checked) {
+      const scene = editingSceneWallpapers.find(item => item.id === sceneId);
+      if (!scene) return;
+      editingSceneWallpapers.forEach(item => {
+        item.talkIds = (item.talkIds || []).filter(id => id !== talkId);
+      });
+      if (checked) scene.talkIds = [...(scene.talkIds || []), talkId];
+      enforceUniqueSceneTalkSelections(editingSceneWallpapers);
+      renderSceneWallpaperList();
+    }
+
+    function selectAllSceneTalks(sceneId) {
+      const project = state.projects[state.currentProjectId];
+      const scene = editingSceneWallpapers.find(item => item.id === sceneId);
+      if (!project || !scene) return;
+      const visibleIds = getVisibleSceneTalkIds(sceneId);
+      const filtersActive = isSceneTalkFilterActive(sceneId);
+      const ids = filtersActive ? visibleIds : project.talks.map(talk => talk.id);
+      editingSceneWallpapers.forEach(item => {
+        if (item.id !== sceneId) item.talkIds = (item.talkIds || []).filter(id => !ids.includes(id));
+      });
+      scene.talkIds = [...new Set([...(scene.talkIds || []), ...ids])];
+      enforceUniqueSceneTalkSelections(editingSceneWallpapers);
+      renderSceneWallpaperList();
+    }
+
+    function clearSceneTalks(sceneId) {
+      const scene = editingSceneWallpapers.find(item => item.id === sceneId);
+      if (!scene) return;
+      scene.talkIds = [];
+      renderSceneWallpaperList();
+    }
+
+    function getVisibleSceneTalkIds(sceneId) {
+      return Array.from(document.querySelectorAll('#sceneTalkList_' + sceneId + ' .scene-talk-option:not(.filtered-out)')).map(row => row.dataset.talkId).filter(Boolean);
+    }
+
+    function isSceneTalkFilterActive(sceneId) {
+      const search = (document.getElementById('sceneTalkSearch_' + sceneId)?.value || '').trim();
+      const charName = document.getElementById('sceneTalkChar_' + sceneId)?.value || '';
+      return !!search || !!charName;
+    }
+
+    function filterSceneTalkOptions(sceneId) {
+      const search = (document.getElementById('sceneTalkSearch_' + sceneId)?.value || '').trim().toLowerCase();
+      const charName = document.getElementById('sceneTalkChar_' + sceneId)?.value || '';
+      document.querySelectorAll('#sceneTalkList_' + sceneId + ' .scene-talk-option').forEach(row => {
+        const matchesSearch = !search || (row.dataset.search || '').toLowerCase().includes(search);
+        const matchesChar = !charName || row.dataset.char === charName;
+        row.classList.toggle('filtered-out', !(matchesSearch && matchesChar));
+      });
     }
 
     function previewSceneWallpaperImage(input, id) {
@@ -501,6 +611,13 @@ let state = {
         scene.offsetX = 50;
         scene.offsetY = 50;
         renderSceneWallpaperList();
+      });
+    }
+
+    function removeTalkIdsFromSceneSettings(project, talkIds) {
+      if (!project || !project.sceneWallpaperSettings || !Array.isArray(talkIds)) return;
+      project.sceneWallpaperSettings.scenes.forEach(scene => {
+        scene.talkIds = (scene.talkIds || []).filter(id => !talkIds.includes(id));
       });
     }
 
@@ -830,7 +947,9 @@ let state = {
         const isRight = isProtagonistTalk(project, talk.charName) && !isScene;
         const bubble = document.createElement('div');
         bubble.className = `chat-bubble ${isScene ? 'scene' : (isRight ? 'right' : 'left')}${editingTalkIndex === index ? ' inline-edit-target' : ''}`;
+        if (!talk.id) talk.id = createTalkId();
         bubble.dataset.index = index;
+        bubble.dataset.talkId = talk.id;
 
         bubble.onpointerup = function(e) {
           if (Date.now() < suppressTalkClickUntil || isSortingTalks) return;
@@ -939,7 +1058,7 @@ let state = {
           cancelInlineTalkEdit();
           return;
         }
-        project.talks[editingTalkIndex] = { charName: currentCharacter, text: text };
+        project.talks[editingTalkIndex] = { ...project.talks[editingTalkIndex], charName: currentCharacter, text: text };
         predictedTalks = [];
         saveState();
         finishInlineTalkEdit();
@@ -950,7 +1069,7 @@ let state = {
         return;
       }
 
-      project.talks.push({ charName: currentCharacter, text: text });
+      project.talks.push(createTalkRecord(currentCharacter, text));
       predictedTalks = [];
 
       saveState();
@@ -1246,10 +1365,7 @@ ${keptPredictionText}
       const project = state.projects[state.currentProjectId];
       const prediction = predictedTalks[untilIndex];
       if (prediction && !prediction.isSystem && prediction.charName !== "システム警告") {
-        project.talks.push({
-          charName: prediction.charName,
-          text: prediction.text
-        });
+        project.talks.push(createTalkRecord(prediction.charName, prediction.text));
       }
       predictedTalks.splice(untilIndex, 1);
       saveState();
@@ -1369,7 +1485,9 @@ ${keptPredictionText}
     function deleteSelectedTalks() {
       if (selectedTalkIndexes.size === 0) return;
       const project = state.projects[state.currentProjectId];
+      const removedIds = project.talks.filter((_, index) => selectedTalkIndexes.has(index)).map(talk => talk.id).filter(Boolean);
       project.talks = project.talks.filter((_, index) => !selectedTalkIndexes.has(index));
+      removeTalkIdsFromSceneSettings(project, removedIds);
       selectedTalkIndexes.clear();
       predictedTalks = [];
       saveState();
@@ -1380,7 +1498,9 @@ ${keptPredictionText}
     function deleteTalk(event, index) {
       event.stopPropagation();
       const project = state.projects[state.currentProjectId];
+      const removed = project.talks[index];
       project.talks.splice(index, 1);
+      removeTalkIdsFromSceneSettings(project, removed?.id ? [removed.id] : []);
       normalizeSelectedTalksAfterMutation();
       predictedTalks = [];
       saveState();
@@ -1393,7 +1513,7 @@ ${keptPredictionText}
       const project = state.projects[state.currentProjectId];
       const original = project.talks[index];
       if (!original) return;
-      project.talks.splice(index + 1, 0, { charName: original.charName, text: original.text });
+      project.talks.splice(index + 1, 0, createTalkRecord(original.charName, original.text));
       selectedTalkIndexes.clear();
       predictedTalks = [];
       saveState();
@@ -1671,7 +1791,9 @@ ${keptPredictionText}
       if (!project || idx >= project.talks.length) return false;
 
       item.dataset.deletedByTrash = 'true';
+      const removed = project.talks[idx];
       project.talks.splice(idx, 1);
+      removeTalkIdsFromSceneSettings(project, removed?.id ? [removed.id] : []);
       saveState();
       renderTimeline();
       updateMetaStats();
