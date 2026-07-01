@@ -312,7 +312,7 @@ let state = {
           const item = document.createElement('div');
           item.className = 'folder-chip' + (state.currentFolderId === folder.id ? ' active' : '');
           item.onclick = () => selectFolder(folder.id);
-          item.innerHTML = '<span>?? ' + escapeHtml(folder.name) + ' (' + count + ')</span>' + (folder.id === UNCLASSIFIED_FOLDER_ID ? '' : '<button onclick="renameFolder(event, \'' + folder.id + '\')">?</button><button onclick="deleteFolder(event, \'' + folder.id + '\')">?</button>');
+          item.innerHTML = '<span>&#128193; ' + escapeHtml(folder.name) + ' (' + count + ')</span>' + (folder.id === UNCLASSIFIED_FOLDER_ID ? '' : '<button onclick="renameFolder(event, \'' + folder.id + '\')">&#9998;</button><button onclick="deleteFolder(event, \'' + folder.id + '\')">&times;</button>');
           folderList.appendChild(item);
         });
       }
@@ -321,7 +321,7 @@ let state = {
         const project = state.projects[id];
         const card = document.createElement('div');
         card.className = 'project-card';
-        card.innerHTML = '<div class="project-info" onclick="openProject(\'' + id + '\')"><h3>' + escapeHtml(project.title) + '</h3><p>??????: ' + project.characters.length + '? / ??: ' + project.talks.length + '?</p></div><div class="project-card-actions" onclick="event.stopPropagation()"><select onchange="moveProjectToFolder(event, \'' + id + '\')">' + folderOptions + '</select><button class="delete-project-btn" onclick="deleteProject(event, \'' + id + '\')">??</button></div>';
+        card.innerHTML = '<div class="project-info" onclick="openProject(\'' + id + '\')"><h3>' + escapeHtml(project.title) + '</h3><p>&#12461;&#12515;&#12521;&#12463;&#12479;&#12540;: ' + project.characters.length + '&#20154; / &#21488;&#26412;: ' + project.talks.length + '&#34892;</p></div><div class="project-card-actions" onclick="event.stopPropagation()"><select onchange="moveProjectToFolder(event, \'' + id + '\')">' + folderOptions + '</select><button class="duplicate-project-btn" onclick="duplicateProject(event, \'' + id + '\')">&#35079;&#35069;</button><button class="delete-project-btn" onclick="deleteProject(event, \'' + id + '\')">&#21066;&#38500;</button></div>';
         const select = card.querySelector('select');
         if (select) select.value = project.folderId || UNCLASSIFIED_FOLDER_ID;
         list.appendChild(card);
@@ -329,7 +329,7 @@ let state = {
       if (!list.children.length) {
         const empty = document.createElement('div');
         empty.className = 'project-empty';
-        empty.innerText = '?????????????????????';
+        empty.innerText = '\u3053\u306e\u30d5\u30a9\u30eb\u30c0\u306b\u306f\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002';
         list.appendChild(empty);
       }
     }
@@ -398,6 +398,34 @@ let state = {
         saveState();
         renderProjectList();
       }
+    }
+
+
+    function duplicateProject(event, id) {
+      event.stopPropagation();
+      const source = state.projects[id];
+      if (!source) return;
+      const newId = 'p_' + Date.now();
+      const copy = cloneProject(source);
+      copy.title = (source.title || '\u30d7\u30ed\u30b8\u30a7\u30af\u30c8') + ' \u306e\u30b3\u30d4\u30fc';
+      copy.folderId = source.folderId || UNCLASSIFIED_FOLDER_ID;
+      if (Array.isArray(copy.talks)) {
+        const idMap = new Map();
+        copy.talks.forEach(talk => {
+          const oldId = talk.id;
+          talk.id = createTalkId();
+          if (oldId) idMap.set(oldId, talk.id);
+        });
+        if (copy.sceneWallpaperSettings?.scenes) {
+          copy.sceneWallpaperSettings.scenes.forEach(scene => {
+            scene.id = 'scene_' + Date.now() + '_' + Math.floor(Math.random() * 1000000);
+            scene.talkIds = (scene.talkIds || []).map(talkId => idMap.get(talkId)).filter(Boolean);
+          });
+        }
+      }
+      state.projects[newId] = copy;
+      saveState();
+      renderProjectList();
     }
 
     function openWallpaperModal() {

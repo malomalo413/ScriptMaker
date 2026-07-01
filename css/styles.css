@@ -1074,3 +1074,14 @@
     .talk-number { align-self: flex-start; margin-top: 24px; min-width: 30px; padding: 2px 4px; border-radius: 5px; background: rgba(255,255,255,0.72); color: #64748b; font-size: 10px; font-weight: 800; text-align: center; pointer-events: none; }
     .chat-bubble.scene .talk-number { margin-top: 6px; }
     @media (max-width: 420px) { .project-card { align-items: stretch; flex-direction: column; gap: 10px; } .project-card-actions { justify-content: flex-end; } .nav-actions { gap: 4px; } .nav-icon-btn { width: 28px; } }
+
+    .duplicate-project-btn {
+      background: #e0f2fe;
+      color: #0369a1;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 12px;
+      cursor: pointer;
+    }
