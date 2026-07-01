@@ -14,9 +14,9 @@
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="./assets/icons/icon-512.png">
-  <link rel="stylesheet" href="./css/styles.css?v=12">
+  <link rel="stylesheet" href="./css/styles.css?v=13">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
-  <script src="./js/app.js?v=12" defer></script>
+  <script src="./js/app.js?v=13" defer></script>
 </head>
 <body>
 <div id="openingView" class="opening-view">
@@ -32,7 +32,8 @@
   </div>
 
   <div id="editorView" class="editor-view hidden">
-    <div id="editorWallpaperLayer" class="editor-wallpaper-layer"></div>
+    <div id="editorWallpaperLayer" class="editor-wallpaper-layer active"></div>
+    <div id="editorWallpaperLayerNext" class="editor-wallpaper-layer"></div>
     <div class="nav-bar">
       <button class="back-btn" onclick="goBack()">←</button>
       <div class="project-title" id="projectTitle">プロジェクト名</div>
@@ -143,6 +144,22 @@
           <span id="wallpaperSizeVal" style="font-weight:bold; color:var(--primary-color);">100%</span>
         </label>
         <input type="range" id="wallpaperSizeSlider" min="100" max="250" value="100" step="2" oninput="updateWallpaperPreviewStyle()">
+      </div>
+      <div class="scene-wallpaper-section">
+        <div class="modal-row-inline scene-wallpaper-toggle-row">
+          <input type="checkbox" id="sceneWallpaperToggle" onchange="toggleSceneWallpaperControls()">
+          <label for="sceneWallpaperToggle">&#12471;&#12540;&#12531;&#20999;&#12426;&#26367;&#12360;&#12434;&#26377;&#21177;&#21270;</label>
+        </div>
+        <div id="sceneWallpaperControls" class="scene-wallpaper-controls hidden">
+          <div class="scene-wallpaper-head">
+            <div>
+              <strong>&#12471;&#12540;&#12531;&#20999;&#12426;&#26367;&#12360;</strong>
+              <small>&#34920;&#31034;&#20013;&#12398;&#12475;&#12522;&#12501;&#30058;&#21495;&#12391;&#22721;&#32025;&#12434;&#20999;&#12426;&#26367;&#12360;&#12414;&#12377;</small>
+            </div>
+            <button type="button" class="btn-scene-add" onclick="addSceneWallpaper()">&#12471;&#12540;&#12531;&#36861;&#21152;</button>
+          </div>
+          <div id="sceneWallpaperList" class="scene-wallpaper-list"></div>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn-modal-cancel" onclick="clearWallpaper()">削除</button>

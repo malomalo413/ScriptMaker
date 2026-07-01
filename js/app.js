@@ -26,6 +26,10 @@ let state = {
     let suppressTalkClickUntil = 0;
     let aiStatusMessage = "";
     let aiStatusType = "info";
+    let editingSceneWallpapers = [];
+    let currentWallpaperKey = "";
+    let activeWallpaperLayerIndex = 0;
+    let sceneWallpaperRaf = 0;
 
     let originalViewportHeight = window.innerHeight;
     const GEMINI_MODEL_CANDIDATES = [
@@ -70,6 +74,7 @@ let state = {
       initCharacterModalActions();
       initWallpaperModalActions();
       initWallpaperPan();
+      initSceneWallpaperScroll();
     };
 
     function normalizeProjectData() {
@@ -83,7 +88,43 @@ let state = {
         if (!project.characters.some(char => char.isProtagonist) && project.characters[0]) {
           project.characters[0].isProtagonist = true;
         }
+        normalizeSceneWallpaperSettings(project);
       });
+    }
+
+
+    function normalizeSceneWallpaperSettings(project) {
+      if (!project) return { enabled: false, scenes: [] };
+      const current = project.sceneWallpaperSettings || {};
+      const scenes = Array.isArray(current.scenes) ? current.scenes : [];
+      project.sceneWallpaperSettings = {
+        enabled: !!current.enabled,
+        scenes: scenes.map((scene, index) => normalizeSceneWallpaper(scene, index)).filter(Boolean)
+      };
+      return project.sceneWallpaperSettings;
+    }
+
+    function normalizeSceneWallpaper(scene, index) {
+      if (!scene || typeof scene !== 'object') return null;
+      const start = Math.max(1, parseInt(scene.start, 10) || 1);
+      const endValue = parseInt(scene.end, 10);
+      const end = Math.max(start, endValue || start);
+      return {
+        id: scene.id || ('scene_' + Date.now() + '_' + index + '_' + Math.floor(Math.random() * 1000)),
+        name: String(scene.name || '\u30b7\u30fc\u30f3' + (index + 1)),
+        start,
+        end,
+        image: scene.image || "",
+        size: Math.max(100, parseInt(scene.size, 10) || 100),
+        offsetX: Number.isFinite(Number(scene.offsetX)) ? Number(scene.offsetX) : 50,
+        offsetY: Number.isFinite(Number(scene.offsetY)) ? Number(scene.offsetY) : 50
+      };
+    }
+
+    function getSceneWallpaperSettings(project) {
+      if (!project) return { enabled: false, scenes: [] };
+      if (!project.sceneWallpaperSettings) normalizeSceneWallpaperSettings(project);
+      return project.sceneWallpaperSettings;
     }
 
     function saveState() {
@@ -200,6 +241,7 @@ let state = {
     function openWallpaperModal() {
       const project = state.projects[state.currentProjectId];
       const wallpaper = project?.wallpaper || {};
+      const sceneSettings = getSceneWallpaperSettings(project);
 
       selectedWallpaperBase64 = wallpaper.image || "";
       wallpaperSize = Math.max(100, wallpaper.size || 100);
@@ -210,8 +252,13 @@ let state = {
 
       document.getElementById('wallpaperSizeSlider').value = wallpaperSize;
       const preview = document.getElementById('wallpaperPreview');
-      preview.style.backgroundImage = selectedWallpaperBase64 ? `url(${selectedWallpaperBase64})` : "";
+      preview.style.backgroundImage = selectedWallpaperBase64 ? 'url(' + selectedWallpaperBase64 + ')' : "";
+      editingSceneWallpapers = (sceneSettings.scenes || []).map((scene, index) => normalizeSceneWallpaper(scene, index)).filter(Boolean);
+      const toggle = document.getElementById('sceneWallpaperToggle');
+      if (toggle) toggle.checked = !!sceneSettings.enabled;
       updateWallpaperPreviewStyle();
+      renderSceneWallpaperList();
+      toggleSceneWallpaperControls();
       openModal('wallpaperModal');
     }
 
@@ -249,8 +296,12 @@ let state = {
         offsetX: wallpaperOffsetX,
         offsetY: wallpaperOffsetY
       } : null;
+      project.sceneWallpaperSettings = {
+        enabled: !!document.getElementById('sceneWallpaperToggle')?.checked,
+        scenes: editingSceneWallpapers.map((scene, index) => normalizeSceneWallpaper(scene, index)).filter(Boolean)
+      };
 
-      applyProjectWallpaper();
+      applyProjectWallpaper(true);
       closeModal('wallpaperModal');
       saveState();
     }
@@ -266,24 +317,191 @@ let state = {
       closeModal('wallpaperModal');
     }
 
-    function applyProjectWallpaper() {
-      const wallpaperLayer = document.getElementById('editorWallpaperLayer');
+    function applyProjectWallpaper(forceUpdate = false) {
       const project = state.projects[state.currentProjectId];
-      const wallpaper = project?.wallpaper;
-
-      if (!wallpaperLayer || !wallpaper?.image) {
-        if (wallpaperLayer) {
-          wallpaperLayer.style.backgroundImage = "";
-          wallpaperLayer.style.transform = "";
-          wallpaperLayer.style.backgroundPosition = "";
-        }
+      const sceneSettings = getSceneWallpaperSettings(project);
+      if (sceneSettings.enabled && sceneSettings.scenes.some(scene => scene.image)) {
+        updateSceneWallpaperByScroll(forceUpdate);
         return;
       }
+      setEditorWallpaper(project?.wallpaper || null, 'single:' + getWallpaperIdentity(project?.wallpaper), forceUpdate);
+    }
 
-      const scale = Math.max(1, (wallpaper.size || 100) / 100);
-      wallpaperLayer.style.backgroundImage = `url(${wallpaper.image})`;
-      wallpaperLayer.style.backgroundPosition = `${wallpaper.offsetX ?? 50}% ${wallpaper.offsetY ?? 50}%`;
-      wallpaperLayer.style.transform = `scale(${scale})`;
+    function getWallpaperIdentity(wallpaper) {
+      if (!wallpaper || !wallpaper.image) return 'none';
+      return [wallpaper.image.slice(0, 64), wallpaper.size || 100, wallpaper.offsetX ?? 50, wallpaper.offsetY ?? 50].join('|');
+    }
+
+    function getWallpaperLayers() {
+      return [document.getElementById('editorWallpaperLayer'), document.getElementById('editorWallpaperLayerNext')].filter(Boolean);
+    }
+
+    function setEditorWallpaper(wallpaper, key, forceUpdate = false) {
+      const layers = getWallpaperLayers();
+      if (layers.length === 0) return;
+      if (!forceUpdate && key === currentWallpaperKey) return;
+      const current = layers[activeWallpaperLayerIndex] || layers[0];
+      const nextIndex = layers.length > 1 ? 1 - activeWallpaperLayerIndex : activeWallpaperLayerIndex;
+      const next = layers[nextIndex] || current;
+      styleWallpaperLayer(next, wallpaper);
+      if (layers.length > 1 && next !== current) {
+        next.classList.add('active');
+        current.classList.remove('active');
+        activeWallpaperLayerIndex = nextIndex;
+      } else {
+        next.classList.add('active');
+      }
+      currentWallpaperKey = key;
+    }
+
+    function styleWallpaperLayer(layer, wallpaper) {
+      if (!layer) return;
+      if (!wallpaper || !wallpaper.image) {
+        layer.style.backgroundImage = "";
+        layer.style.backgroundSize = "";
+        layer.style.backgroundPosition = "";
+        layer.style.transform = "";
+        return;
+      }
+      const size = wallpaper.size || 100;
+      layer.style.backgroundImage = 'url(' + wallpaper.image + ')';
+      layer.style.backgroundSize = size === 100 ? 'cover' : size + '%';
+      layer.style.backgroundPosition = (wallpaper.offsetX ?? 50) + '% ' + (wallpaper.offsetY ?? 50) + '%';
+      layer.style.transform = "";
+    }
+
+    function scheduleSceneWallpaperUpdate() {
+      if (sceneWallpaperRaf) return;
+      sceneWallpaperRaf = requestAnimationFrame(() => {
+        sceneWallpaperRaf = 0;
+        updateSceneWallpaperByScroll(false);
+      });
+    }
+
+    function initSceneWallpaperScroll() {
+      const timeline = document.getElementById('talkTimeline');
+      if (!timeline) return;
+      timeline.addEventListener('scroll', scheduleSceneWallpaperUpdate, { passive: true });
+    }
+
+    function updateSceneWallpaperByScroll(forceUpdate = false) {
+      const project = state.projects[state.currentProjectId];
+      const settings = getSceneWallpaperSettings(project);
+      if (!settings.enabled) {
+        setEditorWallpaper(project?.wallpaper || null, 'single:' + getWallpaperIdentity(project?.wallpaper), forceUpdate);
+        return;
+      }
+      const lineNumber = getCurrentTimelineLineNumber();
+      const scenes = settings.scenes.filter(scene => scene.image).slice().sort((a, b) => a.start - b.start || a.end - b.end);
+      const scene = scenes.find(item => lineNumber >= item.start && lineNumber <= item.end) || null;
+      if (!scene) {
+        setEditorWallpaper(project?.wallpaper || null, 'scene-fallback:' + getWallpaperIdentity(project?.wallpaper), forceUpdate);
+        return;
+      }
+      setEditorWallpaper(scene, 'scene:' + scene.id + ':' + getWallpaperIdentity(scene), forceUpdate);
+    }
+
+    function getCurrentTimelineLineNumber() {
+      const timeline = document.getElementById('talkTimeline');
+      const project = state.projects[state.currentProjectId];
+      if (!timeline || !project || !Array.isArray(project.talks) || project.talks.length === 0) return 1;
+      const timelineRect = timeline.getBoundingClientRect();
+      const bubbles = Array.from(timeline.querySelectorAll('.chat-bubble:not(.ai-predicted)'));
+      if (bubbles.length === 0) return 1;
+      const anchorY = timelineRect.top + Math.min(90, Math.max(24, timelineRect.height * 0.18));
+      let best = bubbles[0];
+      let bestDistance = Infinity;
+      bubbles.forEach(bubble => {
+        const rect = bubble.getBoundingClientRect();
+        const center = Math.max(rect.top, Math.min(rect.bottom, anchorY));
+        const distance = Math.abs(center - anchorY);
+        if (distance < bestDistance) {
+          best = bubble;
+          bestDistance = distance;
+        }
+      });
+      const index = parseInt(best.dataset.index, 10);
+      return Number.isFinite(index) ? index + 1 : 1;
+    }
+
+
+    function toggleSceneWallpaperControls() {
+      const toggle = document.getElementById('sceneWallpaperToggle');
+      const controls = document.getElementById('sceneWallpaperControls');
+      if (!toggle || !controls) return;
+      controls.classList.toggle('hidden', !toggle.checked);
+    }
+
+    function renderSceneWallpaperList() {
+      const list = document.getElementById('sceneWallpaperList');
+      if (!list) return;
+      list.innerHTML = '';
+      if (!editingSceneWallpapers.length) {
+        const empty = document.createElement('div');
+        empty.className = 'scene-wallpaper-empty';
+        empty.innerHTML = '&#12471;&#12540;&#12531;&#12434;&#36861;&#21152;&#12377;&#12427;&#12392;&#12289;&#12475;&#12522;&#12501;&#31684;&#22258;&#12372;&#12392;&#12395;&#22721;&#32025;&#12434;&#22793;&#12360;&#12425;&#12428;&#12414;&#12377;&#12290;';
+        list.appendChild(empty);
+        return;
+      }
+      editingSceneWallpapers.forEach((scene) => {
+        const card = document.createElement('div');
+        card.className = 'scene-wallpaper-card';
+        const fileId = 'sceneWallpaperInput_' + scene.id;
+        card.innerHTML =
+          '<div class="scene-wallpaper-card-head">' +
+            '<input type="text" value="' + escapeHtml(scene.name) + '" placeholder="&#12471;&#12540;&#12531;&#21517;" oninput="updateSceneWallpaperField(\'' + scene.id + '\', \'name\', this.value)">' +
+            '<button type="button" class="btn-scene-delete" onclick="deleteSceneWallpaper(\'' + scene.id + '\')">&#21066;&#38500;</button>' +
+          '</div>' +
+          '<div class="scene-range-row">' +
+            '<label>&#38283;&#22987;&#12475;&#12522;&#12501;&#30058;&#21495;<input type="number" min="1" value="' + scene.start + '" oninput="updateSceneWallpaperField(\'' + scene.id + '\', \'start\', this.value)"></label>' +
+            '<label>&#32066;&#20102;&#12475;&#12522;&#12501;&#30058;&#21495;<input type="number" min="1" value="' + scene.end + '" oninput="updateSceneWallpaperField(\'' + scene.id + '\', \'end\', this.value)"></label>' +
+          '</div>' +
+          '<div class="scene-wallpaper-image-row">' +
+            '<div class="scene-wallpaper-thumb" style="background-image:' + (scene.image ? 'url(' + scene.image + ')' : 'none') + '"></div>' +
+            '<label class="scene-wallpaper-file-btn" for="' + fileId + '">&#22721;&#32025;&#30011;&#20687;&#12434;&#36984;&#25246;</label>' +
+            '<input id="' + fileId + '" type="file" accept="image/*" style="display:none" onchange="previewSceneWallpaperImage(this, \'' + scene.id + '\')">' +
+          '</div>';
+        list.appendChild(card);
+      });
+    }
+
+    function addSceneWallpaper() {
+      const nextIndex = editingSceneWallpapers.length + 1;
+      editingSceneWallpapers.push({ id: 'scene_' + Date.now() + '_' + Math.floor(Math.random() * 1000), name: '\u30b7\u30fc\u30f3' + nextIndex, start: Math.max(1, (nextIndex - 1) * 20 + 1), end: nextIndex * 20, image: '', size: 100, offsetX: 50, offsetY: 50 });
+      renderSceneWallpaperList();
+      const toggle = document.getElementById('sceneWallpaperToggle');
+      if (toggle) toggle.checked = true;
+      toggleSceneWallpaperControls();
+    }
+
+    function deleteSceneWallpaper(id) {
+      editingSceneWallpapers = editingSceneWallpapers.filter(scene => scene.id !== id);
+      renderSceneWallpaperList();
+    }
+
+    function updateSceneWallpaperField(id, field, value) {
+      const scene = editingSceneWallpapers.find(item => item.id === id);
+      if (!scene) return;
+      if (field === 'start' || field === 'end') {
+        scene[field] = Math.max(1, parseInt(value, 10) || 1);
+        if (scene.end < scene.start) scene.end = scene.start;
+      } else {
+        scene[field] = value;
+      }
+    }
+
+    function previewSceneWallpaperImage(input, id) {
+      const file = input.files[0];
+      if (!file) return;
+      compressImageFile(file, 1400, 0.82, function(dataUrl) {
+        const scene = editingSceneWallpapers.find(item => item.id === id);
+        if (!scene) return;
+        scene.image = dataUrl;
+        scene.size = 100;
+        scene.offsetX = 50;
+        scene.offsetY = 50;
+        renderSceneWallpaperList();
+      });
     }
 
     function openProject(id) {
@@ -705,6 +923,7 @@ let state = {
       
       updateSelectedTalkCount();
       scrollToBottom();
+      scheduleSceneWallpaperUpdate();
     }
 
     function sendMessage() {

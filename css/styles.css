@@ -165,6 +165,12 @@
       background-size: cover;
       transform-origin: center center;
       pointer-events: none;
+      opacity: 0;
+      transition: opacity 460ms ease;
+      will-change: opacity, background-image;
+    }
+    .editor-wallpaper-layer.active {
+      opacity: 1;
     }
     .editor-view > *:not(.editor-wallpaper-layer) {
       position: relative;
@@ -829,4 +835,135 @@
     }
     .output-modal-actions {
       flex-wrap: wrap;
+    }
+
+
+    .scene-wallpaper-section {
+      margin-top: 12px;
+      border-top: 1px solid var(--border-color);
+      padding-top: 12px;
+    }
+    .scene-wallpaper-toggle-row {
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      color: #334155;
+    }
+    .scene-wallpaper-controls {
+      margin-top: 10px;
+    }
+    .scene-wallpaper-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .scene-wallpaper-head small {
+      display: block;
+      margin-top: 3px;
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 500;
+      line-height: 1.4;
+    }
+    .btn-scene-add {
+      border: none;
+      border-radius: 7px;
+      padding: 8px 10px;
+      background: #dbeafe;
+      color: #1d4ed8;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .scene-wallpaper-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: min(42vh, 360px);
+      overflow-y: auto;
+      padding-right: 2px;
+    }
+    .scene-wallpaper-card {
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .scene-wallpaper-card-head {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .scene-wallpaper-card-head input {
+      flex: 1;
+      min-width: 0;
+      padding: 8px 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 7px;
+      font-size: 14px;
+      background: white;
+    }
+    .btn-scene-delete {
+      border: none;
+      border-radius: 7px;
+      padding: 8px 10px;
+      background: #fee2e2;
+      color: #b91c1c;
+      font-weight: 700;
+    }
+    .scene-range-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .scene-range-row label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .scene-range-row input {
+      padding: 8px 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 7px;
+      font-size: 14px;
+      background: white;
+    }
+    .scene-wallpaper-image-row {
+      display: grid;
+      grid-template-columns: 88px 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+    .scene-wallpaper-thumb {
+      height: 58px;
+      border: 1px dashed #cbd5e1;
+      border-radius: 7px;
+      background: #fff center / cover no-repeat;
+    }
+    .scene-wallpaper-file-btn {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 40px;
+      border-radius: 7px;
+      background: #e2e8f0;
+      color: #334155;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .scene-wallpaper-empty {
+      padding: 12px;
+      border: 1px dashed #cbd5e1;
+      border-radius: 8px;
+      color: #64748b;
+      font-size: 12px;
+      text-align: center;
+      background: #f8fafc;
     }
