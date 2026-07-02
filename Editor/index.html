@@ -14,9 +14,9 @@
   <link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="../assets/icons/icon-512.png">
-  <link rel="stylesheet" href="../css/styles.css?v=17">
+  <link rel="stylesheet" href="../css/styles.css?v=18">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
-  <script src="../js/app.js?v=17" defer></script>
+  <script src="../js/app.js?v=18" defer></script>
 </head>
 <body>
 <div id="openingView" class="opening-view">
@@ -46,6 +46,7 @@
         <button class="nav-btn nav-icon-btn" id="redoBtn" onclick="redoProjectAction()" title="Redo">&#8631;</button>
         <button class="nav-btn btn-nav-save" onclick="saveDataAlert()">保存</button>
         <button class="nav-btn btn-nav-export" onclick="exportDataAlert()">出力</button>
+        <button class="nav-btn btn-nav-share" onclick="openShareModal()">&#20849;&#26377;</button>
         <button class="nav-btn btn-nav-wallpaper" onclick="openWallpaperModal()">壁紙</button>
         <button class="nav-btn btn-nav-mode" id="modeToggleBtn" onclick="toggleEditMode()">編集</button>
       </div>
@@ -201,6 +202,20 @@
         <button class="btn-modal-cancel" type="button" onclick="closeModal('outputModal')">閉じる</button>
         <button class="btn-modal-cancel" type="button" onclick="downloadOutputText()">保存</button>
         <button class="btn-modal-confirm" type="button" onclick="copyOutputText()">コピー</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="shareModal" class="custom-modal hidden">
+    <div class="modal-content share-modal-content">
+      <h4>&#20849;&#26377;URL&#12434;&#20316;&#25104;</h4>
+      <p class="share-help">&#29694;&#22312;&#38283;&#12356;&#12390;&#12356;&#12427;&#12503;&#12525;&#12472;&#12455;&#12463;&#12488;&#12434;Viewer&#23554;&#29992;&#12398;&#35501;&#12415;&#21462;&#12426;URL&#12395;&#22793;&#25563;&#12375;&#12414;&#12377;&#12290;</p>
+      <textarea id="shareUrlText" class="share-url-textarea" readonly placeholder="URL"></textarea>
+      <div class="share-meta" id="shareMetaText"></div>
+      <div class="modal-actions share-modal-actions">
+        <button class="btn-modal-cancel" type="button" onclick="closeModal('shareModal')">&#38281;&#12376;&#12427;</button>
+        <button class="btn-modal-cancel" type="button" onclick="openSharedViewer()">Viewer&#12391;&#38283;&#12367;</button>
+        <button class="btn-modal-confirm" type="button" onclick="copyShareUrl()">URL&#12467;&#12500;&#12540;</button>
       </div>
     </div>
   </div>

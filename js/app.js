@@ -1841,6 +1841,89 @@ ${keptPredictionText}
       }
     }
 
+
+    function buildViewerSharePayload(project) {
+      const snapshot = cloneProject(project);
+      ensureTalkIds(snapshot);
+      normalizeSceneWallpaperSettings(snapshot);
+      return {
+        shareId: 'share_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
+        title: snapshot.title || '\u53f0\u672c',
+        createdAt: new Date().toISOString(),
+        project: snapshot
+      };
+    }
+
+    function encodeSharePayload(payload) {
+      const json = JSON.stringify(payload);
+      const bytes = new TextEncoder().encode(json);
+      let bin = '';
+      bytes.forEach(byte => { bin += String.fromCharCode(byte); });
+      return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    }
+
+    function viewerBasePath() {
+      const path = location.pathname;
+      const fromEditorDir = /\/Editor\/?(?:index\.html)?$/i.test(path) || /\/Editor\//i.test(path);
+      return fromEditorDir ? '../Viewer/index.html' : './Viewer/index.html';
+    }
+
+    function buildViewerShareUrl(payload) {
+      const encoded = encodeSharePayload(payload);
+      return new URL(viewerBasePath() + '#data=' + encoded, location.href).href;
+    }
+
+    function currentShareUrl() {
+      const text = document.getElementById('shareUrlText');
+      return text ? text.value.trim() : '';
+    }
+
+    function openShareModal() {
+      const input = document.getElementById('inputSpeech');
+      if (input) input.blur();
+      document.body.classList.remove('keyboard-focused');
+      const project = state.projects[state.currentProjectId];
+      if (!project) {
+        alert('\u5171\u6709\u3059\u308b\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002');
+        return;
+      }
+      const payload = buildViewerSharePayload(project);
+      const url = buildViewerShareUrl(payload);
+      const output = document.getElementById('shareUrlText');
+      const meta = document.getElementById('shareMetaText');
+      if (output) output.value = url;
+      if (meta) {
+        const size = Math.ceil(url.length / 1024);
+        meta.innerText = (payload.title || '\u53f0\u672c') + ' / ' + payload.project.talks.length + '\u884c / URL\u30b5\u30a4\u30ba: \u7d04' + size + 'KB';
+      }
+      openModal('shareModal');
+    }
+
+    async function copyShareUrl() {
+      const text = document.getElementById('shareUrlText');
+      if (!text || !text.value) return;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text.value);
+        } else {
+          text.focus();
+          text.select();
+          document.execCommand('copy');
+        }
+        alert('\u5171\u6709URL\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f\u3002');
+      } catch (error) {
+        console.error('Share URL copy failed:', error);
+        alert('\u30b3\u30d4\u30fc\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002URL\u3092\u9078\u629e\u3057\u3066\u30b3\u30d4\u30fc\u3057\u3066\u304f\u3060\u3055\u3044\u3002');
+      }
+    }
+
+    function openSharedViewer() {
+      const url = currentShareUrl();
+      if (!url) return;
+      window.open(url, '_blank');
+    }
+
+
     function downloadOutputText() {
       const project = state.projects[state.currentProjectId];
       const output = document.getElementById('outputText');

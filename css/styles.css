@@ -220,6 +220,7 @@
     }
     .btn-nav-save { background: #475569; }
     .btn-nav-export { background: #10b981; }
+    .btn-nav-share { background: #0ea5e9; }
     .btn-nav-wallpaper { background: #6366f1; }
     .btn-nav-mode { background: #fef3c7; color: #d97706; }
     .btn-nav-mode.editing { background: var(--danger-color); color: white; }
@@ -1084,4 +1085,47 @@
       font-weight: bold;
       font-size: 12px;
       cursor: pointer;
+    }
+
+
+    .share-modal-content {
+      max-width: 360px;
+    }
+    .share-help {
+      margin: 0;
+      color: #64748b;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .share-url-textarea {
+      width: 100%;
+      min-height: 112px;
+      padding: 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      resize: vertical;
+      font-size: 12px;
+      line-height: 1.45;
+      word-break: break-all;
+    }
+    .share-meta {
+      color: #64748b;
+      font-size: 12px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+    .share-modal-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+    .share-modal-actions button {
+      min-width: 0;
+      padding-left: 8px;
+      padding-right: 8px;
+      white-space: normal;
+    }
+    @media (max-width: 420px) {
+      .share-modal-actions { grid-template-columns: 1fr; }
+      .share-url-textarea { min-height: 128px; }
     }
