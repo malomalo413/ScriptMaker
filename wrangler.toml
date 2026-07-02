@@ -8,7 +8,7 @@ PUBLIC_VIEWER_URL = "https://malomalo413.github.io/ScriptMaker/Viewer"
 ALLOWED_ORIGIN = "https://malomalo413.github.io"
 SHARE_TTL_SECONDS = "15552000"
 
-# After creating the KV namespace, replace this placeholder with the real id:
+# After creating the KV namespace, uncomment this block and replace the id.
 # [[kv_namespaces]]
 # binding = "SHARES"
 # id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"

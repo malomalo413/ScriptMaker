@@ -39,6 +39,8 @@ Binding name: SHARES
 KV namespace: SCRIPTMAKER_SHARES
 ```
 
+Japanese setup guide: `workers/SETUP-JA.md`.
+
 ## Environment Variables
 
 ```text
