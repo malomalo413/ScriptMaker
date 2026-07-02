@@ -1,0 +1,14 @@
+name = "scriptmaker-share"
+main = "workers/share-worker.js"
+compatibility_date = "2024-11-01"
+workers_dev = true
+
+[vars]
+PUBLIC_VIEWER_URL = "https://malomalo413.github.io/ScriptMaker/Viewer"
+ALLOWED_ORIGIN = "https://malomalo413.github.io"
+SHARE_TTL_SECONDS = "15552000"
+
+# After creating the KV namespace, replace this placeholder with the real id:
+# [[kv_namespaces]]
+# binding = "SHARES"
+# id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"

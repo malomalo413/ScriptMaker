@@ -59,6 +59,14 @@ npx wrangler deploy workers/share-worker.js
 
 Configure the KV binding in `wrangler.toml` or in the Cloudflare dashboard.
 
+This repository includes a `wrangler.toml` template. After creating the KV namespace, add the real namespace id to:
+
+```toml
+[[kv_namespaces]]
+binding = "SHARES"
+id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+```
+
 ## Configure ScriptMaker
 
 1. Open ScriptMaker Editor.
