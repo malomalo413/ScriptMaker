@@ -1,5 +1,5 @@
-const CACHE_NAME = 'scriptmaker-editor-v2';
-const APP_SHELL = ['./','./index.html','./manifest.json','../css/styles.css?v=18','../js/app.js?v=18','../assets/icons/icon-192.png','../assets/icons/icon-512.png','../assets/images/opening-background.png'];
+const CACHE_NAME = 'scriptmaker-editor-v5';
+const APP_SHELL = ['./','./index.html','./manifest.json','../css/styles.css?v=21','../js/app.js?v=21','../assets/icons/icon-192.png','../assets/icons/icon-512.png','../assets/images/opening-background.png'];
 self.addEventListener('install', event => { event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', event => { event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))); self.clients.claim(); });
 self.addEventListener('fetch', event => {

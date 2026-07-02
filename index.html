@@ -14,11 +14,25 @@
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="./assets/icons/icon-512.png">
-  <link rel="stylesheet" href="./css/styles.css?v=18">
+  <link rel="stylesheet" href="./css/styles.css?v=21">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
-  <script src="./js/app.js?v=18" defer></script>
+  <script src="./js/app.js?v=21" defer></script>
 </head>
-<body>
+<body class="auth-locked">
+
+  <div id="editorAuthGate" class="editor-auth-gate">
+    <div class="editor-auth-card">
+      <p class="auth-label">ScriptMaker</p>
+      <h1 id="editorAuthTitle">&#12497;&#12473;&#12527;&#12540;&#12489;</h1>
+      <p id="editorAuthHelp" class="auth-help"></p>
+      <input id="editorAuthPassword" type="password" autocomplete="current-password" placeholder="&#12497;&#12473;&#12527;&#12540;&#12489;">
+      <input id="editorAuthConfirm" class="hidden" type="password" autocomplete="new-password" placeholder="&#12497;&#12473;&#12527;&#12540;&#12489;&#30906;&#35469;">
+      <button type="button" onclick="submitEditorPassword()">&#38283;&#12367;</button>
+      <div id="editorAuthMessage" class="auth-message"></div>
+      <small>&#8251;GitHub Pages&#19978;&#12398;&#31777;&#26131;&#20445;&#35703;&#12391;&#12354;&#12426;&#12289;&#23436;&#20840;&#12394;&#12469;&#12540;&#12496;&#12540;&#35469;&#35388;&#12391;&#12399;&#12354;&#12426;&#12414;&#12379;&#12435;&#12290;</small>
+    </div>
+  </div>
+
 <div id="openingView" class="opening-view">
     <div class="opening-overlay"></div>
     <div class="opening-content">
@@ -49,6 +63,7 @@
         <button class="nav-btn btn-nav-share" onclick="openShareModal()">&#20849;&#26377;</button>
         <button class="nav-btn btn-nav-wallpaper" onclick="openWallpaperModal()">壁紙</button>
         <button class="nav-btn btn-nav-mode" id="modeToggleBtn" onclick="toggleEditMode()">編集</button>
+        <button class="nav-btn btn-nav-logout" onclick="logoutEditorAuth()">&#12525;&#12464;&#12450;&#12454;&#12488;</button>
       </div>
     </div>
 
@@ -210,6 +225,7 @@
     <div class="modal-content share-modal-content">
       <h4>&#20849;&#26377;URL&#12434;&#20316;&#25104;</h4>
       <p class="share-help">&#29694;&#22312;&#38283;&#12356;&#12390;&#12356;&#12427;&#12503;&#12525;&#12472;&#12455;&#12463;&#12488;&#12434;Viewer&#23554;&#29992;&#12398;&#35501;&#12415;&#21462;&#12426;URL&#12395;&#22793;&#25563;&#12375;&#12414;&#12377;&#12290;</p>
+      <div class="modal-row"><label for="shareViewerPassword">Viewer&#38322;&#35239;&#12497;&#12473;&#12527;&#12540;&#12489;&#65288;&#20219;&#24847;&#65289;</label><input type="password" id="shareViewerPassword" autocomplete="new-password" placeholder="&#26410;&#35373;&#23450;&#12394;&#12425;&#12497;&#12473;&#12527;&#12540;&#12489;&#12394;&#12375;"></div>
       <textarea id="shareUrlText" class="share-url-textarea" readonly placeholder="URL"></textarea>
       <div class="share-meta" id="shareMetaText"></div>
       <div class="modal-actions share-modal-actions">

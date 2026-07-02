@@ -223,6 +223,7 @@
     .btn-nav-share { background: #0ea5e9; }
     .btn-nav-wallpaper { background: #6366f1; }
     .btn-nav-mode { background: #fef3c7; color: #d97706; }
+    .btn-nav-logout { background: #334155; }
     .btn-nav-mode.editing { background: var(--danger-color); color: white; }
 
     .header-scroll-area {
@@ -1128,4 +1129,70 @@
     @media (max-width: 420px) {
       .share-modal-actions { grid-template-columns: 1fr; }
       .share-url-textarea { min-height: 128px; }
+    }
+
+
+    body.auth-locked .opening-view,
+    body.auth-locked .editor-view,
+    body.auth-locked #trashZone {
+      display: none !important;
+    }
+    .editor-auth-gate {
+      position: fixed;
+      inset: 0;
+      z-index: 3000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: linear-gradient(160deg, #0f172a, #1e293b 55%, #0f766e);
+    }
+    .editor-auth-gate.hidden { display: none; }
+    .editor-auth-card {
+      width: min(360px, 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 22px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, .96);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, .28);
+    }
+    .auth-label {
+      margin: 0;
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .editor-auth-card h1 {
+      margin: 0;
+      color: #0f172a;
+      font-size: 22px;
+    }
+    .auth-help, .auth-message {
+      margin: 0;
+      color: #64748b;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .auth-message { color: #dc2626; font-weight: 800; min-height: 18px; }
+    .editor-auth-card input {
+      width: 100%;
+      padding: 11px;
+      border: 1px solid var(--border-color);
+      border-radius: 9px;
+      font-size: 16px;
+    }
+    .editor-auth-card button {
+      border: 0;
+      border-radius: 9px;
+      padding: 12px;
+      background: var(--primary-color);
+      color: #fff;
+      font-weight: 900;
+      font-size: 15px;
+    }
+    .editor-auth-card small {
+      color: #64748b;
+      line-height: 1.5;
     }

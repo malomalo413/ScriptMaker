@@ -4,6 +4,8 @@ const VIEWER_RIGHT_SIDE_PREFIX = 'scriptmaker_viewer_right_side_v1:';
 
 let viewerProject = null;
 let viewerShareKey = 'default';
+let viewerPasswordHash = '';
+let pendingViewerProject = null;
 let rightSideSetting = { mode: 'editor', names: [] };
 let activeLayer = 0;
 let currentWallpaperKey = '';
@@ -42,6 +44,7 @@ function loadSharedProject() {
     const payload = decodePayload(data);
     const project = payload?.project || payload;
     viewerShareKey = stableShareKey(payload, project);
+    viewerPasswordHash = payload?.viewerPasswordHash || payload?.passwordHash || '';
     return project;
   }
   const params = new URLSearchParams(location.search);
@@ -50,7 +53,9 @@ function loadSharedProject() {
     try {
       const shares = JSON.parse(localStorage.getItem('scriptmaker_shares_v1') || '{}');
       viewerShareKey = shareId;
-      return shares[shareId]?.project || null;
+      const share = shares[shareId];
+      viewerPasswordHash = share?.viewerPasswordHash || share?.passwordHash || '';
+      return share?.project || null;
     } catch (error) {
       console.error('Viewer share load failed', error);
     }
@@ -211,6 +216,59 @@ function useEditorSetting() {
   renderTimeline();
 }
 
+
+async function hashPasswordText(value) {
+  const input = String(value || '');
+  if (window.crypto?.subtle && window.TextEncoder) {
+    const bytes = new TextEncoder().encode(input);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return 'sha256:' + Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+  }
+  return 'fallback:' + btoa(unescape(encodeURIComponent(input)));
+}
+
+function viewerAuthSessionKey() {
+  return 'scriptmaker_viewer_auth_ok_v1:' + viewerShareKey;
+}
+
+function isViewerAuthorized() {
+  return !viewerPasswordHash || sessionStorage.getItem(viewerAuthSessionKey()) === viewerPasswordHash;
+}
+
+function showViewerAuth(project) {
+  pendingViewerProject = project;
+  document.getElementById('viewerAuthPanel').classList.remove('hidden');
+  document.getElementById('viewerLogoutButton').classList.add('hidden');
+  setTimeout(() => document.getElementById('viewerPasswordInput')?.focus(), 80);
+}
+
+function finishViewerAuth(project) {
+  document.getElementById('viewerAuthPanel').classList.add('hidden');
+  if (viewerPasswordHash) document.getElementById('viewerLogoutButton').classList.remove('hidden');
+  renderViewer(project);
+}
+
+async function submitViewerPassword() {
+  const input = document.getElementById('viewerPasswordInput');
+  const message = document.getElementById('viewerPasswordMessage');
+  const hash = await hashPasswordText(input?.value || '');
+  if (hash !== viewerPasswordHash) {
+    if (message) message.textContent = '\u30d1\u30b9\u30ef\u30fc\u30c9\u304c\u9055\u3044\u307e\u3059\u3002';
+    return;
+  }
+  sessionStorage.setItem(viewerAuthSessionKey(), viewerPasswordHash);
+  if (input) input.value = '';
+  if (message) message.textContent = '';
+  finishViewerAuth(pendingViewerProject);
+}
+
+function logoutViewerAuth() {
+  sessionStorage.removeItem(viewerAuthSessionKey());
+  document.getElementById('viewerTimeline').innerHTML = '';
+  showViewerAuth(viewerProject || pendingViewerProject);
+}
+
+
 function wallpaperIdentity(wallpaper) {
   return wallpaper?.image ? [wallpaper.image.slice(0, 64), wallpaper.size || 100, wallpaper.offsetX ?? 50, wallpaper.offsetY ?? 50].join('|') : 'none';
 }
@@ -289,12 +347,19 @@ window.addEventListener('load', () => {
   document.getElementById('viewerAllLeft').addEventListener('click', setAllLeft);
   document.getElementById('viewerAllRight').addEventListener('click', setAllRight);
   document.getElementById('viewerUseEditor').addEventListener('click', useEditorSetting);
+  document.getElementById('viewerPasswordSubmit').addEventListener('click', submitViewerPassword);
+  document.getElementById('viewerPasswordInput').addEventListener('keydown', event => { if (event.key === 'Enter') submitViewerPassword(); });
+  document.getElementById('viewerLogoutButton').addEventListener('click', logoutViewerAuth);
 
   const project = loadSharedProject();
   if (!project) {
     document.getElementById('viewerEmpty').classList.remove('hidden');
     return;
   }
-  renderViewer(project);
+  if (!isViewerAuthorized()) {
+    showViewerAuth(project);
+  } else {
+    finishViewerAuth(project);
+  }
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(console.warn);
 });

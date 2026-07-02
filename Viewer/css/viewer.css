@@ -61,6 +61,7 @@ html, body {
   text-overflow: ellipsis;
   max-width: 58vw;
 }
+.viewer-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .viewer-settings-button {
   border: 0;
   border-radius: 9px;
@@ -258,4 +259,51 @@ html, body {
   .viewer-settings-panel { padding: 10px; }
   .viewer-settings-sheet { border-radius: 12px; padding: 14px; }
   .viewer-settings-actions { grid-template-columns: 1fr; }
+}
+
+
+.viewer-logout-button { background: #475569; }
+.viewer-auth-panel {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: linear-gradient(160deg, #0f172a, #1e293b 55%, #0f766e);
+}
+.viewer-auth-panel.hidden { display: none; }
+.viewer-auth-card {
+  width: min(360px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .28);
+}
+.viewer-auth-card h2 { margin: 0; font-size: 21px; color: #0f172a; }
+.viewer-auth-card p { margin: 0; color: #64748b; line-height: 1.55; font-size: 13px; }
+.viewer-auth-card input {
+  width: 100%;
+  padding: 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  font-size: 16px;
+}
+.viewer-auth-card button {
+  border: 0;
+  border-radius: 9px;
+  padding: 12px;
+  background: #3b82f6;
+  color: #fff;
+  font-weight: 900;
+}
+.viewer-auth-message { min-height: 18px; color: #dc2626; font-size: 13px; font-weight: 800; }
+.viewer-auth-card small { color: #64748b; line-height: 1.5; }
+@media (max-width: 420px) {
+  .viewer-header-actions { gap: 6px; }
+  .viewer-logout-button { padding-left: 8px; padding-right: 8px; }
 }

@@ -1,3 +1,6 @@
+const EDITOR_AUTH_HASH_KEY = 'scriptmaker_editor_password_hash_v1';
+const EDITOR_AUTH_SESSION_KEY = 'scriptmaker_editor_auth_ok_v1';
+
 let state = {
       currentProjectId: null,
       projects: {},
@@ -43,6 +46,98 @@ let state = {
       'gemini-3.5-flash'
     ];
 
+
+    async function hashPasswordText(value) {
+      const input = String(value || '');
+      if (window.crypto?.subtle && window.TextEncoder) {
+        const bytes = new TextEncoder().encode(input);
+        const digest = await crypto.subtle.digest('SHA-256', bytes);
+        return 'sha256:' + Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+      }
+      return 'fallback:' + btoa(unescape(encodeURIComponent(input)));
+    }
+
+    function editorPasswordHash() {
+      return localStorage.getItem(EDITOR_AUTH_HASH_KEY) || '';
+    }
+
+    function unlockEditorAuth(hash) {
+      if (hash) sessionStorage.setItem(EDITOR_AUTH_SESSION_KEY, hash);
+      document.body.classList.remove('auth-locked');
+      document.getElementById('editorAuthGate')?.classList.add('hidden');
+    }
+
+    function showEditorAuthGate() {
+      const storedHash = editorPasswordHash();
+      const gate = document.getElementById('editorAuthGate');
+      const title = document.getElementById('editorAuthTitle');
+      const help = document.getElementById('editorAuthHelp');
+      const confirm = document.getElementById('editorAuthConfirm');
+      const password = document.getElementById('editorAuthPassword');
+      const message = document.getElementById('editorAuthMessage');
+      if (!gate || !title || !help || !confirm || !password || !message) return;
+      document.body.classList.add('auth-locked');
+      gate.classList.remove('hidden');
+      message.textContent = '';
+      password.value = '';
+      confirm.value = '';
+      if (storedHash) {
+        title.textContent = '\u30d1\u30b9\u30ef\u30fc\u30c9\u5165\u529b';
+        help.textContent = '\u8a2d\u5b9a\u6e08\u307f\u306e\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u5165\u529b\u3059\u308b\u3068Editor\u3092\u958b\u304d\u307e\u3059\u3002';
+        confirm.classList.add('hidden');
+        confirm.style.display = 'none';
+        confirm.hidden = true;
+      } else {
+        title.textContent = '\u521d\u56de\u30d1\u30b9\u30ef\u30fc\u30c9\u8a2d\u5b9a';
+        help.textContent = '\u3053\u306e\u7aef\u672b\u3067Editor\u3092\u958b\u304f\u305f\u3081\u306e\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u8a2d\u5b9a\u3057\u307e\u3059\u3002';
+        confirm.classList.remove('hidden');
+        confirm.style.display = '';
+        confirm.hidden = false;
+      }
+      setTimeout(() => password.focus(), 80);
+    }
+
+    function initEditorAuthGate() {
+      const storedHash = editorPasswordHash();
+      if (storedHash && sessionStorage.getItem(EDITOR_AUTH_SESSION_KEY) === storedHash) {
+        unlockEditorAuth(storedHash);
+        return;
+      }
+      showEditorAuthGate();
+    }
+
+    async function submitEditorPassword() {
+      const storedHash = editorPasswordHash();
+      const password = document.getElementById('editorAuthPassword')?.value || '';
+      const confirm = document.getElementById('editorAuthConfirm')?.value || '';
+      const message = document.getElementById('editorAuthMessage');
+      if (!password) {
+        if (message) message.textContent = '\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002';
+        return;
+      }
+      const hash = await hashPasswordText(password);
+      if (!storedHash) {
+        if (password !== confirm) {
+          if (message) message.textContent = '\u78ba\u8a8d\u7528\u30d1\u30b9\u30ef\u30fc\u30c9\u304c\u4e00\u81f4\u3057\u307e\u305b\u3093\u3002';
+          return;
+        }
+        localStorage.setItem(EDITOR_AUTH_HASH_KEY, hash);
+        unlockEditorAuth(hash);
+        return;
+      }
+      if (hash !== storedHash) {
+        if (message) message.textContent = '\u30d1\u30b9\u30ef\u30fc\u30c9\u304c\u9055\u3044\u307e\u3059\u3002';
+        return;
+      }
+      unlockEditorAuth(storedHash);
+    }
+
+    function logoutEditorAuth() {
+      sessionStorage.removeItem(EDITOR_AUTH_SESSION_KEY);
+      showEditorAuthGate();
+    }
+
+
     window.onload = function() {
       const saved = localStorage.getItem('script_assistant_data_v21');
       if (saved) {
@@ -82,6 +177,8 @@ let state = {
       initSceneWallpaperScroll();
       initNumberSettingsControls();
     };
+
+    setTimeout(initEditorAuthGate, 0);
 
     function normalizeProjectData() {
       if (!state.folders || typeof state.folders !== 'object') state.folders = {};
@@ -1842,7 +1939,7 @@ ${keptPredictionText}
     }
 
 
-    function buildViewerSharePayload(project) {
+    function buildViewerSharePayload(project, viewerPasswordHash) {
       const snapshot = cloneProject(project);
       ensureTalkIds(snapshot);
       normalizeSceneWallpaperSettings(snapshot);
@@ -1850,6 +1947,7 @@ ${keptPredictionText}
         shareId: 'share_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
         title: snapshot.title || '\u53f0\u672c',
         createdAt: new Date().toISOString(),
+        viewerPasswordHash: viewerPasswordHash || '',
         project: snapshot
       };
     }
@@ -1878,7 +1976,7 @@ ${keptPredictionText}
       return text ? text.value.trim() : '';
     }
 
-    function openShareModal() {
+    async function openShareModal() {
       const input = document.getElementById('inputSpeech');
       if (input) input.blur();
       document.body.classList.remove('keyboard-focused');
@@ -1887,7 +1985,9 @@ ${keptPredictionText}
         alert('\u5171\u6709\u3059\u308b\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002');
         return;
       }
-      const payload = buildViewerSharePayload(project);
+      const viewerPassword = document.getElementById('shareViewerPassword')?.value || '';
+      const viewerPasswordHash = viewerPassword ? await hashPasswordText(viewerPassword) : '';
+      const payload = buildViewerSharePayload(project, viewerPasswordHash);
       const url = buildViewerShareUrl(payload);
       const output = document.getElementById('shareUrlText');
       const meta = document.getElementById('shareMetaText');

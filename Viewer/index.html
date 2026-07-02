@@ -10,8 +10,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
-  <link rel="stylesheet" href="./css/viewer.css?v=3">
-  <script src="./js/viewer.js?v=3" defer></script>
+  <link rel="stylesheet" href="./css/viewer.css?v=4">
+  <script src="./js/viewer.js?v=4" defer></script>
 </head>
 <body>
   <div id="viewerApp" class="viewer-app">
@@ -22,7 +22,7 @@
         <p class="viewer-label">ScriptMaker Viewer</p>
         <h1 id="viewerTitle">&#21488;&#26412;</h1>
       </div>
-      <button id="viewerSettingsButton" class="viewer-settings-button" type="button" aria-haspopup="dialog">&#34920;&#31034;&#35373;&#23450;</button>
+      <div class="viewer-header-actions"><button id="viewerSettingsButton" class="viewer-settings-button" type="button" aria-haspopup="dialog">&#34920;&#31034;&#35373;&#23450;</button><button id="viewerLogoutButton" class="viewer-settings-button viewer-logout-button hidden" type="button">&#12525;&#12464;&#12450;&#12454;&#12488;</button></div>
     </header>
     <main id="viewerTimeline" class="viewer-timeline"></main>
     <div id="viewerEmpty" class="viewer-empty hidden">
@@ -44,6 +44,19 @@
         <div id="viewerCharacterOptions" class="viewer-character-options"></div>
       </div>
     </div>
+
+    <div id="viewerAuthPanel" class="viewer-auth-panel hidden">
+      <div class="viewer-auth-card">
+        <p class="viewer-label">ScriptMaker Viewer</p>
+        <h2>&#38322;&#35239;&#12497;&#12473;&#12527;&#12540;&#12489;</h2>
+        <p>&#12371;&#12398;&#21488;&#26412;&#12399;&#12497;&#12473;&#12527;&#12540;&#12489;&#12391;&#20445;&#35703;&#12373;&#12428;&#12390;&#12356;&#12414;&#12377;&#12290;</p>
+        <input id="viewerPasswordInput" type="password" autocomplete="current-password" placeholder="&#12497;&#12473;&#12527;&#12540;&#12489;">
+        <button id="viewerPasswordSubmit" type="button">&#38283;&#12367;</button>
+        <div id="viewerPasswordMessage" class="viewer-auth-message"></div>
+        <small>&#8251;GitHub Pages&#19978;&#12398;&#31777;&#26131;&#20445;&#35703;&#12391;&#12377;&#12290;</small>
+      </div>
+    </div>
+
   </div>
 </body>
 </html>
