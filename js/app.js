@@ -1,5 +1,6 @@
 const EDITOR_AUTH_HASH_KEY = 'scriptmaker_editor_password_hash_v1';
 const EDITOR_AUTH_SESSION_KEY = 'scriptmaker_editor_auth_ok_v1';
+const SCRIPTMAKER_PUBLIC_VIEWER_URL = 'https://malomalo413.github.io/ScriptMaker/Viewer/index.html';
 
 let state = {
       currentProjectId: null,
@@ -1961,14 +1962,12 @@ ${keptPredictionText}
     }
 
     function viewerBasePath() {
-      const path = location.pathname;
-      const fromEditorDir = /\/Editor\/?(?:index\.html)?$/i.test(path) || /\/Editor\//i.test(path);
-      return fromEditorDir ? '../Viewer/index.html' : './Viewer/index.html';
+      return SCRIPTMAKER_PUBLIC_VIEWER_URL;
     }
 
     function buildViewerShareUrl(payload) {
       const encoded = encodeSharePayload(payload);
-      return new URL(viewerBasePath() + '#data=' + encoded, location.href).href;
+      return viewerBasePath() + '#data=' + encoded;
     }
 
     function currentShareUrl() {
