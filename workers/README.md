@@ -47,8 +47,9 @@ SHARE_TTL_SECONDS=15552000
 For Cloudflare Workers Builds, connect the GitHub repository and set:
 
 ```text
-Build command: npm run deploy
 Install command: npm install
+Build command: npm run build
+Deploy command: npx wrangler deploy
 Root directory: /
 Production branch: main
 ```
@@ -57,6 +58,7 @@ For local Wrangler deployment:
 
 ```bash
 npm install
+npm run build
 npm run deploy
 ```
 

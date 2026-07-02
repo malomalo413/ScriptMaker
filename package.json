@@ -1,5 +1,10 @@
 {
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
+    "build": "node -e \"console.log('No build step required for ScriptMaker Worker')\"",
     "cf:login": "wrangler login",
     "cf:whoami": "wrangler whoami",
     "deploy": "wrangler deploy",

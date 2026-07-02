@@ -48,10 +48,13 @@ Root directory:
 /
 
 Build command:
-npm run deploy
+npm run build
 
 Install command:
 npm install
+
+Deploy command:
+npx wrangler deploy
 ```
 
 `wrangler.toml` がリポジトリ直下にあるため、Cloudflareはこの設定を読んでWorkerをデプロイします。
