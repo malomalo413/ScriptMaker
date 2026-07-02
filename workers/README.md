@@ -1,6 +1,6 @@
 # ScriptMaker Cloudflare Worker Share API
 
-This Worker stores ScriptMaker Viewer share payloads in Cloudflare KV and returns short share IDs.
+This Worker stores ScriptMaker Viewer share payloads in Cloudflare Durable Objects and returns short share IDs.
 
 ## API
 
@@ -28,16 +28,7 @@ Returns:
 
 ## Cloudflare Setup
 
-1. Create a Cloudflare account.
-2. Open Workers & Pages.
-3. Create a Worker and paste `workers/share-worker.js`.
-4. Create a KV namespace, for example `SCRIPTMAKER_SHARES`.
-5. Add a KV binding to the Worker.
-
-```text
-Binding name: SHARES
-KV namespace: SCRIPTMAKER_SHARES
-```
+Use Cloudflare Workers Builds to connect this GitHub repository. Manual code paste is not required.
 
 Japanese setup guide: `workers/SETUP-JA.md`.
 
@@ -53,21 +44,23 @@ SHARE_TTL_SECONDS=15552000
 
 ## Deploy
 
-Dashboard deployment is fine. With Wrangler:
+For Cloudflare Workers Builds, connect the GitHub repository and set:
+
+```text
+Build command: npm run deploy
+Install command: npm install
+Root directory: /
+Production branch: main
+```
+
+For local Wrangler deployment:
 
 ```bash
-npx wrangler deploy workers/share-worker.js
+npm install
+npm run deploy
 ```
 
-Configure the KV binding in `wrangler.toml` or in the Cloudflare dashboard.
-
-This repository includes a `wrangler.toml` template. After creating the KV namespace, add the real namespace id to:
-
-```toml
-[[kv_namespaces]]
-binding = "SHARES"
-id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-```
+The Worker uses Durable Objects, so no KV namespace ID is required.
 
 ## Configure ScriptMaker
 

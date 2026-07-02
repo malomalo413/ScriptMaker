@@ -2,7 +2,7 @@
   "scripts": {
     "cf:login": "wrangler login",
     "cf:whoami": "wrangler whoami",
-    "cf:kv:create": "wrangler kv namespace create SCRIPTMAKER_SHARES",
+    "deploy": "wrangler deploy",
     "cf:deploy": "wrangler deploy",
     "cf:tail": "wrangler tail scriptmaker-share"
   },

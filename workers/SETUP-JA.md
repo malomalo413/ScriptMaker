@@ -1,93 +1,138 @@
-# ScriptMaker 共有Worker セットアップ手順
+# ScriptMaker 共有Worker GitHub連携セットアップ
 
-## 事前確認
+## 目的
 
-Cloudflare APIトークンには最低限、次の権限が必要です。
+CloudflareにGitHubリポジトリを連携するだけで、`workers/share-worker.js` が自動デプロイされる構成です。
 
-- Account: Cloudflare Workers Scripts: Edit
-- Account: Workers KV Storage: Edit
-- Account: Account Settings: Read
+手動でWorkerコードを貼り付ける必要はありません。
 
-トークンはチャットへ貼らず、PowerShellやCloudflare画面だけで扱ってください。
+## 重要な変更
 
-## スマホだけで設定する場合
+保存先はKVではなく Durable Objects を使います。
 
-Cloudflare Dashboardで設定します。
+理由:
 
-1. Cloudflareにログインします。
-2. `Workers & Pages` を開きます。
-3. `KV` を開き、namespaceを作成します。
-   - 名前: `SCRIPTMAKER_SHARES`
-4. `Workers & Pages` に戻り、Workerを作成します。
-   - Worker名: `scriptmaker-share`
-5. Workerのコード編集画面で、`workers/share-worker.js` の内容を貼り付けます。
-6. Workerの `Settings` を開きます。
-7. `Bindings` でKV bindingを追加します。
-   - Variable name: `SHARES`
-   - KV namespace: `SCRIPTMAKER_SHARES`
-8. `Variables and Secrets` で環境変数を追加します。
-   - `PUBLIC_VIEWER_URL` = `https://malomalo413.github.io/ScriptMaker/Viewer`
-   - `ALLOWED_ORIGIN` = `https://malomalo413.github.io`
-   - `SHARE_TTL_SECONDS` = `15552000`
-9. Workerをデプロイします。
-10. Worker URLを控えます。
-    - 例: `https://scriptmaker-share.your-name.workers.dev`
-11. ScriptMakerの共有画面にWorker URLを入力します。
+- KVはnamespace IDを `wrangler.toml` に入れる必要があり、スマホ運用だと手順が増える
+- Durable Objectsは `wrangler.toml` に設定を書いておけば、Cloudflareのデプロイ時に自動で作成される
+- GitHub連携後は、GitHubへpushするだけでWorkerが更新される
 
-## PCからWranglerで設定する場合
+## Cloudflareで最初に1回だけやること
 
-Node.jsとnpmが必要です。
+### 1. Cloudflareにログイン
 
-```powershell
+スマホブラウザでCloudflareにログインします。
+
+### 2. Workers & Pagesを開く
+
+Cloudflare Dashboardで `Workers & Pages` を開きます。
+
+### 3. GitHubリポジトリをインポート
+
+1. `Create application` を押す
+2. `Import a repository` を選ぶ
+3. GitHubを連携する
+4. `malomalo413/ScriptMaker` を選ぶ
+
+### 4. Worker設定
+
+以下のように設定します。
+
+```text
+Project name / Worker name:
+scriptmaker-share
+
+Production branch:
+main
+
+Root directory:
+/
+
+Build command:
+npm run deploy
+
+Install command:
 npm install
 ```
 
-APIトークンをPowerShellの現在のウィンドウだけに設定します。
+`wrangler.toml` がリポジトリ直下にあるため、Cloudflareはこの設定を読んでWorkerをデプロイします。
 
-```powershell
-$env:CLOUDFLARE_API_TOKEN="取得したAPIトークン"
+### 5. 環境変数
+
+基本的には `wrangler.toml` に入っているため追加不要です。
+
+設定済み:
+
+```text
+PUBLIC_VIEWER_URL=https://malomalo413.github.io/ScriptMaker/Viewer
+ALLOWED_ORIGIN=https://malomalo413.github.io
+SHARE_TTL_SECONDS=15552000
 ```
 
-認証確認:
+### 6. KV設定
 
-```powershell
-npx wrangler whoami
-```
+不要です。
 
-KV namespaceを作成:
+この構成ではKVを使わないため、KV namespace作成やBinding設定は不要です。
 
-```powershell
-npx wrangler kv namespace create SCRIPTMAKER_SHARES
-```
+### 7. Durable Objects設定
 
-表示された `id` を `wrangler.toml` に設定します。
+手動設定は不要です。
+
+`wrangler.toml` に以下が入っているため、デプロイ時に自動設定されます。
 
 ```toml
-[[kv_namespaces]]
-binding = "SHARES"
-id = "表示されたid"
+[[durable_objects.bindings]]
+name = "SHARE_OBJECT"
+class_name = "ShareObject"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ShareObject"]
 ```
 
-デプロイ:
+### 8. Save and Deploy
 
-```powershell
-npx wrangler deploy
+`Save and Deploy` を押します。
+
+成功するとWorker URLが発行されます。
+
+例:
+
+```text
+https://scriptmaker-share.xxxxx.workers.dev
 ```
 
-動作確認:
+## ScriptMakerで使う
 
-```powershell
-curl https://scriptmaker-share.your-name.workers.dev/health
+1. ScriptMakerを開く
+2. `共有` を押す
+3. `Cloudflare Worker URL` に発行されたWorker URLを入力する
+4. `WorkerでURL作成` または `URLコピー` を押す
+5. 作成されたViewer URLを声優さんへ送る
+
+同じ端末ではWorker URLがlocalStorageに保存されるため、次回以降は再入力を省略できます。
+
+## 今後の運用
+
+今後Workerコードを変更した場合は、GitHubへpushするだけでCloudflareが自動デプロイします。
+
+手動でWorkerコードを貼り替える必要はありません。
+
+## 動作確認
+
+Worker URLの末尾に `/health` を付けて開きます。
+
+```text
+https://scriptmaker-share.xxxxx.workers.dev/health
 ```
 
-`{"ok":true}` が返ればWorkerは動作しています。
+次のように表示されれば成功です。
 
-## ScriptMaker側の使い方
+```json
+{ "ok": true }
+```
 
-1. ScriptMakerを開きます。
-2. `共有` を押します。
-3. `Cloudflare Worker URL` にデプロイ済みWorker URLを入力します。
-4. `WorkerでURL作成` または `URLコピー` を押します。
-5. 生成されたViewer URLを声優さんに送ります。
+## 参考
 
-Worker URLは端末のlocalStorageに保存されるため、同じ端末では次回以降の入力を省略できます。
+- Cloudflare Workers Builds: GitHub連携でpush時に自動デプロイ
+- Cloudflare Durable Objects: Worker内で使える永続ストレージ
