@@ -1,6 +1,8 @@
 const EDITOR_AUTH_HASH_KEY = 'scriptmaker_editor_password_hash_v1';
 const EDITOR_AUTH_SESSION_KEY = 'scriptmaker_editor_auth_ok_v1';
 const SCRIPTMAKER_PUBLIC_VIEWER_URL = 'https://malomalo413.github.io/ScriptMaker/Viewer/';
+const SCRIPTMAKER_SHARE_WORKER_URL = '';
+const SCRIPTMAKER_SHARE_WORKER_URL_KEY = 'scriptmaker_share_worker_url_v1';
 
 let state = {
       currentProjectId: null,
@@ -40,6 +42,7 @@ let state = {
     let redoStacks = {};
     let isApplyingHistory = false;
     let pendingSharePayload = null;
+    let pendingSharePublished = false;
 
     let originalViewportHeight = window.innerHeight;
     const GEMINI_MODEL_CANDIDATES = [
@@ -1962,12 +1965,33 @@ ${keptPredictionText}
       return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
     }
 
+    function normalizeWorkerUrl(value) {
+      return String(value || '').trim().replace(/\/+$/, '');
+    }
+
     function viewerBasePath() {
       return SCRIPTMAKER_PUBLIC_VIEWER_URL;
     }
 
-    function buildViewerShareUrl(payload) {
-      return SCRIPTMAKER_PUBLIC_VIEWER_URL + '?id=' + encodeURIComponent(payload.shareId);
+    function configuredWorkerUrl() {
+      const input = document.getElementById('shareWorkerUrl');
+      const fromInput = normalizeWorkerUrl(input?.value || '');
+      const fromStorage = normalizeWorkerUrl(localStorage.getItem(SCRIPTMAKER_SHARE_WORKER_URL_KEY) || '');
+      return fromInput || fromStorage || normalizeWorkerUrl(SCRIPTMAKER_SHARE_WORKER_URL);
+    }
+
+    function setWorkerInputFromStorage() {
+      const input = document.getElementById('shareWorkerUrl');
+      if (!input) return;
+      const stored = normalizeWorkerUrl(localStorage.getItem(SCRIPTMAKER_SHARE_WORKER_URL_KEY) || SCRIPTMAKER_SHARE_WORKER_URL);
+      if (!input.value && stored) input.value = stored;
+    }
+
+    function buildViewerShareUrl(payload, workerUrl) {
+      const id = encodeURIComponent(payload.shareId);
+      const normalizedWorker = normalizeWorkerUrl(workerUrl || SCRIPTMAKER_SHARE_WORKER_URL);
+      const workerParam = normalizedWorker && !SCRIPTMAKER_SHARE_WORKER_URL ? '&worker=' + encodeURIComponent(normalizedWorker) : '';
+      return SCRIPTMAKER_PUBLIC_VIEWER_URL + '?id=' + id + workerParam;
     }
 
     function buildLongViewerShareUrl(payload) {
@@ -1985,42 +2009,6 @@ ${keptPredictionText}
     function currentShareUrl() {
       const text = document.getElementById('shareUrlText');
       return text ? text.value.trim() : '';
-    }
-
-    async function openShareModal() {
-      const input = document.getElementById('inputSpeech');
-      if (input) input.blur();
-      document.body.classList.remove('keyboard-focused');
-      const project = state.projects[state.currentProjectId];
-      if (!project) {
-        alert('共有するプロジェクトがありません。');
-        return;
-      }
-      const viewerPassword = document.getElementById('shareViewerPassword')?.value || '';
-      const viewerPasswordHash = viewerPassword ? await hashPasswordText(viewerPassword) : '';
-      pendingSharePayload = buildViewerSharePayload(project, viewerPasswordHash);
-      const shortUrl = buildViewerShareUrl(pendingSharePayload);
-      const output = document.getElementById('shareUrlText');
-      const meta = document.getElementById('shareMetaText');
-      if (output) output.value = shortUrl;
-      if (meta) meta.innerText = (pendingSharePayload.title || '台本') + ' / ' + pendingSharePayload.project.talks.length + '行 / Share/data/' + pendingSharePayload.shareId + '.json';
-      setShareStatus('JSONをダウンロードして Share/data/ に追加すると、この短いURLで開けます。', '');
-      openModal('shareModal');
-    }
-
-    function downloadShareJson() {
-      if (!pendingSharePayload) return;
-      const json = JSON.stringify(pendingSharePayload, null, 2);
-      const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = pendingSharePayload.shareId + '.json';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      setShareStatus('JSONをダウンロードしました。Share/data/ に追加してください。', 'success');
     }
 
     function selectShareUrl() {
@@ -2054,28 +2042,120 @@ ${keptPredictionText}
       }
     }
 
-    async function copyShareUrl() {
-      const text = document.getElementById('shareUrlText');
-      const value = text ? text.value.trim() : '';
-      if (!value) {
-        setShareStatus('???????URL???????????URL??????????', 'error');
-        return;
+    async function openSharedViewer() {
+      if (pendingSharePayload && configuredWorkerUrl() && !pendingSharePublished) {
+        await publishWorkerShareUrl();
       }
-      const ok = await tryClipboardCopy(value);
-      if (ok) {
-        setShareStatus('??URL?????????', 'success');
-        return;
-      }
-      selectShareUrl();
-      setShareStatus('????????????URL????????????????', 'error');
-    }
-
-    function openSharedViewer() {
       const url = currentShareUrl();
       if (!url) return;
       window.open(url, '_blank');
     }
 
+    async function postShareToWorker(payload, workerUrl) {
+      const normalizedWorker = normalizeWorkerUrl(workerUrl);
+      if (!normalizedWorker) throw new Error('Cloudflare Worker URL\u304c\u672a\u8a2d\u5b9a\u3067\u3059\u3002');
+      const response = await fetch(normalizedWorker + '/share', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        throw new Error('Worker\u3078\u306e\u4fdd\u5b58\u306b\u5931\u6557\u3057\u307e\u3057\u305f: ' + response.status + ' ' + detail.slice(0, 160));
+      }
+      return response.json();
+    }
+
+    async function openShareModal() {
+      const input = document.getElementById('inputSpeech');
+      if (input) input.blur();
+      document.body.classList.remove('keyboard-focused');
+      const project = state.projects[state.currentProjectId];
+      if (!project) {
+        alert('\u5171\u6709\u3059\u308b\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002');
+        return;
+      }
+      setWorkerInputFromStorage();
+      const viewerPassword = document.getElementById('shareViewerPassword')?.value || '';
+      const viewerPasswordHash = viewerPassword ? await hashPasswordText(viewerPassword) : '';
+      pendingSharePayload = buildViewerSharePayload(project, viewerPasswordHash);
+      pendingSharePublished = false;
+      const shortUrl = buildViewerShareUrl(pendingSharePayload, configuredWorkerUrl());
+      const output = document.getElementById('shareUrlText');
+      const meta = document.getElementById('shareMetaText');
+      if (output) output.value = shortUrl;
+      if (meta) meta.innerText = (pendingSharePayload.title || '\u53f0\u672c') + ' / ' + pendingSharePayload.project.talks.length + '\u4ef6 / id: ' + pendingSharePayload.shareId;
+      setShareStatus(configuredWorkerUrl() ? 'Worker\u3067URL\u3092\u4f5c\u6210\u3067\u304d\u307e\u3059\u3002JSON\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u3082\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3068\u3057\u3066\u4f7f\u3048\u307e\u3059\u3002' : 'Cloudflare Worker URL\u304c\u672a\u8a2d\u5b9a\u3067\u3059\u3002Worker URL\u3092\u5165\u529b\u3059\u308b\u304b\u3001JSON\u3092\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u3057\u3066 Share/data/ \u306b\u8ffd\u52a0\u3057\u3066\u304f\u3060\u3055\u3044\u3002', configuredWorkerUrl() ? '' : 'error');
+      openModal('shareModal');
+    }
+
+    async function publishWorkerShareUrl() {
+      if (!pendingSharePayload) {
+        await openShareModal();
+        if (!pendingSharePayload) return;
+      }
+      const workerUrl = configuredWorkerUrl();
+      if (!workerUrl) {
+        setShareStatus('Cloudflare Worker URL\u304c\u672a\u8a2d\u5b9a\u3067\u3059\u3002', 'error');
+        return;
+      }
+      localStorage.setItem(SCRIPTMAKER_SHARE_WORKER_URL_KEY, workerUrl);
+      const output = document.getElementById('shareUrlText');
+      const meta = document.getElementById('shareMetaText');
+      try {
+        setShareStatus('Worker\u3078\u5171\u6709\u30c7\u30fc\u30bf\u3092\u4fdd\u5b58\u4e2d...', '');
+        const result = await postShareToWorker(pendingSharePayload, workerUrl);
+        if (result?.id) pendingSharePayload.shareId = result.id;
+        const url = buildViewerShareUrl(pendingSharePayload, workerUrl);
+        if (output) output.value = url;
+        if (meta) meta.innerText = (pendingSharePayload.title || '\u53f0\u672c') + ' / ' + pendingSharePayload.project.talks.length + '\u4ef6 / id: ' + pendingSharePayload.shareId;
+        pendingSharePublished = true;
+        setShareStatus('\u5171\u6709URL\u3092\u4f5c\u6210\u3057\u307e\u3057\u305f\u3002', 'success');
+      } catch (error) {
+        console.error('Worker share failed:', error);
+        setShareStatus(error.message + ' JSON\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u65b9\u5f0f\u3092\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3068\u3057\u3066\u5229\u7528\u3067\u304d\u307e\u3059\u3002', 'error');
+      }
+    }
+
+    function downloadShareJson() {
+      if (!pendingSharePayload) return;
+      const json = JSON.stringify(pendingSharePayload, null, 2);
+      const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = pendingSharePayload.shareId + '.json';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setShareStatus('JSON\u3092\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u3057\u307e\u3057\u305f\u3002Share/data/ \u306b\u8ffd\u52a0\u3059\u308b\u3068Viewer\u3067\u958b\u3051\u307e\u3059\u3002', 'success');
+    }
+
+    async function copyShareUrl() {
+      const text = document.getElementById('shareUrlText');
+      const value = text ? text.value.trim() : '';
+      if (pendingSharePayload && configuredWorkerUrl() && !pendingSharePublished) {
+        await publishWorkerShareUrl();
+        return copyShareUrl();
+      }
+      if (!value) {
+        await publishWorkerShareUrl();
+        const refreshed = text ? text.value.trim() : '';
+        if (!refreshed) {
+          setShareStatus('\u30b3\u30d4\u30fc\u3067\u304d\u308bURL\u304c\u3042\u308a\u307e\u305b\u3093\u3002Worker URL\u3092\u8a2d\u5b9a\u3059\u308b\u304b\u3001JSON\u3092\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u3057\u3066\u304f\u3060\u3055\u3044\u3002', 'error');
+          return;
+        }
+        return copyShareUrl();
+      }
+      const ok = await tryClipboardCopy(value);
+      if (ok) {
+        setShareStatus('\u5171\u6709URL\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f\u3002', 'success');
+        return;
+      }
+      selectShareUrl();
+      setShareStatus('\u30b3\u30d4\u30fc\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002URL\u3092\u9577\u62bc\u3057\u3057\u3066\u30b3\u30d4\u30fc\u3057\u3066\u304f\u3060\u3055\u3044\u3002', 'error');
+    }
 
     function downloadOutputText() {
       const project = state.projects[state.currentProjectId];

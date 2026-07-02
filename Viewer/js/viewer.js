@@ -2,6 +2,7 @@ const VIEWER_SCENE_NAME = '\u60c5\u666f\u63cf\u5199';
 const VIEWER_SYSTEM_NAME = '\u30b7\u30b9\u30c6\u30e0';
 const VIEWER_RIGHT_SIDE_PREFIX = 'scriptmaker_viewer_right_side_v1:';
 const SCRIPTMAKER_SHARE_DATA_BASE_URL = '../Share/data/';
+const SCRIPTMAKER_SHARE_WORKER_URL = '';
 
 let viewerProject = null;
 let viewerShareKey = 'default';
@@ -31,6 +32,22 @@ function decodePayload(value) {
   }
 }
 
+function normalizeWorkerUrl(value) {
+  return String(value || '').trim().replace(/\/+$/, '');
+}
+
+function workerUrlFromParams(params) {
+  return normalizeWorkerUrl(params.get('worker') || SCRIPTMAKER_SHARE_WORKER_URL);
+}
+
+async function fetchShareFromWorker(shareId, workerUrl) {
+  const normalizedWorker = normalizeWorkerUrl(workerUrl);
+  if (!normalizedWorker) return null;
+  const response = await fetch(normalizedWorker + '/share/' + encodeURIComponent(shareId), { cache: 'no-store' });
+  if (!response.ok) throw new Error('Worker share not found: ' + response.status);
+  return response.json();
+}
+
 function stableShareKey(payload, fallbackProject) {
   if (payload?.shareId) return payload.shareId;
   if (fallbackProject?.id) return fallbackProject.id;
@@ -55,6 +72,9 @@ async function loadSharedProject() {
       viewerShareKey = shareId;
       const localShares = JSON.parse(localStorage.getItem('scriptmaker_shares_v1') || '{}');
       let share = localShares[shareId];
+      if (!share) {
+        share = await fetchShareFromWorker(shareId, workerUrlFromParams(params));
+      }
       if (!share) {
         const response = await fetch(SCRIPTMAKER_SHARE_DATA_BASE_URL + encodeURIComponent(shareId) + '.json', { cache: 'no-store' });
         if (!response.ok) throw new Error('Share not found: ' + response.status);
