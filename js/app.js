@@ -2067,22 +2067,51 @@ ${keptPredictionText}
       }
     }
 
+    function selectShareUrl() {
+      const text = document.getElementById('shareUrlText');
+      if (!text || !text.value) return false;
+      text.removeAttribute('readonly');
+      text.focus({ preventScroll: true });
+      text.select();
+      text.setSelectionRange?.(0, text.value.length);
+      text.setAttribute('readonly', 'readonly');
+      return true;
+    }
+
+    async function tryClipboardCopy(value) {
+      if (!value) return false;
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(value);
+          return true;
+        } catch (error) {
+          console.warn('navigator.clipboard failed:', error);
+        }
+      }
+      try {
+        const selected = selectShareUrl();
+        if (!selected) return false;
+        return document.execCommand && document.execCommand('copy') === true;
+      } catch (error) {
+        console.warn('execCommand copy failed:', error);
+        return false;
+      }
+    }
+
     async function copyShareUrl() {
       const text = document.getElementById('shareUrlText');
-      if (!text || !text.value) return;
-      try {
-        if (navigator.clipboard && window.isSecureContext) {
-          await navigator.clipboard.writeText(text.value);
-        } else {
-          text.focus();
-          text.select();
-          document.execCommand('copy');
-        }
-        alert('\u5171\u6709URL\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f\u3002');
-      } catch (error) {
-        console.error('Share URL copy failed:', error);
-        alert('\u30b3\u30d4\u30fc\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002URL\u3092\u9078\u629e\u3057\u3066\u30b3\u30d4\u30fc\u3057\u3066\u304f\u3060\u3055\u3044\u3002');
+      const value = text ? text.value.trim() : '';
+      if (!value) {
+        setShareStatus('???????URL???????????URL??????????', 'error');
+        return;
       }
+      const ok = await tryClipboardCopy(value);
+      if (ok) {
+        setShareStatus('??URL?????????', 'success');
+        return;
+      }
+      selectShareUrl();
+      setShareStatus('????????????URL????????????????', 'error');
     }
 
     function openSharedViewer() {
