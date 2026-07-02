@@ -1,5 +1,10 @@
 const VIEWER_SCENE_NAME = '\u60c5\u666f\u63cf\u5199';
+const VIEWER_SYSTEM_NAME = '\u30b7\u30b9\u30c6\u30e0';
+const VIEWER_RIGHT_SIDE_PREFIX = 'scriptmaker_viewer_right_side_v1:';
+
 let viewerProject = null;
+let viewerShareKey = 'default';
+let rightSideSetting = { mode: 'editor', names: [] };
 let activeLayer = 0;
 let currentWallpaperKey = '';
 let raf = 0;
@@ -23,62 +28,187 @@ function decodePayload(value) {
   }
 }
 
+function stableShareKey(payload, fallbackProject) {
+  if (payload?.shareId) return payload.shareId;
+  if (fallbackProject?.id) return fallbackProject.id;
+  const raw = location.hash || location.search || location.pathname;
+  return 'url_' + raw.slice(0, 80);
+}
+
 function loadSharedProject() {
   const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
   const data = hash.get('data');
   if (data) {
     const payload = decodePayload(data);
-    return payload?.project || payload;
+    const project = payload?.project || payload;
+    viewerShareKey = stableShareKey(payload, project);
+    return project;
   }
   const params = new URLSearchParams(location.search);
   const shareId = params.get('share');
   if (shareId) {
     try {
       const shares = JSON.parse(localStorage.getItem('scriptmaker_shares_v1') || '{}');
+      viewerShareKey = shareId;
       return shares[shareId]?.project || null;
     } catch (error) {
       console.error('Viewer share load failed', error);
     }
   }
+  viewerShareKey = 'direct_' + location.pathname;
   return null;
 }
 
-function isProtagonist(project, name) {
+function isSpecialTalk(talk) {
+  return talk.charName === VIEWER_SCENE_NAME || talk.charName === VIEWER_SYSTEM_NAME;
+}
+
+function isEditorRightSide(project, name) {
   return !!project.characters?.find(character => character.name === name)?.isProtagonist;
+}
+
+function isRightSideCharacter(name) {
+  if (rightSideSetting.mode === 'custom') return rightSideSetting.names.includes(name);
+  return isEditorRightSide(viewerProject, name);
+}
+
+function storageKey() {
+  return VIEWER_RIGHT_SIDE_PREFIX + viewerShareKey;
+}
+
+function loadRightSideSetting() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(storageKey()) || 'null');
+    if (stored && (stored.mode === 'custom' || stored.mode === 'editor') && Array.isArray(stored.names)) {
+      rightSideSetting = stored;
+      return;
+    }
+  } catch (error) {
+    console.warn('Viewer setting load failed', error);
+  }
+  rightSideSetting = { mode: 'editor', names: [] };
+}
+
+function saveRightSideSetting() {
+  localStorage.setItem(storageKey(), JSON.stringify(rightSideSetting));
 }
 
 function formatNo(index) {
   return String(index + 1).padStart(3, '0');
 }
 
-function avatarHtml(project, talk) {
-  if (talk.charName === VIEWER_SCENE_NAME) return '';
-  const character = project.characters?.find(item => item.name === talk.charName);
+function viewerCharacters(project) {
+  const seen = new Set();
+  const result = [];
+  (project.characters || []).forEach(character => {
+    if (!character?.name || seen.has(character.name) || character.name === VIEWER_SCENE_NAME || character.name === VIEWER_SYSTEM_NAME) return;
+    seen.add(character.name);
+    result.push(character);
+  });
+  (project.talks || []).forEach(talk => {
+    if (!talk?.charName || seen.has(talk.charName) || isSpecialTalk(talk)) return;
+    seen.add(talk.charName);
+    result.push({ name: talk.charName });
+  });
+  return result;
+}
+
+function characterByName(project, name) {
+  return project.characters?.find(item => item.name === name);
+}
+
+function avatarHtml(project, talkOrCharacter) {
+  const name = talkOrCharacter.charName || talkOrCharacter.name;
+  if (name === VIEWER_SCENE_NAME || name === VIEWER_SYSTEM_NAME) return '';
+  const character = characterByName(project, name) || talkOrCharacter;
   if (character?.avatar) {
     const radius = character.isRound !== false ? '50%' : '8px';
     return '<div class="viewer-avatar" style="border-radius:' + radius + ';background-image:url(' + character.avatar + ');background-size:' + (character.zoom || 100) + '%;background-position:' + (character.offsetX ?? 50) + '% ' + (character.offsetY ?? 50) + '%"></div>';
   }
-  return '<div class="viewer-avatar-dummy">' + escapeHtml((talk.charName || '').slice(0, 2)) + '</div>';
+  return '<div class="viewer-avatar-dummy">' + escapeHtml((name || '').slice(0, 2)) + '</div>';
 }
 
 function renderViewer(project) {
   viewerProject = JSON.parse(JSON.stringify(project));
+  loadRightSideSetting();
   document.getElementById('viewerTitle').innerText = viewerProject.title || '\u53f0\u672c';
+  renderSettingsOptions();
+  renderTimeline();
+  applyWallpaper(true);
+  const timeline = document.getElementById('viewerTimeline');
+  timeline.removeEventListener('scroll', scheduleWallpaper);
+  timeline.addEventListener('scroll', scheduleWallpaper, { passive: true });
+}
+
+function renderTimeline() {
   const timeline = document.getElementById('viewerTimeline');
   timeline.innerHTML = '';
 
   (viewerProject.talks || []).forEach((talk, index) => {
-    const isScene = talk.charName === VIEWER_SCENE_NAME;
-    const isRight = !isScene && isProtagonist(viewerProject, talk.charName);
+    const isSpecial = isSpecialTalk(talk);
+    const isRight = !isSpecial && isRightSideCharacter(talk.charName);
     const row = document.createElement('article');
-    row.className = 'viewer-talk ' + (isScene ? 'scene' : isRight ? 'right' : 'left');
+    row.className = 'viewer-talk ' + (isSpecial ? 'scene' : isRight ? 'right' : 'left');
     row.dataset.talkId = talk.id || String(index);
     row.innerHTML = '<span class="viewer-number">' + formatNo(index) + '</span>' + avatarHtml(viewerProject, talk) + '<div class="viewer-bubble"><span class="viewer-name">' + escapeHtml(talk.charName || '') + '</span>' + escapeHtml(talk.text || '') + '</div>';
     timeline.appendChild(row);
   });
+}
 
-  applyWallpaper(true);
-  timeline.addEventListener('scroll', scheduleWallpaper, { passive: true });
+function renderSettingsOptions() {
+  const list = document.getElementById('viewerCharacterOptions');
+  if (!list || !viewerProject) return;
+  const characters = viewerCharacters(viewerProject);
+  if (!characters.length) {
+    list.innerHTML = '<p class="viewer-settings-empty">\u8868\u793a\u3067\u304d\u308b\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u304c\u3042\u308a\u307e\u305b\u3093\u3002</p>';
+    return;
+  }
+  list.innerHTML = characters.map(character => {
+    const checked = isRightSideCharacter(character.name) ? ' checked' : '';
+    return '<label class="viewer-character-option">' +
+      '<input type="checkbox" data-name="' + escapeHtml(character.name) + '"' + checked + '>' +
+      avatarHtml(viewerProject, character) +
+      '<span>' + escapeHtml(character.name) + '</span>' +
+      '</label>';
+  }).join('');
+  list.querySelectorAll('input[type="checkbox"]').forEach(input => {
+    input.addEventListener('change', () => {
+      const selected = [...list.querySelectorAll('input[type="checkbox"]:checked')].map(item => item.dataset.name);
+      rightSideSetting = { mode: 'custom', names: selected };
+      saveRightSideSetting();
+      renderTimeline();
+    });
+  });
+}
+
+function openSettings() {
+  renderSettingsOptions();
+  document.getElementById('viewerSettingsPanel').classList.remove('hidden');
+}
+
+function closeSettings() {
+  document.getElementById('viewerSettingsPanel').classList.add('hidden');
+}
+
+function setAllLeft() {
+  rightSideSetting = { mode: 'custom', names: [] };
+  saveRightSideSetting();
+  renderSettingsOptions();
+  renderTimeline();
+}
+
+function setAllRight() {
+  rightSideSetting = { mode: 'custom', names: viewerCharacters(viewerProject).map(character => character.name) };
+  saveRightSideSetting();
+  renderSettingsOptions();
+  renderTimeline();
+}
+
+function useEditorSetting() {
+  rightSideSetting = { mode: 'editor', names: [] };
+  saveRightSideSetting();
+  renderSettingsOptions();
+  renderTimeline();
 }
 
 function wallpaperIdentity(wallpaper) {
@@ -151,6 +281,15 @@ function scheduleWallpaper() {
 }
 
 window.addEventListener('load', () => {
+  document.getElementById('viewerSettingsButton').addEventListener('click', openSettings);
+  document.getElementById('viewerSettingsClose').addEventListener('click', closeSettings);
+  document.getElementById('viewerSettingsPanel').addEventListener('click', event => {
+    if (event.target.id === 'viewerSettingsPanel') closeSettings();
+  });
+  document.getElementById('viewerAllLeft').addEventListener('click', setAllLeft);
+  document.getElementById('viewerAllRight').addEventListener('click', setAllRight);
+  document.getElementById('viewerUseEditor').addEventListener('click', useEditorSetting);
+
   const project = loadSharedProject();
   if (!project) {
     document.getElementById('viewerEmpty').classList.remove('hidden');

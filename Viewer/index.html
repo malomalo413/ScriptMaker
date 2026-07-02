@@ -10,24 +10,39 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
-  <link rel="stylesheet" href="./css/viewer.css?v=2">
-  <script src="./js/viewer.js?v=2" defer></script>
+  <link rel="stylesheet" href="./css/viewer.css?v=3">
+  <script src="./js/viewer.js?v=3" defer></script>
 </head>
 <body>
   <div id="viewerApp" class="viewer-app">
     <div id="viewerWallpaperA" class="viewer-wallpaper active"></div>
     <div id="viewerWallpaperB" class="viewer-wallpaper"></div>
     <header class="viewer-header">
-      <div>
+      <div class="viewer-title-block">
         <p class="viewer-label">ScriptMaker Viewer</p>
         <h1 id="viewerTitle">&#21488;&#26412;</h1>
       </div>
-      <span id="viewerStatus">&#38322;&#35239;&#23554;&#29992;</span>
+      <button id="viewerSettingsButton" class="viewer-settings-button" type="button" aria-haspopup="dialog">&#34920;&#31034;&#35373;&#23450;</button>
     </header>
     <main id="viewerTimeline" class="viewer-timeline"></main>
     <div id="viewerEmpty" class="viewer-empty hidden">
       <h2>&#20849;&#26377;&#12487;&#12540;&#12479;&#12364;&#12354;&#12426;&#12414;&#12379;&#12435;</h2>
       <p>Share&#12391;&#20316;&#25104;&#12375;&#12383;URL&#12363;&#12425;&#38283;&#12356;&#12390;&#12367;&#12384;&#12373;&#12356;&#12290;</p>
+    </div>
+    <div id="viewerSettingsPanel" class="viewer-settings-panel hidden" role="dialog" aria-modal="true" aria-labelledby="viewerSettingsTitle">
+      <div class="viewer-settings-sheet">
+        <div class="viewer-settings-head">
+          <h2 id="viewerSettingsTitle">&#21491;&#20596;&#34920;&#31034;&#12461;&#12515;&#12521;&#12463;&#12479;&#12540;</h2>
+          <button id="viewerSettingsClose" class="viewer-icon-button" type="button" aria-label="close">&#215; </button>
+        </div>
+        <p class="viewer-settings-help">&#12481;&#12455;&#12483;&#12463;&#12375;&#12383;&#12461;&#12515;&#12521;&#12463;&#12479;&#12540;&#12398;&#12475;&#12522;&#12501;&#12434;&#21491;&#20596;&#12395;&#34920;&#31034;&#12375;&#12414;&#12377;&#12290;</p>
+        <div class="viewer-settings-actions">
+          <button id="viewerAllLeft" type="button">&#20840;&#21729;&#24038;&#20596;</button>
+          <button id="viewerAllRight" type="button">&#20840;&#21729;&#21491;&#20596;</button>
+          <button id="viewerUseEditor" type="button">&#32232;&#38598;&#20596;&#35373;&#23450;&#12395;&#25147;&#12377;</button>
+        </div>
+        <div id="viewerCharacterOptions" class="viewer-character-options"></div>
+      </div>
     </div>
   </div>
 </body>
