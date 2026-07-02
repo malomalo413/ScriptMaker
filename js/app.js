@@ -1,9 +1,6 @@
 const EDITOR_AUTH_HASH_KEY = 'scriptmaker_editor_password_hash_v1';
 const EDITOR_AUTH_SESSION_KEY = 'scriptmaker_editor_auth_ok_v1';
-const SCRIPTMAKER_PUBLIC_VIEWER_URL = 'https://malomalo413.github.io/ScriptMaker/Viewer/index.html';
-const SCRIPTMAKER_SHARE_DATA_BASE_URL = 'https://malomalo413.github.io/ScriptMaker/Share/data/';
-const SCRIPTMAKER_GITHUB_CONTENTS_API = 'https://api.github.com/repos/malomalo413/ScriptMaker/contents/Share/data/';
-const SCRIPTMAKER_GITHUB_TOKEN_KEY = 'scriptmaker_github_share_token_v1';
+const SCRIPTMAKER_PUBLIC_VIEWER_URL = 'https://malomalo413.github.io/ScriptMaker/Viewer/';
 
 let state = {
       currentProjectId: null,
@@ -1970,40 +1967,12 @@ ${keptPredictionText}
     }
 
     function buildViewerShareUrl(payload) {
-      return SCRIPTMAKER_PUBLIC_VIEWER_URL + '?share=' + encodeURIComponent(payload.shareId);
+      return SCRIPTMAKER_PUBLIC_VIEWER_URL + '?id=' + encodeURIComponent(payload.shareId);
     }
 
     function buildLongViewerShareUrl(payload) {
       const encoded = encodeSharePayload(payload);
       return viewerBasePath() + '#data=' + encoded;
-    }
-
-    function base64Utf8(text) {
-      const bytes = new TextEncoder().encode(text);
-      let binary = '';
-      bytes.forEach(byte => { binary += String.fromCharCode(byte); });
-      return btoa(binary);
-    }
-
-    async function saveSharePayloadToGitHub(payload, token) {
-      const response = await fetch(SCRIPTMAKER_GITHUB_CONTENTS_API + encodeURIComponent(payload.shareId) + '.json', {
-        method: 'PUT',
-        headers: {
-          'Accept': 'application/vnd.github+json',
-          'Authorization': 'Bearer ' + token,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          message: 'Create ScriptMaker share ' + payload.shareId,
-          content: base64Utf8(JSON.stringify(payload, null, 2)),
-          branch: 'main'
-        })
-      });
-      if (!response.ok) {
-        const detail = await response.text().catch(() => '');
-        throw new Error('GitHub?????????: ' + response.status + ' ' + detail.slice(0, 180));
-      }
-      return response.json();
     }
 
     function setShareStatus(message, type) {
@@ -2024,47 +1993,34 @@ ${keptPredictionText}
       document.body.classList.remove('keyboard-focused');
       const project = state.projects[state.currentProjectId];
       if (!project) {
-        alert('\u5171\u6709\u3059\u308b\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002');
+        alert('共有するプロジェクトがありません。');
         return;
       }
-      const tokenInput = document.getElementById('shareGithubToken');
-      if (tokenInput && !tokenInput.value) tokenInput.value = localStorage.getItem(SCRIPTMAKER_GITHUB_TOKEN_KEY) || '';
       const viewerPassword = document.getElementById('shareViewerPassword')?.value || '';
       const viewerPasswordHash = viewerPassword ? await hashPasswordText(viewerPassword) : '';
       pendingSharePayload = buildViewerSharePayload(project, viewerPasswordHash);
+      const shortUrl = buildViewerShareUrl(pendingSharePayload);
       const output = document.getElementById('shareUrlText');
       const meta = document.getElementById('shareMetaText');
-      if (output) output.value = '';
-      if (meta) meta.innerText = (pendingSharePayload.title || '\u53f0\u672c') + ' / ' + pendingSharePayload.project.talks.length + '\u884c / shareId: ' + pendingSharePayload.shareId;
-      setShareStatus('GitHub token????????URL????????????', '');
+      if (output) output.value = shortUrl;
+      if (meta) meta.innerText = (pendingSharePayload.title || '台本') + ' / ' + pendingSharePayload.project.talks.length + '行 / Share/data/' + pendingSharePayload.shareId + '.json';
+      setShareStatus('JSONをダウンロードして Share/data/ に追加すると、この短いURLで開けます。', '');
       openModal('shareModal');
     }
 
-    async function publishShortShareUrl() {
-      if (!pendingSharePayload) {
-        await openShareModal();
-        if (!pendingSharePayload) return;
-      }
-      const token = (document.getElementById('shareGithubToken')?.value || '').trim();
-      if (!token) {
-        setShareStatus('GitHub token??????????', 'error');
-        return;
-      }
-      localStorage.setItem(SCRIPTMAKER_GITHUB_TOKEN_KEY, token);
-      const output = document.getElementById('shareUrlText');
-      const meta = document.getElementById('shareMetaText');
-      try {
-        setShareStatus('GitHub??????????...', '');
-        await saveSharePayloadToGitHub(pendingSharePayload, token);
-        const shortUrl = buildViewerShareUrl(pendingSharePayload);
-        if (output) output.value = shortUrl;
-        if (meta) meta.innerText = (pendingSharePayload.title || '\u53f0\u672c') + ' / ' + pendingSharePayload.project.talks.length + '\u884c / ' + pendingSharePayload.shareId;
-        setShareStatus('????URL????????', 'success');
-      } catch (error) {
-        console.error('Short share creation failed:', error);
-        if (output) output.value = buildLongViewerShareUrl(pendingSharePayload);
-        setShareStatus(error.message + ' ??URL???????????', 'error');
-      }
+    function downloadShareJson() {
+      if (!pendingSharePayload) return;
+      const json = JSON.stringify(pendingSharePayload, null, 2);
+      const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = pendingSharePayload.shareId + '.json';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setShareStatus('JSONをダウンロードしました。Share/data/ に追加してください。', 'success');
     }
 
     function selectShareUrl() {

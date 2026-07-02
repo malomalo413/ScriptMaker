@@ -1,7 +1,7 @@
 const VIEWER_SCENE_NAME = '\u60c5\u666f\u63cf\u5199';
 const VIEWER_SYSTEM_NAME = '\u30b7\u30b9\u30c6\u30e0';
 const VIEWER_RIGHT_SIDE_PREFIX = 'scriptmaker_viewer_right_side_v1:';
-const SCRIPTMAKER_SHARE_DATA_BASE_URL = 'https://malomalo413.github.io/ScriptMaker/Share/data/';
+const SCRIPTMAKER_SHARE_DATA_BASE_URL = '../Share/data/';
 
 let viewerProject = null;
 let viewerShareKey = 'default';
@@ -49,7 +49,7 @@ async function loadSharedProject() {
     return project;
   }
   const params = new URLSearchParams(location.search);
-  const shareId = params.get('share');
+  const shareId = params.get('id') || params.get('share');
   if (shareId) {
     try {
       viewerShareKey = shareId;
