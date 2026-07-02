@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>ScriptMaker Viewer</title>
+  <meta name="theme-color" content="#111827">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
+  <link rel="stylesheet" href="./css/viewer.css?v=2">
+  <script src="./js/viewer.js?v=2" defer></script>
+</head>
+<body>
+  <div id="viewerApp" class="viewer-app">
+    <div id="viewerWallpaperA" class="viewer-wallpaper active"></div>
+    <div id="viewerWallpaperB" class="viewer-wallpaper"></div>
+    <header class="viewer-header">
+      <div>
+        <p class="viewer-label">ScriptMaker Viewer</p>
+        <h1 id="viewerTitle">&#21488;&#26412;</h1>
+      </div>
+      <span id="viewerStatus">&#38322;&#35239;&#23554;&#29992;</span>
+    </header>
+    <main id="viewerTimeline" class="viewer-timeline"></main>
+    <div id="viewerEmpty" class="viewer-empty hidden">
+      <h2>&#20849;&#26377;&#12487;&#12540;&#12479;&#12364;&#12354;&#12426;&#12414;&#12379;&#12435;</h2>
+      <p>Share&#12391;&#20316;&#25104;&#12375;&#12383;URL&#12363;&#12425;&#38283;&#12356;&#12390;&#12367;&#12384;&#12373;&#12356;&#12290;</p>
+    </div>
+  </div>
+</body>
+</html>
