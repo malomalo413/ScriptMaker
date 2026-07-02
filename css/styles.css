@@ -1196,3 +1196,18 @@
       color: #64748b;
       line-height: 1.5;
     }
+
+
+    .share-modal-content code {
+      padding: 1px 4px;
+      border-radius: 4px;
+      background: #f1f5f9;
+      color: #334155;
+      font-size: 12px;
+    }
+    .share-status {
+      min-height: 18px;
+      font-weight: 800;
+    }
+    .share-status.is-error { color: #dc2626; }
+    .share-status.is-success { color: #059669; }

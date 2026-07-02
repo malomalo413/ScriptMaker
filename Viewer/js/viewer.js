@@ -1,6 +1,7 @@
 const VIEWER_SCENE_NAME = '\u60c5\u666f\u63cf\u5199';
 const VIEWER_SYSTEM_NAME = '\u30b7\u30b9\u30c6\u30e0';
 const VIEWER_RIGHT_SIDE_PREFIX = 'scriptmaker_viewer_right_side_v1:';
+const SCRIPTMAKER_SHARE_DATA_BASE_URL = 'https://malomalo413.github.io/ScriptMaker/Share/data/';
 
 let viewerProject = null;
 let viewerShareKey = 'default';
@@ -37,7 +38,7 @@ function stableShareKey(payload, fallbackProject) {
   return 'url_' + raw.slice(0, 80);
 }
 
-function loadSharedProject() {
+async function loadSharedProject() {
   const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
   const data = hash.get('data');
   if (data) {
@@ -51,9 +52,14 @@ function loadSharedProject() {
   const shareId = params.get('share');
   if (shareId) {
     try {
-      const shares = JSON.parse(localStorage.getItem('scriptmaker_shares_v1') || '{}');
       viewerShareKey = shareId;
-      const share = shares[shareId];
+      const localShares = JSON.parse(localStorage.getItem('scriptmaker_shares_v1') || '{}');
+      let share = localShares[shareId];
+      if (!share) {
+        const response = await fetch(SCRIPTMAKER_SHARE_DATA_BASE_URL + encodeURIComponent(shareId) + '.json', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Share not found: ' + response.status);
+        share = await response.json();
+      }
       viewerPasswordHash = share?.viewerPasswordHash || share?.passwordHash || '';
       return share?.project || null;
     } catch (error) {
@@ -338,7 +344,7 @@ function scheduleWallpaper() {
   });
 }
 
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
   document.getElementById('viewerSettingsButton').addEventListener('click', openSettings);
   document.getElementById('viewerSettingsClose').addEventListener('click', closeSettings);
   document.getElementById('viewerSettingsPanel').addEventListener('click', event => {
@@ -351,7 +357,7 @@ window.addEventListener('load', () => {
   document.getElementById('viewerPasswordInput').addEventListener('keydown', event => { if (event.key === 'Enter') submitViewerPassword(); });
   document.getElementById('viewerLogoutButton').addEventListener('click', logoutViewerAuth);
 
-  const project = loadSharedProject();
+  const project = await loadSharedProject();
   if (!project) {
     document.getElementById('viewerEmpty').classList.remove('hidden');
     return;
