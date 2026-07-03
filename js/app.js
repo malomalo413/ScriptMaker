@@ -1989,9 +1989,7 @@ ${keptPredictionText}
 
     function buildViewerShareUrl(payload, workerUrl) {
       const id = encodeURIComponent(payload.shareId);
-      const normalizedWorker = normalizeWorkerUrl(workerUrl || SCRIPTMAKER_SHARE_WORKER_URL);
-      const workerParam = normalizedWorker && !SCRIPTMAKER_SHARE_WORKER_URL ? '&worker=' + encodeURIComponent(normalizedWorker) : '';
-      return SCRIPTMAKER_PUBLIC_VIEWER_URL + '?id=' + id + workerParam;
+      return SCRIPTMAKER_PUBLIC_VIEWER_URL + '?id=' + id;
     }
 
     function buildLongViewerShareUrl(payload) {
@@ -2043,8 +2041,8 @@ ${keptPredictionText}
     }
 
     async function openSharedViewer() {
-      if (pendingSharePayload && configuredWorkerUrl() && !pendingSharePublished) {
-        await publishWorkerShareUrl();
+      if (pendingSharePayload && !pendingSharePublished) {
+        await publishFirebaseShareUrl();
       }
       const url = currentShareUrl();
       if (!url) return;
@@ -2075,18 +2073,50 @@ ${keptPredictionText}
         alert('\u5171\u6709\u3059\u308b\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002');
         return;
       }
-      setWorkerInputFromStorage();
+      const firebaseInput = document.getElementById('shareFirebaseConfig');
+      if (firebaseInput && window.ScriptMakerFirebaseShare) {
+        firebaseInput.value = window.ScriptMakerFirebaseShare.configTextForInput();
+      }
       const viewerPassword = document.getElementById('shareViewerPassword')?.value || '';
       const viewerPasswordHash = viewerPassword ? await hashPasswordText(viewerPassword) : '';
       pendingSharePayload = buildViewerSharePayload(project, viewerPasswordHash);
       pendingSharePublished = false;
-      const shortUrl = buildViewerShareUrl(pendingSharePayload, configuredWorkerUrl());
+      const shortUrl = buildViewerShareUrl(pendingSharePayload);
       const output = document.getElementById('shareUrlText');
       const meta = document.getElementById('shareMetaText');
       if (output) output.value = shortUrl;
       if (meta) meta.innerText = (pendingSharePayload.title || '\u53f0\u672c') + ' / ' + pendingSharePayload.project.talks.length + '\u4ef6 / id: ' + pendingSharePayload.shareId;
-      setShareStatus(configuredWorkerUrl() ? 'Worker\u3067URL\u3092\u4f5c\u6210\u3067\u304d\u307e\u3059\u3002JSON\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u3082\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3068\u3057\u3066\u4f7f\u3048\u307e\u3059\u3002' : 'Cloudflare Worker URL\u304c\u672a\u8a2d\u5b9a\u3067\u3059\u3002Worker URL\u3092\u5165\u529b\u3059\u308b\u304b\u3001JSON\u3092\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u3057\u3066 Share/data/ \u306b\u8ffd\u52a0\u3057\u3066\u304f\u3060\u3055\u3044\u3002', configuredWorkerUrl() ? '' : 'error');
+      setShareStatus('Firebase Firestore\u306b\u4fdd\u5b58\u3059\u308b\u3068\u3001\u3053\u306e\u77ed\u3044URL\u3067Viewer\u304c\u958b\u3051\u307e\u3059\u3002', '');
       openModal('shareModal');
+    }
+
+    async function publishFirebaseShareUrl() {
+      if (!pendingSharePayload) {
+        await openShareModal();
+        if (!pendingSharePayload) return;
+      }
+      const helper = window.ScriptMakerFirebaseShare;
+      if (!helper) {
+        setShareStatus('Firebase\u5171\u6709\u30e2\u30b8\u30e5\u30fc\u30eb\u3092\u8aad\u307f\u8fbc\u3081\u307e\u305b\u3093\u3002', 'error');
+        return;
+      }
+      const output = document.getElementById('shareUrlText');
+      const meta = document.getElementById('shareMetaText');
+      const configText = document.getElementById('shareFirebaseConfig')?.value || '';
+      try {
+        setShareStatus('Firestore\u3078\u5171\u6709\u30c7\u30fc\u30bf\u3092\u4fdd\u5b58\u4e2d...', '');
+        const config = helper.configuredConfig(configText);
+        helper.saveConfig(config);
+        await helper.saveShare(pendingSharePayload, config);
+        const url = buildViewerShareUrl(pendingSharePayload);
+        if (output) output.value = url;
+        if (meta) meta.innerText = (pendingSharePayload.title || '\u53f0\u672c') + ' / ' + pendingSharePayload.project.talks.length + '\u4ef6 / id: ' + pendingSharePayload.shareId;
+        pendingSharePublished = true;
+        setShareStatus('\u5171\u6709URL\u3092\u4f5c\u6210\u3057\u307e\u3057\u305f\u3002', 'success');
+      } catch (error) {
+        console.error('Firebase share failed:', error);
+        setShareStatus((error.message || 'Firebase\u3078\u306e\u4fdd\u5b58\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002') + ' JSON\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u65b9\u5f0f\u306f\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3068\u3057\u3066\u5229\u7528\u3067\u304d\u307e\u3059\u3002', 'error');
+      }
     }
 
     async function publishWorkerShareUrl() {
@@ -2135,15 +2165,15 @@ ${keptPredictionText}
     async function copyShareUrl() {
       const text = document.getElementById('shareUrlText');
       const value = text ? text.value.trim() : '';
-      if (pendingSharePayload && configuredWorkerUrl() && !pendingSharePublished) {
-        await publishWorkerShareUrl();
+      if (pendingSharePayload && !pendingSharePublished) {
+        await publishFirebaseShareUrl();
         return copyShareUrl();
       }
       if (!value) {
-        await publishWorkerShareUrl();
+        await publishFirebaseShareUrl();
         const refreshed = text ? text.value.trim() : '';
         if (!refreshed) {
-          setShareStatus('\u30b3\u30d4\u30fc\u3067\u304d\u308bURL\u304c\u3042\u308a\u307e\u305b\u3093\u3002Worker URL\u3092\u8a2d\u5b9a\u3059\u308b\u304b\u3001JSON\u3092\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u3057\u3066\u304f\u3060\u3055\u3044\u3002', 'error');
+          setShareStatus('\u30b3\u30d4\u30fc\u3067\u304d\u308bURL\u304c\u3042\u308a\u307e\u305b\u3093\u3002Firebase config\u3092\u8a2d\u5b9a\u3057\u3066\u304f\u3060\u3055\u3044\u3002', 'error');
           return;
         }
         return copyShareUrl();

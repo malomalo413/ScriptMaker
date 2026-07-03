@@ -72,6 +72,13 @@ async function loadSharedProject() {
       viewerShareKey = shareId;
       const localShares = JSON.parse(localStorage.getItem('scriptmaker_shares_v1') || '{}');
       let share = localShares[shareId];
+      if (!share && window.ScriptMakerFirebaseShare) {
+        try {
+          share = await window.ScriptMakerFirebaseShare.loadShare(shareId);
+        } catch (firebaseError) {
+          console.warn('Viewer Firebase share load failed', firebaseError);
+        }
+      }
       if (!share) {
         share = await fetchShareFromWorker(shareId, workerUrlFromParams(params));
       }
