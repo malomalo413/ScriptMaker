@@ -32,6 +32,14 @@ Use Cloudflare Workers Builds to connect this GitHub repository. Manual code pas
 
 Japanese setup guide: `workers/SETUP-JA.md`.
 
+This project uses `workers_dev = true`, so the Cloudflare account must have a `workers.dev` subdomain before deployment. If it is not configured, Cloudflare deploys can fail with:
+
+```text
+You need a workers.dev subdomain in order to proceed. (code:10063)
+```
+
+Configure it in Cloudflare Dashboard > Workers & Pages > Your subdomain.
+
 ## Environment Variables
 
 ```text

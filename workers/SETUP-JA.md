@@ -26,14 +26,45 @@ CloudflareにGitHubリポジトリを連携するだけで、`workers/share-work
 
 Cloudflare Dashboardで `Workers & Pages` を開きます。
 
-### 3. GitHubリポジトリをインポート
+### 3. workers.dev サブドメインを有効化
+
+このリポジトリは `wrangler.toml` で `workers_dev = true` にしています。
+
+そのため、Cloudflareアカウント側で workers.dev サブドメインが未作成の場合、デプロイ時に次のエラーになります。
+
+```text
+You need a workers.dev subdomain in order to proceed. (code:10063)
+```
+
+Cloudflare Dashboardで以下を確認してください。
+
+1. `Workers & Pages` を開く
+2. Overview画面で `Your subdomain` を探す
+3. `Change` または `Set up` を押す
+4. 任意のサブドメインを設定する
+
+例:
+
+```text
+malomalo413.workers.dev
+```
+
+デプロイ後のWorker URLは次の形式になります。
+
+```text
+https://scriptmaker-share.malomalo413.workers.dev
+```
+
+もし `Your subdomain` が表示されない場合は、Cloudflare Dashboardの検索で `workers.dev` または `subdomain` を検索してください。
+
+### 4. GitHubリポジトリをインポート
 
 1. `Create application` を押す
 2. `Import a repository` を選ぶ
 3. GitHubを連携する
 4. `malomalo413/ScriptMaker` を選ぶ
 
-### 4. Worker設定
+### 5. Worker設定
 
 以下のように設定します。
 
@@ -59,7 +90,7 @@ npx wrangler deploy
 
 `wrangler.toml` がリポジトリ直下にあるため、Cloudflareはこの設定を読んでWorkerをデプロイします。
 
-### 5. 環境変数
+### 6. 環境変数
 
 基本的には `wrangler.toml` に入っているため追加不要です。
 
@@ -71,13 +102,13 @@ ALLOWED_ORIGIN=https://malomalo413.github.io
 SHARE_TTL_SECONDS=15552000
 ```
 
-### 6. KV設定
+### 7. KV設定
 
 不要です。
 
 この構成ではKVを使わないため、KV namespace作成やBinding設定は不要です。
 
-### 7. Durable Objects設定
+### 8. Durable Objects設定
 
 手動設定は不要です。
 
@@ -93,7 +124,7 @@ tag = "v1"
 new_sqlite_classes = ["ShareObject"]
 ```
 
-### 8. Save and Deploy
+### 9. Save and Deploy
 
 `Save and Deploy` を押します。
 
@@ -134,6 +165,12 @@ https://scriptmaker-share.xxxxx.workers.dev/health
 ```json
 { "ok": true }
 ```
+
+## workers.dev を使わない場合
+
+独自ドメインをCloudflareに追加済みの場合のみ、`workers_dev = false` にしてCustom DomainまたはRouteで公開できます。
+
+ただし、ScriptMakerの共有機能には公開Worker URLが必要です。独自ドメインがない場合は、`workers.dev` サブドメインを使う構成が最も簡単です。
 
 ## 参考
 
