@@ -243,6 +243,7 @@ function renderViewer(project) {
   loadRightSideSetting();
   loadCountSetting();
   document.getElementById('viewerTitle').innerText = viewerProject.title || '\u53f0\u672c';
+  document.getElementById('viewerPdfButton')?.classList.remove('hidden');
   renderSettingsOptions();
   renderTimeline();
   renderCountPanel();
@@ -501,7 +502,23 @@ function scheduleWallpaper() {
   });
 }
 
+function printViewerPdf() {
+  if (!viewerProject) return;
+  const countDetails = document.getElementById('viewerCountDetails');
+  const wasOpen = !!countDetails?.open;
+  if (countDetails) countDetails.open = true;
+
+  const restorePrintState = () => {
+    if (countDetails) countDetails.open = wasOpen;
+    window.removeEventListener('afterprint', restorePrintState);
+  };
+
+  window.addEventListener('afterprint', restorePrintState);
+  setTimeout(() => window.print(), 50);
+}
+
 window.addEventListener('load', async () => {
+  document.getElementById('viewerPdfButton').addEventListener('click', printViewerPdf);
   document.getElementById('viewerSettingsButton').addEventListener('click', openSettings);
   document.getElementById('viewerSettingsClose').addEventListener('click', closeSettings);
   document.getElementById('viewerSettingsPanel').addEventListener('click', event => {

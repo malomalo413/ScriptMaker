@@ -6,6 +6,7 @@
   --accent: #3b82f6;
 }
 * { box-sizing: border-box; }
+.hidden { display: none !important; }
 html, body {
   margin: 0;
   width: 100%;
@@ -72,6 +73,7 @@ html, body {
   font-weight: 800;
   white-space: nowrap;
 }
+.viewer-pdf-button { background: #0f766e; }
 .viewer-count-panel {
   position: relative;
   z-index: 2;
@@ -406,4 +408,182 @@ html, body {
 @media (max-width: 420px) {
   .viewer-header-actions { gap: 6px; }
   .viewer-logout-button { padding-left: 8px; padding-right: 8px; }
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
+  html,
+  body {
+    width: auto;
+    height: auto;
+    overflow: visible;
+    background: #fff !important;
+    color: #111827;
+    font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  }
+
+  .viewer-app {
+    display: block;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    background: #fff !important;
+  }
+
+  .viewer-wallpaper,
+  .viewer-header-actions,
+  .viewer-settings-panel,
+  .viewer-auth-panel,
+  .viewer-empty,
+  .viewer-count-options {
+    display: none !important;
+  }
+
+  .viewer-header {
+    position: static;
+    display: block;
+    padding: 0 0 8px;
+    background: #fff !important;
+    border-bottom: 2px solid #111827;
+    backdrop-filter: none;
+  }
+
+  .viewer-label {
+    display: none;
+  }
+
+  .viewer-header h1 {
+    max-width: none;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    font-size: 22px;
+    line-height: 1.35;
+  }
+
+  .viewer-count-panel {
+    display: block !important;
+    position: static;
+    padding: 8px 0;
+    background: #fff !important;
+    border-bottom: 1px solid #d1d5db;
+    backdrop-filter: none;
+  }
+
+  .viewer-count-panel details {
+    max-width: none;
+  }
+
+  .viewer-count-panel summary {
+    min-height: auto;
+    padding: 0;
+    cursor: default;
+    font-size: 12px;
+  }
+
+  .viewer-count-panel summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .viewer-count-breakdown {
+    gap: 4px 10px;
+    padding-top: 6px;
+  }
+
+  .viewer-count-breakdown span {
+    padding: 0;
+    background: transparent;
+    color: #374151;
+    font-size: 11px;
+  }
+
+  .viewer-timeline {
+    position: static;
+    display: block;
+    height: auto;
+    overflow: visible;
+    padding: 12px 0 0;
+  }
+
+  .viewer-talk {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    gap: 8px;
+    max-width: none;
+    margin: 0 0 8px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .viewer-talk.right,
+  .viewer-talk.left,
+  .viewer-talk.scene {
+    align-self: auto;
+    flex-direction: initial;
+    justify-content: initial;
+    max-width: none;
+  }
+
+  .viewer-avatar,
+  .viewer-avatar-dummy {
+    display: none;
+  }
+
+  .viewer-number {
+    display: block !important;
+    grid-column: 1;
+    align-self: start;
+    min-width: 0;
+    margin: 2px 0 0;
+    padding: 0;
+    background: transparent;
+    color: #6b7280;
+    font-size: 11px;
+    text-align: left;
+  }
+
+  .viewer-bubble {
+    grid-column: 2;
+    padding: 0 0 0 8px;
+    border-radius: 0;
+    background: #fff !important;
+    box-shadow: none;
+    color: #111827;
+    font-size: 12px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+  }
+
+  .viewer-talk.left .viewer-bubble {
+    border-left: 3px solid #cbd5e1;
+  }
+
+  .viewer-talk.right .viewer-bubble {
+    border-left: 3px solid #3b82f6;
+  }
+
+  .viewer-talk.scene {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    padding: 6px 0;
+  }
+
+  .viewer-talk.scene .viewer-bubble {
+    border-left: 3px solid #94a3b8;
+    background: #f8fafc !important;
+    text-align: left;
+    padding: 5px 8px;
+  }
+
+  .viewer-name {
+    display: inline;
+    margin: 0 8px 0 0;
+    color: #111827;
+    font-size: 11px;
+    font-weight: 900;
+  }
 }
