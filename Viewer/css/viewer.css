@@ -343,9 +343,23 @@ html, body {
   color: #64748b;
 }
 @media (max-width: 420px) {
-  .viewer-header { padding: 10px 12px; }
-  .viewer-header h1 { max-width: 52vw; font-size: 17px; }
+  .viewer-header {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    padding: 10px 12px;
+  }
+  .viewer-title-block {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  .viewer-header h1 { max-width: 100%; font-size: 17px; }
+  .viewer-header-actions {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
   .viewer-settings-button { padding: 8px 10px; font-size: 12px; }
+  .viewer-pdf-button { order: -1; }
   .viewer-count-panel { padding: 6px 10px; }
   .viewer-count-panel summary { min-height: 30px; }
   .viewer-count-panel summary strong { font-size: 12px; }
