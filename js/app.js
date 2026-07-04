@@ -2145,9 +2145,14 @@ unlock();
       if (firebaseInput && window.ScriptMakerFirebaseShare) {
         firebaseInput.value = window.ScriptMakerFirebaseShare.configTextForInput();
       }
-      if (output) output.value = buildViewerShareUrl(pendingSharePayload);
+      const copyButton = document.getElementById('shareCopyButton');
+      if (output) {
+        output.value = '';
+        output.classList.add('hidden');
+      }
+      if (copyButton) copyButton.classList.add('hidden');
       if (meta) meta.innerText = (pendingSharePayload.title || '\u53f0\u672c') + ' / ' + pendingSharePayload.project.talks.length + '\u4ef6 / id: ' + pendingSharePayload.shareId;
-      setShareStatus('Firebase Firestore\u306b\u4fdd\u5b58\u3059\u308b\u3068\u3001\u3053\u306e\u77ed\u3044URL\u3067Viewer\u304c\u958b\u3051\u307e\u3059\u3002Google Drive\u7528HTML\u306f\u300cHTML\u66f8\u304d\u51fa\u3057\u300d\u304b\u3089\u4fdd\u5b58\u3067\u304d\u307e\u3059\u3002', '');
+      setShareStatus('\u300c\u5171\u6709URL\u3092\u4f5c\u6210\u300d\u3092\u62bc\u3059\u3068Firestore\u306b\u4fdd\u5b58\u3057\u3066URL\u3092\u8868\u793a\u3057\u307e\u3059\u3002', '');
       openModal('shareModal');
     }
 
@@ -2203,6 +2208,7 @@ unlock();
       }
       const output = document.getElementById('shareUrlText');
       const meta = document.getElementById('shareMetaText');
+      const copyButton = document.getElementById('shareCopyButton');
       const configText = document.getElementById('shareFirebaseConfig')?.value || '';
       try {
         setShareStatus('Firestore\u3078\u5171\u6709\u30c7\u30fc\u30bf\u3092\u4fdd\u5b58\u4e2d...', '');
@@ -2210,10 +2216,14 @@ unlock();
         helper.saveConfig(config);
         await helper.saveShare(pendingSharePayload, config);
         const url = buildViewerShareUrl(pendingSharePayload);
-        if (output) output.value = url;
+        if (output) {
+          output.value = url;
+          output.classList.remove('hidden');
+        }
+        if (copyButton) copyButton.classList.remove('hidden');
         if (meta) meta.innerText = (pendingSharePayload.title || '\u53f0\u672c') + ' / ' + pendingSharePayload.project.talks.length + '\u4ef6 / id: ' + pendingSharePayload.shareId;
         pendingSharePublished = true;
-        setShareStatus('\u5171\u6709URL\u3092\u4f5c\u6210\u3057\u307e\u3057\u305f\u3002', 'success');
+        setShareStatus('\u5171\u6709URL\u3092\u4f5c\u6210\u3057\u307e\u3057\u305f\u3002\u6b21\u306b\u300cURL\u3092\u30b3\u30d4\u30fc\u300d\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002', 'success');
       } catch (error) {
         console.error('Firebase share failed:', error);
         setShareStatus((error.message || 'Firebase\u3078\u306e\u4fdd\u5b58\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002') + ' JSON\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u65b9\u5f0f\u306f\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3068\u3057\u3066\u5229\u7528\u3067\u304d\u307e\u3059\u3002', 'error');

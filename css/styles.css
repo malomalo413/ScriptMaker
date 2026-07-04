@@ -1100,7 +1100,7 @@
     }
     .share-url-textarea {
       width: 100%;
-      min-height: 112px;
+      min-height: 72px;
       padding: 10px;
       border: 1px solid var(--border-color);
       border-radius: 8px;
@@ -1108,6 +1108,15 @@
       font-size: 12px;
       line-height: 1.45;
       word-break: break-all;
+    }
+    .share-url-output {
+      background: #f8fafc;
+      font-weight: 700;
+    }
+    .share-config-textarea {
+      min-height: 112px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
     }
     .share-meta {
       color: #64748b;
@@ -1117,8 +1126,36 @@
     }
     .share-modal-actions {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-columns: 1fr 1fr;
       gap: 8px;
+    }
+    .share-main-actions {
+      grid-template-columns: 1fr;
+    }
+    .share-main-actions .btn-modal-confirm {
+      font-size: 15px;
+      padding: 12px 10px;
+    }
+    .share-advanced {
+      margin-top: 4px;
+      border-top: 1px solid var(--border-color);
+      padding-top: 10px;
+    }
+    .share-advanced summary {
+      color: #64748b;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 800;
+      list-style-position: inside;
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+    }
+    .share-advanced[open] summary {
+      margin-bottom: 8px;
+    }
+    .share-advanced-actions {
+      grid-template-columns: 1fr;
     }
     .share-modal-actions button {
       min-width: 0;
@@ -1128,7 +1165,8 @@
     }
     @media (max-width: 420px) {
       .share-modal-actions { grid-template-columns: 1fr; }
-      .share-url-textarea { min-height: 128px; }
+      .share-url-textarea { min-height: 82px; }
+      .share-config-textarea { min-height: 128px; }
     }
 
 
