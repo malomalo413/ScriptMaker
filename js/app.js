@@ -3,6 +3,7 @@ const EDITOR_AUTH_SESSION_KEY = 'scriptmaker_editor_auth_ok_v1';
 const SCRIPTMAKER_PUBLIC_VIEWER_URL = 'https://malomalo413.github.io/ScriptMaker/Viewer/';
 const SCRIPTMAKER_SHARE_WORKER_URL = '';
 const SCRIPTMAKER_SHARE_WORKER_URL_KEY = 'scriptmaker_share_worker_url_v1';
+const SCRIPTMAKER_SHARE_VIEWER_PASSWORD_KEY = 'scriptmaker_share_viewer_password_v1';
 
 let state = {
       currentProjectId: null,
@@ -2135,7 +2136,11 @@ unlock();
         alert('\u5171\u6709\u3059\u308b\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002');
         return;
       }
-      const viewerPassword = document.getElementById('shareViewerPassword')?.value || '';
+      const passwordInput = document.getElementById('shareViewerPassword');
+      if (passwordInput && !passwordInput.value) {
+        passwordInput.value = localStorage.getItem(SCRIPTMAKER_SHARE_VIEWER_PASSWORD_KEY) || '';
+      }
+      const viewerPassword = passwordInput?.value || '';
       const viewerPasswordHash = viewerPassword ? await hashPasswordText(viewerPassword) : '';
       pendingSharePayload = buildViewerSharePayload(project, viewerPasswordHash);
       pendingSharePublished = false;
@@ -2154,6 +2159,13 @@ unlock();
       if (meta) meta.innerText = (pendingSharePayload.title || '\u53f0\u672c') + ' / ' + pendingSharePayload.project.talks.length + '\u4ef6 / id: ' + pendingSharePayload.shareId;
       setShareStatus('\u300c\u5171\u6709URL\u3092\u4f5c\u6210\u300d\u3092\u62bc\u3059\u3068Firestore\u306b\u4fdd\u5b58\u3057\u3066URL\u3092\u8868\u793a\u3057\u307e\u3059\u3002', '');
       openModal('shareModal');
+    }
+
+    function clearStoredSharePassword() {
+      localStorage.removeItem(SCRIPTMAKER_SHARE_VIEWER_PASSWORD_KEY);
+      const input = document.getElementById('shareViewerPassword');
+      if (input) input.value = '';
+      setShareStatus('\u4fdd\u5b58\u3057\u305f\u95b2\u89a7\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u524a\u9664\u3057\u307e\u3057\u305f\u3002', 'success');
     }
 
     function downloadDriveViewerHtml() {
@@ -2212,6 +2224,13 @@ unlock();
       const configText = document.getElementById('shareFirebaseConfig')?.value || '';
       try {
         setShareStatus('Firestore\u3078\u5171\u6709\u30c7\u30fc\u30bf\u3092\u4fdd\u5b58\u4e2d...', '');
+        const viewerPassword = document.getElementById('shareViewerPassword')?.value || '';
+        if (viewerPassword) {
+          localStorage.setItem(SCRIPTMAKER_SHARE_VIEWER_PASSWORD_KEY, viewerPassword);
+        } else {
+          localStorage.removeItem(SCRIPTMAKER_SHARE_VIEWER_PASSWORD_KEY);
+        }
+        pendingSharePayload.viewerPasswordHash = viewerPassword ? await hashPasswordText(viewerPassword) : '';
         const config = helper.configuredConfig(configText);
         helper.saveConfig(config);
         await helper.saveShare(pendingSharePayload, config);

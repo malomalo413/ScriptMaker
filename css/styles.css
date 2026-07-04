@@ -1163,6 +1163,17 @@
       padding-right: 8px;
       white-space: normal;
     }
+    .share-clear-password {
+      width: 100%;
+      margin-top: 6px;
+      border: 0;
+      border-radius: 8px;
+      background: #f1f5f9;
+      color: #475569;
+      font-size: 12px;
+      font-weight: 800;
+      padding: 8px 10px;
+    }
     @media (max-width: 420px) {
       .share-modal-actions { grid-template-columns: 1fr; }
       .share-url-textarea { min-height: 82px; }

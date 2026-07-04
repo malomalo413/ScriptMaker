@@ -1,6 +1,7 @@
 const VIEWER_SCENE_NAME = '\u60c5\u666f\u63cf\u5199';
 const VIEWER_SYSTEM_NAME = '\u30b7\u30b9\u30c6\u30e0';
 const VIEWER_RIGHT_SIDE_PREFIX = 'scriptmaker_viewer_right_side_v1:';
+const VIEWER_PASSWORD_HASH_PREFIX = 'scriptmaker_viewer_password_hash_v1:';
 const SCRIPTMAKER_SHARE_DATA_BASE_URL = '../Share/data/';
 const SCRIPTMAKER_SHARE_WORKER_URL = '';
 
@@ -264,8 +265,23 @@ function viewerAuthSessionKey() {
   return 'scriptmaker_viewer_auth_ok_v1:' + viewerShareKey;
 }
 
+function viewerPasswordStorageKey() {
+  return VIEWER_PASSWORD_HASH_PREFIX + viewerShareKey;
+}
+
+function savedViewerPasswordHash() {
+  return localStorage.getItem(viewerPasswordStorageKey()) || '';
+}
+
 function isViewerAuthorized() {
-  return !viewerPasswordHash || sessionStorage.getItem(viewerAuthSessionKey()) === viewerPasswordHash;
+  if (!viewerPasswordHash) return true;
+  if (sessionStorage.getItem(viewerAuthSessionKey()) === viewerPasswordHash) return true;
+  if (savedViewerPasswordHash() === viewerPasswordHash) {
+    sessionStorage.setItem(viewerAuthSessionKey(), viewerPasswordHash);
+    return true;
+  }
+  if (savedViewerPasswordHash()) localStorage.removeItem(viewerPasswordStorageKey());
+  return false;
 }
 
 function showViewerAuth(project) {
@@ -290,9 +306,18 @@ async function submitViewerPassword() {
     return;
   }
   sessionStorage.setItem(viewerAuthSessionKey(), viewerPasswordHash);
+  localStorage.setItem(viewerPasswordStorageKey(), viewerPasswordHash);
   if (input) input.value = '';
   if (message) message.textContent = '';
   finishViewerAuth(pendingViewerProject);
+}
+
+function clearSavedViewerPassword() {
+  localStorage.removeItem(viewerPasswordStorageKey());
+  sessionStorage.removeItem(viewerAuthSessionKey());
+  const message = document.getElementById('viewerPasswordMessage');
+  if (message) message.textContent = '\u4fdd\u5b58\u3057\u305f\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u524a\u9664\u3057\u307e\u3057\u305f\u3002';
+  document.getElementById('viewerPasswordInput')?.focus();
 }
 
 function logoutViewerAuth() {
@@ -382,6 +407,7 @@ window.addEventListener('load', async () => {
   document.getElementById('viewerUseEditor').addEventListener('click', useEditorSetting);
   document.getElementById('viewerPasswordSubmit').addEventListener('click', submitViewerPassword);
   document.getElementById('viewerPasswordInput').addEventListener('keydown', event => { if (event.key === 'Enter') submitViewerPassword(); });
+  document.getElementById('viewerClearSavedPassword').addEventListener('click', clearSavedViewerPassword);
   document.getElementById('viewerLogoutButton').addEventListener('click', logoutViewerAuth);
 
   const project = await loadSharedProject();

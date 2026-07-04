@@ -301,6 +301,11 @@ html, body {
   color: #fff;
   font-weight: 900;
 }
+.viewer-auth-card .viewer-secondary-button {
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+}
 .viewer-auth-message { min-height: 18px; color: #dc2626; font-size: 13px; font-weight: 800; }
 .viewer-auth-card small { color: #64748b; line-height: 1.5; }
 @media (max-width: 420px) {

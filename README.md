@@ -78,3 +78,9 @@ The standard sharing flow uses Firebase Firestore. The Editor saves a read-only 
 See `FIREBASE-SETUP.md` for Firebase project setup, Firestore rules, and `js/firebase-config.js` configuration.
 
 Google Drive is kept as an optional HTML export path. Use the share modal's HTML export buttons when you need a standalone read-only HTML file. See `DRIVE-SETUP.md` for that fallback flow.
+
+## Password convenience storage
+
+The Editor can remember the Viewer password entered in the share modal on the current device. The Viewer can also remember a successful password check per share ID on the current device. These values are stored only in browser `localStorage` and are not shared with other devices.
+
+This is a convenience feature, not strong authentication. GitHub Pages is a static site, so Viewer password protection should be treated as lightweight access control for casual sharing.
