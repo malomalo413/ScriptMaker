@@ -18,6 +18,7 @@ let currentWallpaperKey = '';
 let raf = 0;
 let viewerShareIdMissing = false;
 let viewerLoadErrorType = '';
+let printAssetsReadyPromise = Promise.resolve();
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -347,6 +348,7 @@ function renderViewer(project) {
   renderTimeline();
   renderCountPanel();
   updateNumberVisibility();
+  preparePrintPages();
   applyWallpaper(true);
   const timeline = document.getElementById('viewerTimeline');
   timeline.removeEventListener('scroll', scheduleWallpaper);
@@ -391,6 +393,7 @@ function renderSettingsOptions() {
       saveRightSideSetting();
       renderTimeline();
       updateNumberVisibility();
+      preparePrintPages();
     });
   });
 }
@@ -410,6 +413,7 @@ function setAllLeft() {
   renderSettingsOptions();
   renderTimeline();
   updateNumberVisibility();
+  preparePrintPages();
 }
 
 function setAllRight() {
@@ -418,6 +422,7 @@ function setAllRight() {
   renderSettingsOptions();
   renderTimeline();
   updateNumberVisibility();
+  preparePrintPages();
 }
 
 function useEditorSetting() {
@@ -426,6 +431,7 @@ function useEditorSetting() {
   renderSettingsOptions();
   renderTimeline();
   updateNumberVisibility();
+  preparePrintPages();
 }
 
 function initCountControls() {
@@ -622,6 +628,15 @@ function waitForPrintImages(images) {
   ]);
 }
 
+function preparePrintPages() {
+  if (!viewerProject) return [];
+  const images = renderPrintPages();
+  printAssetsReadyPromise = waitForPrintImages(images).catch(error => {
+    console.warn('Viewer print image preload failed', error);
+  });
+  return images;
+}
+
 function styleLayer(layer, wallpaper) {
   if (!wallpaper?.image) {
     layer.style.backgroundImage = '';
@@ -718,22 +733,25 @@ function showViewerEmptyMessage() {
   empty.classList.remove('hidden');
 }
 
-async function printViewerPdf() {
+function printViewerPdf() {
   if (!viewerProject) return;
   const countDetails = document.getElementById('viewerCountDetails');
   const wasOpen = !!countDetails?.open;
   if (countDetails) countDetails.open = true;
-  const images = renderPrintPages();
-  await waitForPrintImages(images);
+  preparePrintPages();
 
   const restorePrintState = () => {
     if (countDetails) countDetails.open = wasOpen;
-    document.getElementById('viewerPrintPages')?.replaceChildren();
     window.removeEventListener('afterprint', restorePrintState);
   };
 
   window.addEventListener('afterprint', restorePrintState);
-  setTimeout(() => window.print(), 50);
+  try {
+    window.print();
+  } catch (error) {
+    console.error('Viewer print failed', error);
+    printAssetsReadyPromise.finally(() => window.print());
+  }
 }
 
 window.addEventListener('load', async () => {
