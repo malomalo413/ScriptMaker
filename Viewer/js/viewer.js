@@ -637,6 +637,232 @@ function preparePrintPages() {
   return images;
 }
 
+function printDocumentStyles() {
+  return `
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      background: #eef2f7;
+      color: #111827;
+      font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+    }
+    .viewer-print-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, .94);
+      border-bottom: 1px solid #d1d5db;
+      backdrop-filter: blur(12px);
+    }
+    .viewer-print-toolbar strong {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 14px;
+    }
+    .viewer-print-toolbar button {
+      border: 0;
+      border-radius: 9px;
+      padding: 10px 14px;
+      background: #2563eb;
+      color: #fff;
+      font-weight: 900;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+    .viewer-print-pages {
+      display: block;
+      padding: 16px;
+    }
+    .viewer-print-page {
+      max-width: 920px;
+      min-height: 1120px;
+      margin: 0 auto 16px;
+      padding: 22px;
+      background: #fff;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, .14);
+      page-break-after: always;
+      break-after: page;
+    }
+    .viewer-print-page:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+    .viewer-print-head {
+      padding: 0 0 8px;
+      border-bottom: 2px solid #111827;
+      margin-bottom: 12px;
+    }
+    .viewer-print-head h1 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.35;
+    }
+    .viewer-print-head p {
+      margin: 3px 0 0;
+      color: #475569;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .viewer-print-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 38%;
+      gap: 28px;
+      align-items: start;
+    }
+    .viewer-print-script { min-width: 0; }
+    .viewer-print-art {
+      min-height: 420px;
+      border: 1px solid #d1d5db;
+      background: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .viewer-print-wallpaper-image {
+      display: block;
+      max-width: 100%;
+      max-height: 760px;
+      object-fit: contain;
+    }
+    .viewer-print-no-wallpaper {
+      width: 100%;
+      min-height: 260px;
+      display: grid;
+      place-items: center;
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 800;
+      text-align: center;
+    }
+    .viewer-print-talk {
+      display: grid;
+      grid-template-columns: 36px 78px minmax(0, 1fr);
+      gap: 6px;
+      margin: 0 0 6px;
+      padding-left: 7px;
+      border-left: 3px solid #cbd5e1;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .viewer-print-talk.right { border-left-color: #3b82f6; }
+    .viewer-print-talk.scene {
+      grid-template-columns: 36px 1fr;
+      border-left-color: #94a3b8;
+      background: #f1f5f9;
+      padding: 4px 6px;
+    }
+    .viewer-print-talk.scene .viewer-print-name { display: none; }
+    .viewer-print-number { color: #6b7280; font-weight: 900; }
+    .viewer-print-name {
+      color: #111827;
+      font-weight: 900;
+      overflow-wrap: anywhere;
+    }
+    .viewer-print-text {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    @media (max-width: 720px) {
+      .viewer-print-pages { padding: 10px; }
+      .viewer-print-page {
+        min-height: auto;
+        padding: 16px;
+      }
+      .viewer-print-layout {
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+      .viewer-print-art {
+        min-height: 220px;
+        order: -1;
+      }
+      .viewer-print-wallpaper-image {
+        max-height: 420px;
+      }
+    }
+    @media print {
+      @page { size: A4; margin: 14mm; }
+      html, body {
+        width: auto;
+        height: auto;
+        overflow: visible;
+        background: #fff !important;
+      }
+      .viewer-print-toolbar { display: none !important; }
+      .viewer-print-pages {
+        padding: 0;
+      }
+      .viewer-print-page {
+        max-width: none;
+        min-height: calc(297mm - 28mm);
+        margin: 0;
+        padding: 0;
+        box-shadow: none;
+      }
+      .viewer-print-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 38%;
+        gap: 12mm;
+      }
+      .viewer-print-art {
+        min-height: 110mm;
+        padding: 5mm;
+      }
+      .viewer-print-wallpaper-image {
+        max-height: 210mm;
+      }
+      .viewer-print-talk {
+        font-size: 11px;
+      }
+    }
+  `;
+}
+
+function buildPrintableHtml() {
+  const pages = document.getElementById('viewerPrintPages')?.innerHTML || '';
+  const title = escapeHtml(viewerProject?.title || '\u53f0\u672c');
+  return '<!doctype html><html lang="ja"><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+    '<title>' + title + ' PDF</title><style>' + printDocumentStyles() + '</style></head>' +
+    '<body><div class="viewer-print-toolbar"><strong>' + title + '</strong>' +
+    '<button type="button" onclick="window.print()">印刷 / PDF保存</button></div>' +
+    '<main class="viewer-print-pages">' + pages + '</main>' +
+    '<script>window.addEventListener("load",function(){setTimeout(function(){try{window.print()}catch(e){}},300);});<\/script>' +
+    '</body></html>';
+}
+
+function openPrintableWindow() {
+  const html = buildPrintableHtml();
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const useSameTab = window.matchMedia?.('(pointer: coarse)').matches || window.innerWidth <= 768;
+  if (useSameTab) {
+    window.location.href = url;
+    return false;
+  }
+
+  const popup = window.open(url, '_blank', 'noopener');
+  if (popup) {
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return true;
+  }
+
+  window.location.href = url;
+  return false;
+}
+
 function styleLayer(layer, wallpaper) {
   if (!wallpaper?.image) {
     layer.style.backgroundImage = '';
@@ -735,6 +961,11 @@ function showViewerEmptyMessage() {
 
 function printViewerPdf() {
   if (!viewerProject) return;
+  const pdfButton = document.getElementById('viewerPdfButton');
+  if (pdfButton) {
+    pdfButton.disabled = true;
+    pdfButton.textContent = 'PDF準備中';
+  }
   const countDetails = document.getElementById('viewerCountDetails');
   const wasOpen = !!countDetails?.open;
   if (countDetails) countDetails.open = true;
@@ -742,20 +973,37 @@ function printViewerPdf() {
 
   const restorePrintState = () => {
     if (countDetails) countDetails.open = wasOpen;
+    if (pdfButton) {
+      pdfButton.disabled = false;
+      pdfButton.textContent = 'PDFで保存';
+    }
     window.removeEventListener('afterprint', restorePrintState);
   };
 
   window.addEventListener('afterprint', restorePrintState);
   try {
-    window.print();
+    const opened = openPrintableWindow();
+    if (!opened) return;
   } catch (error) {
     console.error('Viewer print failed', error);
-    printAssetsReadyPromise.finally(() => window.print());
+    printAssetsReadyPromise.finally(() => openPrintableWindow());
+  } finally {
+    setTimeout(() => {
+      if (pdfButton && document.contains(pdfButton)) {
+        pdfButton.disabled = false;
+        pdfButton.textContent = 'PDFで保存';
+      }
+    }, 1200);
   }
 }
 
 window.addEventListener('load', async () => {
-  document.getElementById('viewerPdfButton').addEventListener('click', printViewerPdf);
+  const pdfButton = document.getElementById('viewerPdfButton');
+  pdfButton.addEventListener('click', printViewerPdf);
+  pdfButton.addEventListener('touchend', event => {
+    event.preventDefault();
+    printViewerPdf();
+  }, { passive: false });
   document.getElementById('viewerSettingsButton').addEventListener('click', openSettings);
   document.getElementById('viewerSettingsClose').addEventListener('click', closeSettings);
   document.getElementById('viewerSettingsPanel').addEventListener('click', event => {
