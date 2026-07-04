@@ -419,6 +419,7 @@ html, body {
 }
 .viewer-auth-message { min-height: 18px; color: #dc2626; font-size: 13px; font-weight: 800; }
 .viewer-auth-card small { color: #64748b; line-height: 1.5; }
+.viewer-print-pages { display: none; }
 @media (max-width: 420px) {
   .viewer-header-actions { gap: 6px; }
   .viewer-logout-button { padding-left: 8px; padding-right: 8px; }
@@ -453,8 +454,130 @@ html, body {
   .viewer-settings-panel,
   .viewer-auth-panel,
   .viewer-empty,
-  .viewer-count-options {
+  .viewer-count-options,
+  .viewer-count-panel,
+  .viewer-timeline {
     display: none !important;
+  }
+
+  .viewer-print-pages {
+    display: block !important;
+  }
+
+  .viewer-print-page {
+    page-break-after: always;
+    break-after: page;
+    min-height: calc(297mm - 28mm);
+    padding: 0;
+  }
+
+  .viewer-print-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .viewer-print-head {
+    padding: 0 0 8px;
+    border-bottom: 2px solid #111827;
+    margin-bottom: 10px;
+  }
+
+  .viewer-print-head h1 {
+    margin: 0;
+    font-size: 20px;
+    line-height: 1.35;
+  }
+
+  .viewer-print-head p {
+    margin: 3px 0 0;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .viewer-print-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 38%;
+    gap: 12mm;
+    align-items: start;
+  }
+
+  .viewer-print-script {
+    min-width: 0;
+  }
+
+  .viewer-print-art {
+    min-height: 110mm;
+    border: 1px solid #d1d5db;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5mm;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .viewer-print-wallpaper-image {
+    display: block;
+    max-width: 100%;
+    max-height: 210mm;
+    object-fit: contain;
+  }
+
+  .viewer-print-no-wallpaper {
+    width: 100%;
+    min-height: 80mm;
+    display: grid;
+    place-items: center;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .viewer-print-talk {
+    display: grid;
+    grid-template-columns: 36px 78px minmax(0, 1fr);
+    gap: 6px;
+    margin: 0 0 6px;
+    padding-left: 7px;
+    border-left: 3px solid #cbd5e1;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    font-size: 11px;
+    line-height: 1.6;
+  }
+
+  .viewer-print-talk.right {
+    border-left-color: #3b82f6;
+  }
+
+  .viewer-print-talk.scene {
+    grid-template-columns: 36px 1fr;
+    border-left-color: #94a3b8;
+    background: #f1f5f9;
+    padding: 4px 6px;
+  }
+
+  .viewer-print-talk.scene .viewer-print-name {
+    display: none;
+  }
+
+  .viewer-print-number {
+    color: #6b7280;
+    font-weight: 900;
+  }
+
+  .viewer-print-name {
+    color: #111827;
+    font-weight: 900;
+    overflow-wrap: anywhere;
+  }
+
+  .viewer-print-text {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
   .viewer-header {
@@ -599,5 +722,15 @@ html, body {
     color: #111827;
     font-size: 11px;
     font-weight: 900;
+  }
+
+  .viewer-header,
+  .viewer-count-panel,
+  .viewer-timeline {
+    display: none !important;
+  }
+
+  .viewer-print-pages {
+    display: block !important;
   }
 }

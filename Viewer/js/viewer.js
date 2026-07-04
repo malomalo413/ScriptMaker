@@ -536,6 +536,92 @@ function wallpaperIdentity(wallpaper) {
   return wallpaper?.image ? [wallpaper.image.slice(0, 64), wallpaper.size || 100, wallpaper.offsetX ?? 50, wallpaper.offsetY ?? 50].join('|') : 'none';
 }
 
+function wallpaperForTalk(talk) {
+  const settings = viewerProject?.sceneWallpaperSettings;
+  if (settings?.enabled && talk?.id) {
+    const scene = (settings.scenes || []).find(item => Array.isArray(item.talkIds) && item.talkIds.includes(talk.id));
+    if (scene) return { wallpaper: scene.image ? scene : null, sceneName: scene.name || '' };
+  }
+  return { wallpaper: viewerProject?.wallpaper || null, sceneName: '' };
+}
+
+function printGroupKey(info) {
+  const wallpaper = info?.wallpaper;
+  return (info?.sceneName || '') + '|' + wallpaperIdentity(wallpaper);
+}
+
+function buildPrintGroups() {
+  const talks = viewerProject?.talks || [];
+  const groups = [];
+  talks.forEach((talk, index) => {
+    const info = wallpaperForTalk(talk);
+    const key = printGroupKey(info);
+    const last = groups[groups.length - 1];
+    if (!last || last.key !== key) {
+      groups.push({
+        key,
+        sceneName: info.sceneName,
+        wallpaper: info.wallpaper,
+        talks: []
+      });
+    }
+    groups[groups.length - 1].talks.push({ talk, index });
+  });
+  return groups.length ? groups : [{ key: 'empty', sceneName: '', wallpaper: viewerProject?.wallpaper || null, talks: [] }];
+}
+
+function renderPrintPages() {
+  const container = document.getElementById('viewerPrintPages');
+  if (!container || !viewerProject) return [];
+  const groups = buildPrintGroups();
+  container.innerHTML = groups.map(group => {
+    const wallpaper = group.wallpaper;
+    const title = escapeHtml(viewerProject.title || '\u53f0\u672c');
+    const sceneTitle = escapeHtml(group.sceneName || (wallpaper?.image ? '\u58c1\u7d19\u30b7\u30fc\u30f3' : '\u58c1\u7d19\u306a\u3057'));
+    const imageHtml = wallpaper?.image
+      ? '<img class="viewer-print-wallpaper-image" src="' + escapeHtml(wallpaper.image) + '" alt="' + sceneTitle + '">'
+      : '<div class="viewer-print-no-wallpaper">\u58c1\u7d19\u306a\u3057</div>';
+    const talkHtml = group.talks.map(({ talk, index }) => {
+      const isSpecial = isSpecialTalk(talk);
+      const sideClass = isSpecial ? 'scene' : isRightSideCharacter(talk.charName) ? 'right' : 'left';
+      return '<div class="viewer-print-talk ' + sideClass + '">' +
+        '<span class="viewer-print-number">' + formatNo(index) + '</span>' +
+        '<span class="viewer-print-name">' + escapeHtml(talk.charName || '') + '</span>' +
+        '<span class="viewer-print-text">' + escapeHtml(talk.text || '') + '</span>' +
+      '</div>';
+    }).join('');
+    return '<section class="viewer-print-page">' +
+      '<header class="viewer-print-head"><h1>' + title + '</h1><p>' + sceneTitle + '</p></header>' +
+      '<div class="viewer-print-layout">' +
+        '<div class="viewer-print-script">' + talkHtml + '</div>' +
+        '<aside class="viewer-print-art">' + imageHtml + '</aside>' +
+      '</div>' +
+    '</section>';
+  }).join('');
+  return [...container.querySelectorAll('img')];
+}
+
+function waitForPrintImages(images) {
+  const tasks = images.map(image => {
+    if (image.complete) return Promise.resolve();
+    return new Promise(resolve => {
+      image.onload = () => resolve();
+      image.onerror = () => {
+        image.classList.add('viewer-print-image-error');
+        image.replaceWith(Object.assign(document.createElement('div'), {
+          className: 'viewer-print-no-wallpaper',
+          textContent: '\u58c1\u7d19\u3092\u8aad\u307f\u8fbc\u3081\u307e\u305b\u3093\u3067\u3057\u305f'
+        }));
+        resolve();
+      };
+    });
+  });
+  return Promise.race([
+    Promise.all(tasks),
+    new Promise(resolve => setTimeout(resolve, 4000))
+  ]);
+}
+
 function styleLayer(layer, wallpaper) {
   if (!wallpaper?.image) {
     layer.style.backgroundImage = '';
@@ -632,14 +718,17 @@ function showViewerEmptyMessage() {
   empty.classList.remove('hidden');
 }
 
-function printViewerPdf() {
+async function printViewerPdf() {
   if (!viewerProject) return;
   const countDetails = document.getElementById('viewerCountDetails');
   const wasOpen = !!countDetails?.open;
   if (countDetails) countDetails.open = true;
+  const images = renderPrintPages();
+  await waitForPrintImages(images);
 
   const restorePrintState = () => {
     if (countDetails) countDetails.open = wasOpen;
+    document.getElementById('viewerPrintPages')?.replaceChildren();
     window.removeEventListener('afterprint', restorePrintState);
   };
 
