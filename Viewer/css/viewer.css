@@ -72,6 +72,83 @@ html, body {
   font-weight: 800;
   white-space: nowrap;
 }
+.viewer-count-panel {
+  position: relative;
+  z-index: 2;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, .82);
+  border-bottom: 1px solid rgba(226, 232, 240, .78);
+  backdrop-filter: blur(10px);
+}
+.viewer-count-panel.hidden { display: none; }
+.viewer-count-panel details {
+  max-width: 760px;
+  margin: 0 auto;
+}
+.viewer-count-panel summary {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 900;
+}
+.viewer-count-panel summary strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+.viewer-count-options {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  padding: 8px 0 6px;
+}
+.viewer-count-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+.viewer-count-field input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 15px;
+}
+.viewer-count-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 800;
+}
+.viewer-count-check input {
+  width: 19px;
+  height: 19px;
+}
+.viewer-count-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 4px;
+}
+.viewer-count-breakdown span {
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #334155;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
 .viewer-timeline {
   position: relative;
   z-index: 1;
@@ -142,6 +219,7 @@ html, body {
   color: #64748b;
   text-align: center;
 }
+.hide-viewer-numbers .viewer-number { display: none; }
 .viewer-empty {
   position: absolute;
   z-index: 3;
@@ -252,6 +330,9 @@ html, body {
   .viewer-header { padding: 10px 12px; }
   .viewer-header h1 { max-width: 52vw; font-size: 17px; }
   .viewer-settings-button { padding: 8px 10px; font-size: 12px; }
+  .viewer-count-panel { padding: 6px 10px; }
+  .viewer-count-panel summary { min-height: 30px; }
+  .viewer-count-panel summary strong { font-size: 12px; }
   .viewer-timeline { padding: 14px 10px 28px; }
   .viewer-bubble { font-size: 14px; }
   .viewer-avatar, .viewer-avatar-dummy { width: 38px; height: 38px; flex-basis: 38px; }

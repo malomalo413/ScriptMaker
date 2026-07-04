@@ -2,6 +2,7 @@ const VIEWER_SCENE_NAME = '\u60c5\u666f\u63cf\u5199';
 const VIEWER_SYSTEM_NAME = '\u30b7\u30b9\u30c6\u30e0';
 const VIEWER_RIGHT_SIDE_PREFIX = 'scriptmaker_viewer_right_side_v1:';
 const VIEWER_PASSWORD_HASH_PREFIX = 'scriptmaker_viewer_password_hash_v1:';
+const VIEWER_COUNT_SETTING_PREFIX = 'scriptmaker_viewer_count_settings_v1:';
 const SCRIPTMAKER_SHARE_DATA_BASE_URL = '../Share/data/';
 const SCRIPTMAKER_SHARE_WORKER_URL = '';
 
@@ -10,6 +11,7 @@ let viewerShareKey = 'default';
 let viewerPasswordHash = '';
 let pendingViewerProject = null;
 let rightSideSetting = { mode: 'editor', names: [] };
+let countSetting = { excludeChars: '', showNumbers: true, outputNumbers: false };
 let activeLayer = 0;
 let currentWallpaperKey = '';
 let raf = 0;
@@ -132,8 +134,75 @@ function saveRightSideSetting() {
   localStorage.setItem(storageKey(), JSON.stringify(rightSideSetting));
 }
 
+function countStorageKey() {
+  return VIEWER_COUNT_SETTING_PREFIX + viewerShareKey;
+}
+
+function loadCountSetting() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(countStorageKey()) || 'null');
+    countSetting = {
+      excludeChars: typeof stored?.excludeChars === 'string' ? stored.excludeChars : '',
+      showNumbers: stored?.showNumbers !== false,
+      outputNumbers: !!stored?.outputNumbers
+    };
+  } catch (error) {
+    console.warn('Viewer count setting load failed', error);
+    countSetting = { excludeChars: '', showNumbers: true, outputNumbers: false };
+  }
+}
+
+function saveCountSetting() {
+  localStorage.setItem(countStorageKey(), JSON.stringify(countSetting));
+}
+
 function formatNo(index) {
   return String(index + 1).padStart(3, '0');
+}
+
+function countedText(text) {
+  const customChars = countSetting.excludeChars || '';
+  if (!customChars) return text || '';
+  const excluded = new Set([...customChars]);
+  return [...(text || '')].filter(char => !excluded.has(char)).join('');
+}
+
+function calculateTextCounts(project) {
+  const counts = {};
+  let total = 0;
+  (project?.talks || []).forEach(talk => {
+    const count = [...countedText(talk.text)].length;
+    total += count;
+    const name = talk.charName || '\u672a\u8a2d\u5b9a';
+    counts[name] = (counts[name] || 0) + count;
+  });
+  return { total, counts };
+}
+
+function renderCountPanel() {
+  const panel = document.getElementById('viewerCountPanel');
+  const total = document.getElementById('viewerCountTotal');
+  const breakdown = document.getElementById('viewerCountBreakdown');
+  const exclude = document.getElementById('viewerExcludeChars');
+  const showNumbers = document.getElementById('viewerShowNumbers');
+  const outputNumbers = document.getElementById('viewerOutputNumbers');
+  if (!panel || !total || !breakdown || !viewerProject) return;
+
+  panel.classList.remove('hidden');
+  if (exclude && exclude.value !== countSetting.excludeChars) exclude.value = countSetting.excludeChars;
+  if (showNumbers) showNumbers.checked = countSetting.showNumbers !== false;
+  if (outputNumbers) outputNumbers.checked = !!countSetting.outputNumbers;
+
+  const result = calculateTextCounts(viewerProject);
+  total.textContent = '\u5408\u8a08\u6587\u5b57\u6570\uff1a' + result.total + '\u6587\u5b57';
+  const entries = Object.entries(result.counts);
+  breakdown.innerHTML = entries.length
+    ? entries.map(([name, count]) => '<span>' + escapeHtml(name) + '\uff1a' + count + '\u6587\u5b57</span>').join('')
+    : '<span>\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u5225\uff1a0\u6587\u5b57</span>';
+}
+
+function updateNumberVisibility() {
+  document.getElementById('viewerApp')?.classList.toggle('hide-viewer-numbers', countSetting.showNumbers === false);
 }
 
 function viewerCharacters(project) {
@@ -170,9 +239,12 @@ function avatarHtml(project, talkOrCharacter) {
 function renderViewer(project) {
   viewerProject = JSON.parse(JSON.stringify(project));
   loadRightSideSetting();
+  loadCountSetting();
   document.getElementById('viewerTitle').innerText = viewerProject.title || '\u53f0\u672c';
   renderSettingsOptions();
   renderTimeline();
+  renderCountPanel();
+  updateNumberVisibility();
   applyWallpaper(true);
   const timeline = document.getElementById('viewerTimeline');
   timeline.removeEventListener('scroll', scheduleWallpaper);
@@ -216,6 +288,7 @@ function renderSettingsOptions() {
       rightSideSetting = { mode: 'custom', names: selected };
       saveRightSideSetting();
       renderTimeline();
+      updateNumberVisibility();
     });
   });
 }
@@ -234,6 +307,7 @@ function setAllLeft() {
   saveRightSideSetting();
   renderSettingsOptions();
   renderTimeline();
+  updateNumberVisibility();
 }
 
 function setAllRight() {
@@ -241,6 +315,7 @@ function setAllRight() {
   saveRightSideSetting();
   renderSettingsOptions();
   renderTimeline();
+  updateNumberVisibility();
 }
 
 function useEditorSetting() {
@@ -248,6 +323,33 @@ function useEditorSetting() {
   saveRightSideSetting();
   renderSettingsOptions();
   renderTimeline();
+  updateNumberVisibility();
+}
+
+function initCountControls() {
+  const exclude = document.getElementById('viewerExcludeChars');
+  const showNumbers = document.getElementById('viewerShowNumbers');
+  const outputNumbers = document.getElementById('viewerOutputNumbers');
+  if (exclude) {
+    exclude.addEventListener('input', () => {
+      countSetting.excludeChars = exclude.value || '';
+      saveCountSetting();
+      renderCountPanel();
+    });
+  }
+  if (showNumbers) {
+    showNumbers.addEventListener('change', () => {
+      countSetting.showNumbers = showNumbers.checked;
+      saveCountSetting();
+      updateNumberVisibility();
+    });
+  }
+  if (outputNumbers) {
+    outputNumbers.addEventListener('change', () => {
+      countSetting.outputNumbers = outputNumbers.checked;
+      saveCountSetting();
+    });
+  }
 }
 
 
@@ -409,6 +511,7 @@ window.addEventListener('load', async () => {
   document.getElementById('viewerPasswordInput').addEventListener('keydown', event => { if (event.key === 'Enter') submitViewerPassword(); });
   document.getElementById('viewerClearSavedPassword').addEventListener('click', clearSavedViewerPassword);
   document.getElementById('viewerLogoutButton').addEventListener('click', logoutViewerAuth);
+  initCountControls();
 
   const project = await loadSharedProject();
   if (!project) {

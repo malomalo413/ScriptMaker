@@ -10,10 +10,10 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
-  <link rel="stylesheet" href="./css/viewer.css?v=9">
+  <link rel="stylesheet" href="./css/viewer.css?v=11">
   <script src="../js/firebase-config.js?v=30" defer></script>
   <script src="../js/firebase-share.js?v=30" defer></script>
-  <script src="./js/viewer.js?v=9" defer></script>
+  <script src="./js/viewer.js?v=11" defer></script>
 </head>
 <body>
   <div id="viewerApp" class="viewer-app">
@@ -26,6 +26,17 @@
       </div>
       <div class="viewer-header-actions"><button id="viewerSettingsButton" class="viewer-settings-button" type="button" aria-haspopup="dialog">&#34920;&#31034;&#35373;&#23450;</button><button id="viewerLogoutButton" class="viewer-settings-button viewer-logout-button hidden" type="button">&#12525;&#12464;&#12450;&#12454;&#12488;</button></div>
     </header>
+    <section id="viewerCountPanel" class="viewer-count-panel hidden">
+      <details id="viewerCountDetails">
+        <summary><span>&#25991;&#23383;&#25968;</span><strong id="viewerCountTotal">&#21512;&#35336;&#25991;&#23383;&#25968;&#65306;0&#25991;&#23383;</strong></summary>
+        <div class="viewer-count-options">
+          <label class="viewer-count-field"><span>&#38500;&#22806;&#12377;&#12427;&#25991;&#23383;</span><input id="viewerExcludeChars" type="text" placeholder="&#20363;&#65306;&#12289;&#12290;&#65281;&#65311;"></label>
+          <label class="viewer-count-check"><input id="viewerShowNumbers" type="checkbox" checked> <span>&#30058;&#21495;&#34920;&#31034;</span></label>
+          <label class="viewer-count-check"><input id="viewerOutputNumbers" type="checkbox"> <span>&#20986;&#21147;&#12395;&#30058;&#21495;</span></label>
+        </div>
+        <div id="viewerCountBreakdown" class="viewer-count-breakdown"></div>
+      </details>
+    </section>
     <main id="viewerTimeline" class="viewer-timeline"></main>
     <div id="viewerEmpty" class="viewer-empty hidden">
       <h2>&#20849;&#26377;&#12487;&#12540;&#12479;&#12364;&#12354;&#12426;&#12414;&#12379;&#12435;</h2>
