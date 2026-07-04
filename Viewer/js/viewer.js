@@ -3,6 +3,7 @@ const VIEWER_SYSTEM_NAME = '\u30b7\u30b9\u30c6\u30e0';
 const VIEWER_RIGHT_SIDE_PREFIX = 'scriptmaker_viewer_right_side_v1:';
 const VIEWER_PASSWORD_HASH_PREFIX = 'scriptmaker_viewer_password_hash_v1:';
 const VIEWER_COUNT_SETTING_PREFIX = 'scriptmaker_viewer_count_settings_v1:';
+const VIEWER_DISPLAY_MODE_PREFIX = 'scriptmaker_viewer_display_mode_v1:';
 const VIEWER_DEFAULT_EXCLUDE_CHARS = '\u3001\u3002\u300c\u300d\uff08\uff09\u30fc\u301c\uff1f\uff01.';
 const SCRIPTMAKER_SHARE_DATA_BASE_URL = '../Share/data/';
 const SCRIPTMAKER_SHARE_WORKER_URL = '';
@@ -19,6 +20,7 @@ let raf = 0;
 let viewerShareIdMissing = false;
 let viewerLoadErrorType = '';
 let printAssetsReadyPromise = Promise.resolve();
+let viewerDisplayMode = 'chat';
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -248,6 +250,37 @@ function countStorageKey() {
   return VIEWER_COUNT_SETTING_PREFIX + viewerShareKey;
 }
 
+function displayModeStorageKey() {
+  return VIEWER_DISPLAY_MODE_PREFIX + viewerShareKey;
+}
+
+function loadViewerDisplayMode() {
+  viewerDisplayMode = localStorage.getItem(displayModeStorageKey()) === 'script' ? 'script' : 'chat';
+}
+
+function saveViewerDisplayMode() {
+  localStorage.setItem(displayModeStorageKey(), viewerDisplayMode);
+}
+
+function applyViewerDisplayModeClass() {
+  const app = document.getElementById('viewerApp');
+  if (!app) return;
+  app.classList.toggle('viewer-mode-script', viewerDisplayMode === 'script');
+  app.classList.toggle('viewer-mode-chat', viewerDisplayMode !== 'script');
+  document.querySelectorAll('input[name="viewerDisplayMode"]').forEach(input => {
+    input.checked = input.value === viewerDisplayMode;
+  });
+}
+
+function setViewerDisplayMode(mode) {
+  viewerDisplayMode = mode === 'script' ? 'script' : 'chat';
+  saveViewerDisplayMode();
+  applyViewerDisplayModeClass();
+  renderTimeline();
+  preparePrintPages();
+  applyWallpaper(true);
+}
+
 function loadCountSetting() {
   try {
     const stored = JSON.parse(localStorage.getItem(countStorageKey()) || 'null');
@@ -351,6 +384,8 @@ function renderViewer(project) {
   viewerProject = JSON.parse(JSON.stringify(project));
   loadRightSideSetting();
   loadCountSetting();
+  loadViewerDisplayMode();
+  applyViewerDisplayModeClass();
   document.getElementById('viewerTitle').innerText = viewerProject.title || '\u53f0\u672c';
   document.getElementById('viewerPdfButton')?.classList.remove('hidden');
   renderSettingsOptions();
@@ -368,6 +403,11 @@ function renderTimeline() {
   const timeline = document.getElementById('viewerTimeline');
   timeline.innerHTML = '';
 
+  if (viewerDisplayMode === 'script') {
+    renderViewerScriptTimeline(timeline);
+    return;
+  }
+
   (viewerProject.talks || []).forEach((talk, index) => {
     const isSpecial = isSpecialTalk(talk);
     const isRight = !isSpecial && isRightSideCharacter(talk.charName);
@@ -375,6 +415,40 @@ function renderTimeline() {
     row.className = 'viewer-talk ' + (isSpecial ? 'scene' : isRight ? 'right' : 'left');
     row.dataset.talkId = talk.id || String(index);
     row.innerHTML = '<span class="viewer-number">' + formatNo(index) + '</span>' + avatarHtml(viewerProject, talk) + '<div class="viewer-bubble"><span class="viewer-name">' + escapeHtml(talk.charName || '') + '</span>' + escapeHtml(talk.text || '') + viewerStageDirectionHtml(talk) + '</div>';
+    timeline.appendChild(row);
+  });
+}
+
+function sceneInfoForTalk(talk) {
+  const settings = viewerProject?.sceneWallpaperSettings;
+  if (settings?.enabled && talk?.id) {
+    const scene = (settings.scenes || []).find(item => Array.isArray(item.talkIds) && item.talkIds.includes(talk.id));
+    if (scene) return { wallpaper: scene.image ? scene : null, sceneName: scene.name || '' };
+  }
+  return { wallpaper: null, sceneName: '' };
+}
+
+function viewerWallpaperStyle(wallpaper) {
+  if (!wallpaper?.image) return '';
+  const size = (wallpaper.size || 100) === 100 ? 'cover' : (wallpaper.size || 100) + '%';
+  return 'background-image:url(' + wallpaper.image + ');background-size:' + size + ';background-position:' + (wallpaper.offsetX ?? 50) + '% ' + (wallpaper.offsetY ?? 50) + '%;';
+}
+
+function renderViewerScriptTimeline(timeline) {
+  (viewerProject.talks || []).forEach((talk, index) => {
+    const info = sceneInfoForTalk(talk);
+    const row = document.createElement('article');
+    row.className = 'viewer-script-row';
+    row.dataset.talkId = talk.id || String(index);
+    row.innerHTML =
+      '<div class="viewer-script-col viewer-script-dialogue">' +
+        '<div class="viewer-script-meta"><span>' + formatNo(index) + '</span><strong>' + escapeHtml(talk.charName || '') + '</strong></div>' +
+        '<div class="viewer-script-text">' + escapeHtml(talk.text || '') + '</div>' +
+      '</div>' +
+      '<div class="viewer-script-col viewer-script-stage">' + escapeHtml(stageDirectionText(talk)) + '</div>' +
+      '<div class="viewer-script-col viewer-script-art">' +
+        (info.wallpaper?.image ? '<div class="viewer-script-art-image" style="' + viewerWallpaperStyle(info.wallpaper) + '"></div><span>' + escapeHtml(info.sceneName || '') + '</span>' : '<div class="viewer-script-art-empty">壁紙なし</div>') +
+      '</div>';
     timeline.appendChild(row);
   });
 }
@@ -602,7 +676,8 @@ function renderPrintPages() {
       return '<div class="viewer-print-talk ' + sideClass + '">' +
         '<span class="viewer-print-number">' + formatNo(index) + '</span>' +
         '<span class="viewer-print-name">' + escapeHtml(talk.charName || '') + '</span>' +
-        '<span class="viewer-print-text">' + escapeHtml(talk.text || '') + viewerStageDirectionHtml(talk, 'viewer-print-stage-direction') + '</span>' +
+        '<span class="viewer-print-text">' + escapeHtml(talk.text || '') + '</span>' +
+        '<span class="viewer-print-stage-direction">' + escapeHtml(stageDirectionText(talk)) + '</span>' +
       '</div>';
     }).join('');
     return '<section class="viewer-print-page">' +
@@ -755,7 +830,7 @@ function printDocumentStyles() {
     }
     .viewer-print-talk {
       display: grid;
-      grid-template-columns: 36px 78px minmax(0, 1fr);
+      grid-template-columns: 36px 78px minmax(0, 1fr) minmax(130px, .7fr);
       gap: 6px;
       margin: 0 0 6px;
       padding-left: 7px;
@@ -767,12 +842,12 @@ function printDocumentStyles() {
     }
     .viewer-print-talk.right { border-left-color: #3b82f6; }
     .viewer-print-talk.scene {
-      grid-template-columns: 36px 1fr;
+      grid-template-columns: 36px 78px minmax(0, 1fr) minmax(130px, .7fr);
       border-left-color: #94a3b8;
       background: #f1f5f9;
       padding: 4px 6px;
     }
-    .viewer-print-talk.scene .viewer-print-name { display: none; }
+    .viewer-print-talk.scene .viewer-print-name { color: #64748b; }
     .viewer-print-number { color: #6b7280; font-weight: 900; }
     .viewer-print-name {
       color: #111827;
@@ -785,7 +860,7 @@ function printDocumentStyles() {
     }
     .viewer-print-stage-direction {
       display: block;
-      margin-top: 4px;
+      margin-top: 0;
       padding: 4px 6px;
       border-radius: 5px;
       background: #e5e7eb;
@@ -937,6 +1012,10 @@ function currentTalkId() {
 
 function applyWallpaper(force = false) {
   if (!viewerProject) return;
+  if (viewerDisplayMode === 'script') {
+    setWallpaper(viewerProject.wallpaper || null, 'script-fixed:' + wallpaperIdentity(viewerProject.wallpaper), force);
+    return;
+  }
   const settings = viewerProject.sceneWallpaperSettings;
   if (settings?.enabled) {
     const talkId = currentTalkId();
@@ -1023,6 +1102,9 @@ window.addEventListener('load', async () => {
     event.preventDefault();
     printViewerPdf();
   }, { passive: false });
+  document.querySelectorAll('input[name="viewerDisplayMode"]').forEach(input => {
+    input.addEventListener('change', event => setViewerDisplayMode(event.target.value));
+  });
   document.getElementById('viewerSettingsButton').addEventListener('click', openSettings);
   document.getElementById('viewerSettingsClose').addEventListener('click', closeSettings);
   document.getElementById('viewerSettingsPanel').addEventListener('click', event => {

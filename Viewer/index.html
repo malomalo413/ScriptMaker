@@ -10,10 +10,10 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
-  <link rel="stylesheet" href="./css/viewer.css?v=17">
+  <link rel="stylesheet" href="./css/viewer.css?v=18">
   <script src="../js/firebase-config.js?v=30" defer></script>
   <script src="../js/firebase-share.js?v=31" defer></script>
-  <script src="./js/viewer.js?v=22" defer></script>
+  <script src="./js/viewer.js?v=23" defer></script>
 </head>
 <body>
   <div id="viewerApp" class="viewer-app">
@@ -26,6 +26,11 @@
       </div>
       <div class="viewer-header-actions"><button id="viewerPdfButton" class="viewer-settings-button viewer-pdf-button hidden" type="button">PDF&#12391;&#20445;&#23384;</button><button id="viewerSettingsButton" class="viewer-settings-button" type="button" aria-haspopup="dialog">&#34920;&#31034;&#35373;&#23450;</button><button id="viewerLogoutButton" class="viewer-settings-button viewer-logout-button hidden" type="button">&#12525;&#12464;&#12450;&#12454;&#12488;</button></div>
     </header>
+    <section class="viewer-display-mode-bar">
+      <span>&#34920;&#31034;&#12514;&#12540;&#12489;</span>
+      <label><input type="radio" name="viewerDisplayMode" value="chat"> &#12481;&#12515;&#12483;&#12488;&#22411;</label>
+      <label><input type="radio" name="viewerDisplayMode" value="script"> &#21488;&#26412;&#22411;</label>
+    </section>
     <section id="viewerCountPanel" class="viewer-count-panel hidden">
       <details id="viewerCountDetails">
         <summary><span>&#25991;&#23383;&#25968;</span><strong id="viewerCountTotal">&#21512;&#35336;&#25991;&#23383;&#25968;&#65306;0&#25991;&#23383;</strong></summary>

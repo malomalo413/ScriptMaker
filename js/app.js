@@ -5,6 +5,7 @@ const SCRIPTMAKER_PUBLIC_VIEWER_URL = 'https://malomalo413.github.io/ScriptMaker
 const SCRIPTMAKER_SHARE_WORKER_URL = '';
 const SCRIPTMAKER_SHARE_WORKER_URL_KEY = 'scriptmaker_share_worker_url_v1';
 const SCRIPTMAKER_SHARE_VIEWER_PASSWORD_KEY = 'scriptmaker_share_viewer_password_v1';
+const SCRIPTMAKER_EDITOR_DISPLAY_MODE_KEY = 'scriptmaker_editor_display_mode_v1';
 
 let state = {
       currentProjectId: null,
@@ -45,6 +46,7 @@ let state = {
     let isApplyingHistory = false;
     let pendingSharePayload = null;
     let pendingSharePublished = false;
+    let editorDisplayMode = localStorage.getItem(SCRIPTMAKER_EDITOR_DISPLAY_MODE_KEY) === 'script' ? 'script' : 'chat';
 
     let originalViewportHeight = window.innerHeight;
     const GEMINI_MODEL_CANDIDATES = [
@@ -213,6 +215,7 @@ let state = {
       initWallpaperPan();
       initSceneWallpaperScroll();
       initNumberSettingsControls();
+      initEditorDisplayModeControls();
     };
 
     setTimeout(initEditorAuthGate, 0);
@@ -650,6 +653,10 @@ let state = {
 
     function applyProjectWallpaper(forceUpdate = false) {
       const project = state.projects[state.currentProjectId];
+      if (editorDisplayMode === 'script') {
+        setEditorWallpaper(project?.wallpaper || null, 'script-fixed:' + getWallpaperIdentity(project?.wallpaper), forceUpdate);
+        return;
+      }
       const sceneSettings = getSceneWallpaperSettings(project);
       if (sceneSettings.enabled && sceneSettings.scenes.some(scene => scene.image)) {
         updateSceneWallpaperByScroll(forceUpdate);
@@ -1316,6 +1323,75 @@ let state = {
       return '<div class="stage-direction">' + escapeHtml(stageDirection) + '</div>';
     }
 
+    function initEditorDisplayModeControls() {
+      document.querySelectorAll('input[name="editorDisplayMode"]').forEach(input => {
+        input.checked = input.value === editorDisplayMode;
+      });
+      applyEditorDisplayModeClass();
+    }
+
+    function setEditorDisplayMode(mode) {
+      editorDisplayMode = mode === 'script' ? 'script' : 'chat';
+      localStorage.setItem(SCRIPTMAKER_EDITOR_DISPLAY_MODE_KEY, editorDisplayMode);
+      initEditorDisplayModeControls();
+      renderTimeline();
+      applyProjectWallpaper(true);
+    }
+
+    function applyEditorDisplayModeClass() {
+      const editorView = document.getElementById('editorView');
+      if (!editorView) return;
+      editorView.classList.toggle('display-mode-script', editorDisplayMode === 'script');
+      editorView.classList.toggle('display-mode-chat', editorDisplayMode !== 'script');
+    }
+
+    function sceneWallpaperForTalk(project, talk) {
+      const settings = getSceneWallpaperSettings(project);
+      if (settings?.enabled && talk?.id) {
+        const scene = (settings.scenes || []).find(item => item.image && Array.isArray(item.talkIds) && item.talkIds.includes(talk.id));
+        if (scene) return scene;
+      }
+      return null;
+    }
+
+    function wallpaperStyle(wallpaper) {
+      if (!wallpaper?.image) return '';
+      const size = (wallpaper.size || 100) === 100 ? 'cover' : (wallpaper.size || 100) + '%';
+      return 'background-image:url(' + wallpaper.image + ');background-size:' + size + ';background-position:' + (wallpaper.offsetX ?? 50) + '% ' + (wallpaper.offsetY ?? 50) + '%;';
+    }
+
+    function renderScriptTimeline(project, timeline) {
+      timeline.innerHTML = '';
+      (project.talks || []).forEach((talk, index) => {
+        if (!talk.id) talk.id = createTalkId();
+        const scene = sceneWallpaperForTalk(project, talk);
+        const row = document.createElement('article');
+        row.className = 'script-row' + (editingTalkIndex === index ? ' inline-edit-target' : '');
+        row.dataset.index = index;
+        row.dataset.talkId = talk.id;
+        row.onclick = function() {
+          if (Date.now() < suppressTalkClickUntil || isSortingTalks) return;
+          startInlineTalkEdit(index);
+        };
+        row.innerHTML =
+          '<div class="script-col script-dialogue">' +
+            '<div class="script-meta"><span>' + formatTalkNumber(index) + '</span><strong>' + escapeHtml(talk.charName || '') + '</strong></div>' +
+            '<div class="script-text">' + escapeHtml(talk.text || '') + '</div>' +
+          '</div>' +
+          '<div class="script-col script-stage">' + (getStageDirection(talk) ? escapeHtml(getStageDirection(talk)) : '') + '</div>' +
+          '<div class="script-col script-art">' +
+            (scene?.image ? '<div class="script-art-image" style="' + wallpaperStyle(scene) + '"></div><span>' + escapeHtml(scene.name || '') + '</span>' : '<div class="script-art-empty">壁紙なし</div>') +
+          '</div>';
+        timeline.appendChild(row);
+      });
+      const predicting = document.createElement('div');
+      predicting.className = `predicting-msg ${aiStatusMessage ? '' : 'hidden'} ${aiStatusType === 'error' ? 'error' : ''}`;
+      predicting.id = 'aiPredicting';
+      predicting.innerText = aiStatusMessage || 'AIが予測を更新中...';
+      timeline.appendChild(predicting);
+      updateSelectedTalkCount();
+    }
+
     function renderTimeline() {
       if (isSortingTalks) {
         pendingTimelineRender = true;
@@ -1326,6 +1402,11 @@ let state = {
       timeline.innerHTML = '';
       const project = state.projects[state.currentProjectId];
       if (!project) return;
+      applyEditorDisplayModeClass();
+      if (editorDisplayMode === 'script') {
+        renderScriptTimeline(project, timeline);
+        return;
+      }
 
       // 1. 確定済みのトークを描画
       project.talks.forEach((talk, index) => {

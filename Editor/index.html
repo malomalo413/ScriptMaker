@@ -14,11 +14,11 @@
   <link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="../assets/icons/icon-512.png">
-  <link rel="stylesheet" href="../css/styles.css?v=34">
+  <link rel="stylesheet" href="../css/styles.css?v=35">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
   <script src="../js/firebase-config.js?v=30" defer></script>
   <script src="../js/firebase-share.js?v=31" defer></script>
-  <script src="../js/app.js?v=38" defer></script>
+  <script src="../js/app.js?v=39" defer></script>
 </head>
 <body class="auth-locked">
 
@@ -69,6 +69,12 @@
         <button class="nav-btn btn-nav-mode" id="modeToggleBtn" onclick="toggleEditMode()">編集</button>
         <button class="nav-btn btn-nav-logout" onclick="logoutEditorAuth()">&#12525;&#12464;&#12450;&#12454;&#12488;</button>
       </div>
+    </div>
+
+    <div class="display-mode-bar">
+      <span>表示モード</span>
+      <label><input type="radio" name="editorDisplayMode" value="chat" onchange="setEditorDisplayMode(this.value)"> チャット型</label>
+      <label><input type="radio" name="editorDisplayMode" value="script" onchange="setEditorDisplayMode(this.value)"> 台本型</label>
     </div>
 
     <div class="header-scroll-area">
