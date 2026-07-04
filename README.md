@@ -83,4 +83,6 @@ Google Drive is kept as an optional HTML export path. Use the share modal's HTML
 
 The Editor can remember the Viewer password entered in the share modal on the current device. The Viewer can also remember a successful password check per share ID on the current device. These values are stored only in browser `localStorage` and are not shared with other devices.
 
+The Editor startup password can also be remembered on the current device when the "save on this device" checkbox is enabled. The Editor saved password hash uses a separate localStorage key from Viewer password storage.
+
 This is a convenience feature, not strong authentication. GitHub Pages is a static site, so Viewer password protection should be treated as lightweight access control for casual sharing.

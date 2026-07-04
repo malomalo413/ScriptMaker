@@ -1,5 +1,6 @@
 const EDITOR_AUTH_HASH_KEY = 'scriptmaker_editor_password_hash_v1';
 const EDITOR_AUTH_SESSION_KEY = 'scriptmaker_editor_auth_ok_v1';
+const EDITOR_AUTH_SAVED_HASH_KEY = 'scriptmaker_editor_saved_password_hash_v1';
 const SCRIPTMAKER_PUBLIC_VIEWER_URL = 'https://malomalo413.github.io/ScriptMaker/Viewer/';
 const SCRIPTMAKER_SHARE_WORKER_URL = '';
 const SCRIPTMAKER_SHARE_WORKER_URL_KEY = 'scriptmaker_share_worker_url_v1';
@@ -67,6 +68,10 @@ let state = {
       return localStorage.getItem(EDITOR_AUTH_HASH_KEY) || '';
     }
 
+    function savedEditorPasswordHash() {
+      return localStorage.getItem(EDITOR_AUTH_SAVED_HASH_KEY) || '';
+    }
+
     function unlockEditorAuth(hash) {
       if (hash) sessionStorage.setItem(EDITOR_AUTH_SESSION_KEY, hash);
       document.body.classList.remove('auth-locked');
@@ -80,6 +85,7 @@ let state = {
       const help = document.getElementById('editorAuthHelp');
       const confirm = document.getElementById('editorAuthConfirm');
       const password = document.getElementById('editorAuthPassword');
+      const remember = document.getElementById('editorAuthRemember');
       const message = document.getElementById('editorAuthMessage');
       if (!gate || !title || !help || !confirm || !password || !message) return;
       document.body.classList.add('auth-locked');
@@ -87,6 +93,7 @@ let state = {
       message.textContent = '';
       password.value = '';
       confirm.value = '';
+      if (remember) remember.checked = true;
       if (storedHash) {
         title.textContent = '\u30d1\u30b9\u30ef\u30fc\u30c9\u5165\u529b';
         help.textContent = '\u8a2d\u5b9a\u6e08\u307f\u306e\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u5165\u529b\u3059\u308b\u3068Editor\u3092\u958b\u304d\u307e\u3059\u3002';
@@ -109,6 +116,14 @@ let state = {
         unlockEditorAuth(storedHash);
         return;
       }
+      const savedHash = savedEditorPasswordHash();
+      if (storedHash && savedHash === storedHash) {
+        unlockEditorAuth(storedHash);
+        return;
+      }
+      if (savedHash && savedHash !== storedHash) {
+        localStorage.removeItem(EDITOR_AUTH_SAVED_HASH_KEY);
+      }
       showEditorAuthGate();
     }
 
@@ -116,6 +131,7 @@ let state = {
       const storedHash = editorPasswordHash();
       const password = document.getElementById('editorAuthPassword')?.value || '';
       const confirm = document.getElementById('editorAuthConfirm')?.value || '';
+      const remember = document.getElementById('editorAuthRemember')?.checked !== false;
       const message = document.getElementById('editorAuthMessage');
       if (!password) {
         if (message) message.textContent = '\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002';
@@ -128,6 +144,8 @@ let state = {
           return;
         }
         localStorage.setItem(EDITOR_AUTH_HASH_KEY, hash);
+        if (remember) localStorage.setItem(EDITOR_AUTH_SAVED_HASH_KEY, hash);
+        else localStorage.removeItem(EDITOR_AUTH_SAVED_HASH_KEY);
         unlockEditorAuth(hash);
         return;
       }
@@ -135,7 +153,20 @@ let state = {
         if (message) message.textContent = '\u30d1\u30b9\u30ef\u30fc\u30c9\u304c\u9055\u3044\u307e\u3059\u3002';
         return;
       }
+      if (remember) localStorage.setItem(EDITOR_AUTH_SAVED_HASH_KEY, storedHash);
+      else localStorage.removeItem(EDITOR_AUTH_SAVED_HASH_KEY);
       unlockEditorAuth(storedHash);
+    }
+
+    function clearSavedEditorPassword() {
+      localStorage.removeItem(EDITOR_AUTH_SAVED_HASH_KEY);
+      const remember = document.getElementById('editorAuthRemember');
+      const message = document.getElementById('editorAuthMessage');
+      if (remember) remember.checked = false;
+      if (message) {
+        message.textContent = '\u4fdd\u5b58\u3057\u305f\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u524a\u9664\u3057\u307e\u3057\u305f\u3002';
+        message.classList.remove('is-error');
+      }
     }
 
     function logoutEditorAuth() {
