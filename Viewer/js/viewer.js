@@ -16,6 +16,7 @@ let countSetting = { useExcludeChars: false, excludeChars: VIEWER_DEFAULT_EXCLUD
 let activeLayer = 0;
 let currentWallpaperKey = '';
 let raf = 0;
+let viewerShareIdMissing = false;
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -44,6 +45,37 @@ function workerUrlFromParams(params) {
   return normalizeWorkerUrl(params.get('worker') || SCRIPTMAKER_SHARE_WORKER_URL);
 }
 
+function paramsFromFragment(fragment) {
+  const clean = String(fragment || '').replace(/^#/, '').replace(/^\?/, '');
+  return new URLSearchParams(clean);
+}
+
+function readParamFromHref(name) {
+  const match = String(location.href || '').match(new RegExp('[?#&]' + name + '=([^&#]+)'));
+  return match ? decodeURIComponent(match[1].replace(/\+/g, ' ')) : '';
+}
+
+function resolveViewerShareInfo() {
+  const searchParams = new URLSearchParams(location.search || '');
+  const hashParams = paramsFromFragment(location.hash);
+  const shareId = searchParams.get('id') || searchParams.get('share') ||
+    hashParams.get('id') || hashParams.get('share') ||
+    readParamFromHref('id') || readParamFromHref('share') || '';
+  const worker = searchParams.get('worker') || hashParams.get('worker') || readParamFromHref('worker') || '';
+  console.log('ScriptMaker Viewer URL debug', {
+    href: location.href,
+    search: location.search,
+    hash: location.hash,
+    shareId
+  });
+  return {
+    shareId,
+    workerUrl: normalizeWorkerUrl(worker || SCRIPTMAKER_SHARE_WORKER_URL),
+    searchParams,
+    hashParams
+  };
+}
+
 async function fetchShareFromWorker(shareId, workerUrl) {
   const normalizedWorker = normalizeWorkerUrl(workerUrl);
   if (!normalizedWorker) return null;
@@ -60,7 +92,8 @@ function stableShareKey(payload, fallbackProject) {
 }
 
 async function loadSharedProject() {
-  const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+  viewerShareIdMissing = false;
+  const hash = paramsFromFragment(location.hash);
   const data = hash.get('data');
   if (data) {
     const payload = decodePayload(data);
@@ -69,8 +102,8 @@ async function loadSharedProject() {
     viewerPasswordHash = payload?.viewerPasswordHash || payload?.passwordHash || '';
     return project;
   }
-  const params = new URLSearchParams(location.search);
-  const shareId = params.get('id') || params.get('share');
+  const shareInfo = resolveViewerShareInfo();
+  const shareId = shareInfo.shareId;
   if (shareId) {
     try {
       viewerShareKey = shareId;
@@ -84,7 +117,7 @@ async function loadSharedProject() {
         }
       }
       if (!share) {
-        share = await fetchShareFromWorker(shareId, workerUrlFromParams(params));
+        share = await fetchShareFromWorker(shareId, shareInfo.workerUrl);
       }
       if (!share) {
         const response = await fetch(SCRIPTMAKER_SHARE_DATA_BASE_URL + encodeURIComponent(shareId) + '.json', { cache: 'no-store' });
@@ -97,6 +130,7 @@ async function loadSharedProject() {
       console.error('Viewer share load failed', error);
     }
   }
+  viewerShareIdMissing = !shareId;
   viewerShareKey = 'direct_' + location.pathname;
   return null;
 }
@@ -502,6 +536,18 @@ function scheduleWallpaper() {
   });
 }
 
+function showViewerEmptyMessage() {
+  const empty = document.getElementById('viewerEmpty');
+  if (!empty) return;
+  const title = empty.querySelector('h2');
+  const text = empty.querySelector('p');
+  if (viewerShareIdMissing) {
+    if (title) title.textContent = '\u5171\u6709URL\u306eID\u3092\u8aad\u307f\u53d6\u308c\u307e\u305b\u3093\u3067\u3057\u305f';
+    if (text) text.textContent = 'LINE\u5185\u30d6\u30e9\u30a6\u30b6\u306e\u5834\u5408\u306f\u3001\u53f3\u4e0b\u30e1\u30cb\u30e5\u30fc\u304b\u3089\u5916\u90e8\u30d6\u30e9\u30a6\u30b6\u3067\u958b\u3044\u3066\u304f\u3060\u3055\u3044\u3002';
+  }
+  empty.classList.remove('hidden');
+}
+
 function printViewerPdf() {
   if (!viewerProject) return;
   const countDetails = document.getElementById('viewerCountDetails');
@@ -535,7 +581,7 @@ window.addEventListener('load', async () => {
 
   const project = await loadSharedProject();
   if (!project) {
-    document.getElementById('viewerEmpty').classList.remove('hidden');
+    showViewerEmptyMessage();
     return;
   }
   if (!isViewerAuthorized()) {

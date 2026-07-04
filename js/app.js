@@ -2096,7 +2096,7 @@ ${keptPredictionText}
 
     function buildViewerShareUrl(payload, workerUrl) {
       const id = encodeURIComponent(payload.shareId);
-      return SCRIPTMAKER_PUBLIC_VIEWER_URL + '?id=' + id;
+      return SCRIPTMAKER_PUBLIC_VIEWER_URL + '#id=' + id;
     }
 
     function buildLongViewerShareUrl(payload) {
