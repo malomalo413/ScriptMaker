@@ -17,6 +17,7 @@ let activeLayer = 0;
 let currentWallpaperKey = '';
 let raf = 0;
 let viewerShareIdMissing = false;
+let viewerLoadErrorType = '';
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -76,6 +77,46 @@ function resolveViewerShareInfo() {
   };
 }
 
+function viewerFirebaseConfig() {
+  const helper = window.ScriptMakerFirebaseShare;
+  if (!helper || !window.SCRIPTMAKER_FIREBASE_CONFIG) return null;
+  const config = helper.cleanConfig(window.SCRIPTMAKER_FIREBASE_CONFIG);
+  return helper.isConfigured(config) ? config : null;
+}
+
+function loadViewerScriptOnce(src, globalCheck) {
+  if (globalCheck()) return Promise.resolve();
+  const existing = [...document.scripts].find(script => script.src.includes(src.split('?')[0]));
+  if (existing && existing.dataset.scriptmakerLoading === 'true') {
+    return new Promise((resolve, reject) => {
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error('Script load failed: ' + src)), { once: true });
+    });
+  }
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.defer = true;
+    script.dataset.scriptmakerLoading = 'true';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Script load failed: ' + src));
+    document.head.appendChild(script);
+  });
+}
+
+async function ensureViewerFirebaseShare() {
+  if (!window.SCRIPTMAKER_FIREBASE_CONFIG) {
+    await loadViewerScriptOnce('../js/firebase-config.js?v=30', () => !!window.SCRIPTMAKER_FIREBASE_CONFIG);
+  }
+  if (!window.ScriptMakerFirebaseShare) {
+    await loadViewerScriptOnce('../js/firebase-share.js?v=31', () => !!window.ScriptMakerFirebaseShare);
+  }
+  return {
+    helper: window.ScriptMakerFirebaseShare || null,
+    config: viewerFirebaseConfig()
+  };
+}
+
 async function fetchShareFromWorker(shareId, workerUrl) {
   const normalizedWorker = normalizeWorkerUrl(workerUrl);
   if (!normalizedWorker) return null;
@@ -93,6 +134,7 @@ function stableShareKey(payload, fallbackProject) {
 
 async function loadSharedProject() {
   viewerShareIdMissing = false;
+  viewerLoadErrorType = '';
   const hash = paramsFromFragment(location.hash);
   const data = hash.get('data');
   if (data) {
@@ -107,13 +149,34 @@ async function loadSharedProject() {
   if (shareId) {
     try {
       viewerShareKey = shareId;
-      const localShares = JSON.parse(localStorage.getItem('scriptmaker_shares_v1') || '{}');
-      let share = localShares[shareId];
-      if (!share && window.ScriptMakerFirebaseShare) {
+      let share = null;
+      let firebase = { helper: window.ScriptMakerFirebaseShare || null, config: viewerFirebaseConfig() };
+      if (!firebase.helper || !firebase.config) {
         try {
-          share = await window.ScriptMakerFirebaseShare.loadShare(shareId);
+          firebase = await ensureViewerFirebaseShare();
+        } catch (firebaseScriptError) {
+          console.warn('Viewer Firebase scripts load failed', firebaseScriptError);
+        }
+      }
+      if (!firebase.helper || !firebase.config) {
+        viewerLoadErrorType = 'missing-firebase-config';
+        return null;
+      }
+      if (firebase.helper && firebase.config) {
+        try {
+          share = await firebase.helper.loadShare(shareId, firebase.config);
         } catch (firebaseError) {
           console.warn('Viewer Firebase share load failed', firebaseError);
+          viewerLoadErrorType = 'firebase-connect-failed';
+          return null;
+        }
+      }
+      if (!share) {
+        try {
+          const localShares = JSON.parse(localStorage.getItem('scriptmaker_shares_v1') || '{}');
+          share = localShares[shareId] || null;
+        } catch (localError) {
+          console.warn('Viewer local share fallback failed', localError);
         }
       }
       if (!share) {
@@ -128,9 +191,11 @@ async function loadSharedProject() {
       return share?.project || null;
     } catch (error) {
       console.error('Viewer share load failed', error);
+      if (!viewerLoadErrorType) viewerLoadErrorType = 'share-not-found';
     }
   }
   viewerShareIdMissing = !shareId;
+  if (shareId && !viewerLoadErrorType) viewerLoadErrorType = 'share-not-found';
   viewerShareKey = 'direct_' + location.pathname;
   return null;
 }
@@ -554,6 +619,15 @@ function showViewerEmptyMessage() {
   if (viewerShareIdMissing) {
     if (title) title.textContent = '\u5171\u6709URL\u306eID\u3092\u8aad\u307f\u53d6\u308c\u307e\u305b\u3093\u3067\u3057\u305f';
     if (text) text.textContent = 'LINE\u5185\u30d6\u30e9\u30a6\u30b6\u306e\u5834\u5408\u306f\u3001\u53f3\u4e0b\u30e1\u30cb\u30e5\u30fc\u304b\u3089\u5916\u90e8\u30d6\u30e9\u30a6\u30b6\u3067\u958b\u3044\u3066\u304f\u3060\u3055\u3044\u3002';
+  } else if (viewerLoadErrorType === 'missing-firebase-config') {
+    if (title) title.textContent = 'Firebase\u8a2d\u5b9a\u3092\u8aad\u307f\u8fbc\u3081\u307e\u305b\u3093\u3067\u3057\u305f';
+    if (text) text.textContent = 'Viewer\u304cFirebase\u306b\u63a5\u7d9a\u3067\u304d\u308b\u8a2d\u5b9a\u3092\u8aad\u307f\u8fbc\u3081\u3066\u3044\u307e\u305b\u3093\u3002\u30da\u30fc\u30b8\u3092\u518d\u8aad\u307f\u8fbc\u307f\u3057\u3066\u3082\u6539\u5584\u3057\u306a\u3044\u5834\u5408\u306f\u4f5c\u6210\u8005\u306b\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002';
+  } else if (viewerLoadErrorType === 'firebase-connect-failed') {
+    if (title) title.textContent = 'Firebase\u306b\u63a5\u7d9a\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f';
+    if (text) text.textContent = '\u901a\u4fe1\u74b0\u5883\u3084\u30d6\u30e9\u30a6\u30b6\u5236\u9650\u306b\u3088\u308a\u5171\u6709\u30c7\u30fc\u30bf\u3092\u53d6\u5f97\u3067\u304d\u307e\u305b\u3093\u3002LINE\u5185\u30d6\u30e9\u30a6\u30b6\u306e\u5834\u5408\u306f\u5916\u90e8\u30d6\u30e9\u30a6\u30b6\u3067\u958b\u3044\u3066\u304f\u3060\u3055\u3044\u3002';
+  } else if (viewerLoadErrorType === 'share-not-found') {
+    if (title) title.textContent = '\u5171\u6709\u30c7\u30fc\u30bf\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093';
+    if (text) text.textContent = '\u3053\u306e\u5171\u6709URL\u306e\u30c7\u30fc\u30bf\u304cFirestore\u306b\u898b\u3064\u304b\u308a\u307e\u305b\u3093\u3002URL\u304c\u6b63\u3057\u3044\u304b\u3001\u4f5c\u6210\u8005\u304c\u5171\u6709\u30c7\u30fc\u30bf\u3092\u66f4\u65b0\u6e08\u307f\u304b\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002';
   }
   empty.classList.remove('hidden');
 }
