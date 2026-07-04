@@ -1,6 +1,8 @@
-# ScriptMaker Firebase共有設定
+# ScriptMaker Firebase共有設定（旧方式）
 
-ScriptMakerの標準共有方式はFirebase Firestoreです。
+現在のScriptMakerの標準共有方式はGoogle Drive向けHTML共有です。
+
+このファイルは、Firestore共有方式を再利用したい場合の参考資料として残しています。
 
 GitHub Pagesはそのまま使います。Firebase Hostingは使いません。
 
@@ -97,7 +99,7 @@ service cloud.firestore {
 1. ScriptMaker Editorを開く
 2. `共有` を押す
 3. 必要なら閲覧パスワードを入力
-4. `FirebaseでURL作成` または `URLコピー` を押す
+4. Firebase方式を再有効化している場合は `FirebaseでURL作成` または `URLコピー` を押す
 5. Firestoreへ保存され、Viewer用URLが作成される
 
 URL例:
@@ -120,4 +122,4 @@ https://malomalo413.github.io/ScriptMaker/Viewer/?id=share_xxxxx
 - Firestoreには共有用データだけを保存します。
 - Viewerは閲覧専用のままです。
 - 画像を多く含む巨大な台本はFirestoreの保存量が増えます。
-- Cloudflare Workersは不要です。既存コードはバックアップとして残っていますが、標準共有方式はFirebaseです。
+- Cloudflare Workersは不要です。現在の標準共有方式はGoogle Drive向けHTML共有です。

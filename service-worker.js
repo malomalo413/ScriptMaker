@@ -1,11 +1,9 @@
-const CACHE_NAME = 'script-assistant-pwa-v28';
+const CACHE_NAME = 'script-assistant-pwa-v29';
 const APP_SHELL = [
   './',
   './index.html',
-  './css/styles.css?v=28',
-  './js/firebase-config.js?v=1',
-  './js/firebase-share.js?v=1',
-  './js/app.js?v=28',
+  './css/styles.css?v=29',
+  './js/app.js?v=29',
   './manifest.json',
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',

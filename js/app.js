@@ -2040,13 +2040,69 @@ ${keptPredictionText}
       }
     }
 
+    function shareFileName(payload) {
+      const title = (payload?.title || 'scriptmaker').replace(/[\\/:*?"<>|]/g, '_').slice(0, 48);
+      return title + '_viewer.html';
+    }
+
+    function safeHtmlJson(value) {
+      return JSON.stringify(value).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+    }
+
+    function buildDriveViewerHtml(payload) {
+      const data = safeHtmlJson(payload);
+      return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>${payload.title || 'ScriptMaker Viewer'}</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f3f4f6;color:#172033}.app{position:relative;min-height:100dvh;overflow:hidden}.wallpaper{position:fixed;inset:0;background:#f3f4f6 center/cover no-repeat;transition:opacity .45s ease;z-index:0}.wallpaper.next{opacity:0}.header{position:sticky;top:0;z-index:3;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);padding:14px 16px;border-bottom:1px solid rgba(15,23,42,.08)}.label{font-size:12px;color:#64748b;margin:0 0 2px}.title{font-size:19px;margin:0;font-weight:800}.timeline{position:relative;z-index:1;height:calc(100dvh - 62px);overflow:auto;padding:18px 14px 42px}.talk{display:flex;gap:8px;margin:13px 0;align-items:flex-end}.talk.right{justify-content:flex-end}.talk.center{justify-content:center}.avatar{width:44px;height:44px;border-radius:50%;background:#cbd5e1 center/cover no-repeat;flex:0 0 auto;border:2px solid rgba(255,255,255,.85)}.name{font-size:12px;color:#64748b;margin:0 0 3px}.bubble{max-width:min(74vw,520px);padding:11px 14px;border-radius:16px;background:#fff;box-shadow:0 2px 10px rgba(15,23,42,.08);line-height:1.65;white-space:pre-wrap;word-break:break-word}.right .bubble{background:#dff3ff}.scene .bubble{background:rgba(229,231,235,.94);text-align:center;border-radius:4px;color:#374151;max-width:min(86vw,620px)}.number{display:block;font-size:11px;color:#94a3b8;margin-bottom:2px}.password{position:fixed;inset:0;z-index:9;display:flex;align-items:center;justify-content:center;background:#f8fafc;padding:20px}.password.hidden{display:none}.password-box{width:min(420px,100%);background:#fff;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(15,23,42,.16)}.password-box input{width:100%;font-size:16px;padding:12px;border:1px solid #cbd5e1;border-radius:8px}.password-box button{margin-top:12px;width:100%;font-size:16px;font-weight:700;padding:12px;border:0;border-radius:8px;background:#2563eb;color:white}.error{color:#b91c1c;font-size:13px;min-height:18px}</style>
+</head>
+<body>
+<div class="app"><div id="wallpaperA" class="wallpaper"></div><div id="wallpaperB" class="wallpaper next"></div><header class="header"><p class="label">ScriptMaker Viewer</p><h1 id="title" class="title"></h1></header><main id="timeline" class="timeline"></main></div>
+<div id="passwordGate" class="password hidden"><div class="password-box"><h2>閲覧パスワード</h2><input id="passwordInput" type="password" autocomplete="current-password"><button id="passwordButton">開く</button><p id="passwordError" class="error"></p></div></div>
+<script>
+const SHARE_PAYLOAD=${data};
+const SCENE_NAME="情景描写";
+const SYSTEM_NAME="システム";
+let activeWallpaper=0;
+let currentWallpaperKey="";
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;","'":"&#39;"}[c]));}
+async function hashPasswordText(value){const input=String(value||"");if(crypto?.subtle&&TextEncoder){const bytes=new TextEncoder().encode(input);const digest=await crypto.subtle.digest("SHA-256",bytes);return "sha256:"+Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,"0")).join("")}return "fallback:"+btoa(unescape(encodeURIComponent(input)))}
+function project(){return SHARE_PAYLOAD.project||{}}
+function character(name){return (project().characters||[]).find(c=>c.name===name)||{}}
+function isRight(name){return !!character(name).isProtagonist}
+function isSpecial(talk){return talk.charName===SCENE_NAME||talk.charName===SYSTEM_NAME}
+function avatarHtml(name){const c=character(name);const image=c.avatar||"";const zoom=c.zoom||100;const ox=c.offsetX??50;const oy=c.offsetY??50;const radius=c.roundAvatar===false?"18%":"50%";const bg=image?"background-image:url("+image+");background-size:"+zoom+"%;background-position:"+ox+"% "+oy+"%;":"";return '<div class="avatar" style="border-radius:'+radius+';'+bg+'"></div>'}
+function sceneForTalk(talkId){const settings=project().sceneWallpaperSettings||{};if(!settings.enabled)return null;return (settings.scenes||[]).find(s=>s.image&&Array.isArray(s.talkIds)&&s.talkIds.includes(talkId))||null}
+function wallpaperForTalk(talkId){return sceneForTalk(talkId)||project().wallpaper||null}
+function wallpaperKey(w){return w&&w.image?[w.image.slice(0,60),w.size||100,w.offsetX??50,w.offsetY??50].join("|"):"none"}
+function applyWallpaper(w){const key=wallpaperKey(w);if(key===currentWallpaperKey)return;const layers=[document.getElementById("wallpaperA"),document.getElementById("wallpaperB")];const next=layers[1-activeWallpaper];const current=layers[activeWallpaper];if(w&&w.image){next.style.backgroundImage="url("+w.image+")";next.style.backgroundSize=(w.size||100)===100?"cover":(w.size||100)+"%";next.style.backgroundPosition=(w.offsetX??50)+"% "+(w.offsetY??50)+"%"}else{next.style.backgroundImage=""}next.classList.remove("next");current.classList.add("next");activeWallpaper=1-activeWallpaper;currentWallpaperKey=key}
+function currentTalkId(){const items=[...document.querySelectorAll("[data-talk-id]")];const mid=innerHeight/2;let best=null;let dist=Infinity;for(const item of items){const r=item.getBoundingClientRect();const d=Math.abs((r.top+r.bottom)/2-mid);if(d<dist){dist=d;best=item}}return best?.dataset.talkId||""}
+function render(){const p=project();document.getElementById("title").textContent=p.title||SHARE_PAYLOAD.title||"台本";const talks=p.talks||[];document.getElementById("timeline").innerHTML=talks.map((talk,index)=>{const special=isSpecial(talk);const side=special?"center":(isRight(talk.charName)?"right":"left");const num=String(index+1).padStart(3,"0");const name=esc(talk.charName||"");const text=esc(talk.text||"");if(special)return '<section class="talk center scene" data-talk-id="'+esc(talk.id||"")+'"><div class="bubble"><span class="number">'+num+'</span>'+text+'</div></section>';return '<section class="talk '+side+'" data-talk-id="'+esc(talk.id||"")+'">'+(side==="right"?"":avatarHtml(talk.charName))+'<div><p class="name">'+name+'</p><div class="bubble"><span class="number">'+num+'</span>'+text+'</div></div>'+(side==="right"?avatarHtml(talk.charName):"")+'</section>'}).join("");applyWallpaper(wallpaperForTalk(talks[0]?.id));document.getElementById("timeline").addEventListener("scroll",()=>applyWallpaper(wallpaperForTalk(currentTalkId())),{passive:true})}
+async function unlock(){const expected=SHARE_PAYLOAD.viewerPasswordHash||"";if(!expected){render();return}document.getElementById("passwordGate").classList.remove("hidden");document.getElementById("passwordButton").onclick=async()=>{const hash=await hashPasswordText(document.getElementById("passwordInput").value);if(hash===expected){document.getElementById("passwordGate").classList.add("hidden");render()}else{document.getElementById("passwordError").textContent="パスワードが違います"}}}
+unlock();
+</script>
+</body>
+</html>`;
+    }
+
+    function driveViewerBlob(payload) {
+      return new Blob([buildDriveViewerHtml(payload)], { type: 'text/html;charset=utf-8' });
+    }
+
+    function ensureSharePayload() {
+      if (!pendingSharePayload) throw new Error('共有データがありません。');
+      return pendingSharePayload;
+    }
+
     async function openSharedViewer() {
-      if (pendingSharePayload && !pendingSharePublished) {
-        await publishFirebaseShareUrl();
-      }
-      const url = currentShareUrl();
-      if (!url) return;
+      const payload = ensureSharePayload();
+      const url = URL.createObjectURL(driveViewerBlob(payload));
       window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
     }
 
     async function postShareToWorker(payload, workerUrl) {
@@ -2073,21 +2129,56 @@ ${keptPredictionText}
         alert('\u5171\u6709\u3059\u308b\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002');
         return;
       }
-      const firebaseInput = document.getElementById('shareFirebaseConfig');
-      if (firebaseInput && window.ScriptMakerFirebaseShare) {
-        firebaseInput.value = window.ScriptMakerFirebaseShare.configTextForInput();
-      }
       const viewerPassword = document.getElementById('shareViewerPassword')?.value || '';
       const viewerPasswordHash = viewerPassword ? await hashPasswordText(viewerPassword) : '';
       pendingSharePayload = buildViewerSharePayload(project, viewerPasswordHash);
       pendingSharePublished = false;
-      const shortUrl = buildViewerShareUrl(pendingSharePayload);
       const output = document.getElementById('shareUrlText');
       const meta = document.getElementById('shareMetaText');
-      if (output) output.value = shortUrl;
-      if (meta) meta.innerText = (pendingSharePayload.title || '\u53f0\u672c') + ' / ' + pendingSharePayload.project.talks.length + '\u4ef6 / id: ' + pendingSharePayload.shareId;
-      setShareStatus('Firebase Firestore\u306b\u4fdd\u5b58\u3059\u308b\u3068\u3001\u3053\u306e\u77ed\u3044URL\u3067Viewer\u304c\u958b\u3051\u307e\u3059\u3002', '');
+      if (output) output.value = '';
+      if (meta) meta.innerText = (pendingSharePayload.title || '\u53f0\u672c') + ' / ' + pendingSharePayload.project.talks.length + '\u4ef6 / HTML\u5171\u6709';
+      setShareStatus('HTML\u3092\u4fdd\u5b58\u3057\u3066Google Drive\u306b\u30a2\u30c3\u30d7\u30ed\u30fc\u30c9\u3057\u3001Drive\u3067\u5171\u6709\u30ea\u30f3\u30af\u3092\u4f5c\u6210\u3057\u3066\u304f\u3060\u3055\u3044\u3002', '');
       openModal('shareModal');
+    }
+
+    function downloadDriveViewerHtml() {
+      const payload = ensureSharePayload();
+      const blob = driveViewerBlob(payload);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = shareFileName(payload);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      pendingSharePublished = true;
+      setShareStatus('閲覧専用HTMLを保存しました。Google Driveにアップロードして共有リンクを作成してください。', 'success');
+    }
+
+    async function shareDriveViewerHtml() {
+      const payload = ensureSharePayload();
+      const file = new File([driveViewerBlob(payload)], shareFileName(payload), { type: 'text/html' });
+      if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+        try {
+          await navigator.share({
+            title: payload.title || 'ScriptMaker Viewer',
+            text: 'ScriptMaker閲覧専用HTML',
+            files: [file]
+          });
+          pendingSharePublished = true;
+          setShareStatus('共有シートを開きました。Google Driveを選んで保存してください。', 'success');
+          return;
+        } catch (error) {
+          if (error?.name === 'AbortError') {
+            setShareStatus('共有をキャンセルしました。', '');
+            return;
+          }
+          console.warn('Drive share failed:', error);
+        }
+      }
+      downloadDriveViewerHtml();
+      setShareStatus('このブラウザでは直接共有できないため、HTMLを保存しました。Google Driveにアップロードしてください。', 'success');
     }
 
     async function publishFirebaseShareUrl() {
@@ -2165,18 +2256,9 @@ ${keptPredictionText}
     async function copyShareUrl() {
       const text = document.getElementById('shareUrlText');
       const value = text ? text.value.trim() : '';
-      if (pendingSharePayload && !pendingSharePublished) {
-        await publishFirebaseShareUrl();
-        return copyShareUrl();
-      }
       if (!value) {
-        await publishFirebaseShareUrl();
-        const refreshed = text ? text.value.trim() : '';
-        if (!refreshed) {
-          setShareStatus('\u30b3\u30d4\u30fc\u3067\u304d\u308bURL\u304c\u3042\u308a\u307e\u305b\u3093\u3002Firebase config\u3092\u8a2d\u5b9a\u3057\u3066\u304f\u3060\u3055\u3044\u3002', 'error');
-          return;
-        }
-        return copyShareUrl();
+        setShareStatus('Google Driveで共有リンクを作成し、この欄に貼り付けてからコピーしてください。', 'error');
+        return;
       }
       const ok = await tryClipboardCopy(value);
       if (ok) {
