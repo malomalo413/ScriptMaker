@@ -205,6 +205,15 @@ function isSpecialTalk(talk) {
   return talk.charName === VIEWER_SCENE_NAME || talk.charName === VIEWER_SYSTEM_NAME;
 }
 
+function stageDirectionText(talk) {
+  return String(talk?.stageDirection || talk?.note || '').trim();
+}
+
+function viewerStageDirectionHtml(talk, className = 'viewer-stage-direction') {
+  const text = stageDirectionText(talk);
+  return text ? '<div class="' + className + '">' + escapeHtml(text) + '</div>' : '';
+}
+
 function isEditorRightSide(project, name) {
   return !!project.characters?.find(character => character.name === name)?.isProtagonist;
 }
@@ -365,7 +374,7 @@ function renderTimeline() {
     const row = document.createElement('article');
     row.className = 'viewer-talk ' + (isSpecial ? 'scene' : isRight ? 'right' : 'left');
     row.dataset.talkId = talk.id || String(index);
-    row.innerHTML = '<span class="viewer-number">' + formatNo(index) + '</span>' + avatarHtml(viewerProject, talk) + '<div class="viewer-bubble"><span class="viewer-name">' + escapeHtml(talk.charName || '') + '</span>' + escapeHtml(talk.text || '') + '</div>';
+    row.innerHTML = '<span class="viewer-number">' + formatNo(index) + '</span>' + avatarHtml(viewerProject, talk) + '<div class="viewer-bubble"><span class="viewer-name">' + escapeHtml(talk.charName || '') + '</span>' + escapeHtml(talk.text || '') + viewerStageDirectionHtml(talk) + '</div>';
     timeline.appendChild(row);
   });
 }
@@ -593,7 +602,7 @@ function renderPrintPages() {
       return '<div class="viewer-print-talk ' + sideClass + '">' +
         '<span class="viewer-print-number">' + formatNo(index) + '</span>' +
         '<span class="viewer-print-name">' + escapeHtml(talk.charName || '') + '</span>' +
-        '<span class="viewer-print-text">' + escapeHtml(talk.text || '') + '</span>' +
+        '<span class="viewer-print-text">' + escapeHtml(talk.text || '') + viewerStageDirectionHtml(talk, 'viewer-print-stage-direction') + '</span>' +
       '</div>';
     }).join('');
     return '<section class="viewer-print-page">' +
@@ -773,6 +782,16 @@ function printDocumentStyles() {
     .viewer-print-text {
       white-space: pre-wrap;
       overflow-wrap: anywhere;
+    }
+    .viewer-print-stage-direction {
+      display: block;
+      margin-top: 4px;
+      padding: 4px 6px;
+      border-radius: 5px;
+      background: #e5e7eb;
+      color: #475569;
+      font-size: 10px;
+      line-height: 1.5;
     }
     @media (max-width: 720px) {
       .viewer-print-pages { padding: 10px; }

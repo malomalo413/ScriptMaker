@@ -247,12 +247,16 @@ let state = {
       const usedIds = new Set();
       project.talks.forEach(talk => {
         if (!talk.id || usedIds.has(talk.id)) talk.id = createTalkId();
+        if (!talk.stageDirection && talk.note) talk.stageDirection = talk.note;
+        if (talk.stageDirection != null && typeof talk.stageDirection !== 'string') talk.stageDirection = String(talk.stageDirection);
         usedIds.add(talk.id);
       });
     }
 
-    function createTalkRecord(charName, text) {
-      return { id: createTalkId(), charName, text };
+    function createTalkRecord(charName, text, stageDirection = '') {
+      const record = { id: createTalkId(), charName, text };
+      if (stageDirection && stageDirection.trim()) record.stageDirection = stageDirection.trim();
+      return record;
     }
 
     function normalizeSceneWallpaperSettings(project) {
@@ -1302,6 +1306,16 @@ let state = {
 
     function formatTalkNumber(index) { return String(index + 1).padStart(3, '0'); }
 
+    function getStageDirection(talk) {
+      return String(talk?.stageDirection || talk?.note || '').trim();
+    }
+
+    function stageDirectionHtml(talk) {
+      const stageDirection = getStageDirection(talk);
+      if (!stageDirection) return '';
+      return '<div class="stage-direction">' + escapeHtml(stageDirection) + '</div>';
+    }
+
     function renderTimeline() {
       if (isSortingTalks) {
         pendingTimelineRender = true;
@@ -1356,11 +1370,13 @@ let state = {
           ${state.settings?.showTalkNumbers !== false ? '<span class="talk-number">' + formatTalkNumber(index) + '</span>' : ''}
           ${avatarHtml}
           <div class="bubble-content">
-            <span class="char-name">${talk.charName}</span>
-            <div class="message-text">${talk.text}</div>
+            <span class="char-name">${escapeHtml(talk.charName)}</span>
+            <div class="message-text">${escapeHtml(talk.text || '')}</div>
+            ${stageDirectionHtml(talk)}
             <div class="talk-edit-tools" onclick="event.stopPropagation()">
               <button onclick="moveTalk(event, ${index}, -1)">↑</button>
               <button onclick="moveTalk(event, ${index}, 1)">↓</button>
+              <button onclick="openStageDirectionEditor(event, ${index})">&#12488;&#26360;&#12365;</button>
               <button onclick="duplicateTalk(event, ${index})">複製</button>
               <button class="btn-talk-delete" onclick="deleteTalk(event, ${index})">削除</button>
             </div>
@@ -1399,8 +1415,8 @@ let state = {
           bubble.innerHTML = `
             ${avatarHtml}
             <div class="bubble-content">
-              <span class="char-name">${talk.charName} (予測候補)</span>
-              <div class="message-text">${talk.text}</div>
+              <span class="char-name">${escapeHtml(talk.charName)} (予測候補)</span>
+              <div class="message-text">${escapeHtml(talk.text || '')}</div>
             </div>
           `;
           timeline.appendChild(bubble);
@@ -1885,13 +1901,58 @@ ${keptPredictionText}
       updateMetaStats();
     }
 
+    function openStageDirectionEditor(event, index) {
+      event?.stopPropagation?.();
+      const project = state.projects[state.currentProjectId];
+      const talk = project?.talks?.[index];
+      if (!talk) return;
+      const textarea = document.getElementById('stageDirectionText');
+      const target = document.getElementById('stageDirectionTarget');
+      const label = document.getElementById('stageDirectionTalkLabel');
+      if (target) target.value = String(index);
+      if (textarea) {
+        textarea.value = getStageDirection(talk);
+        setTimeout(() => {
+          textarea.focus({ preventScroll: true });
+          const end = textarea.value.length;
+          textarea.setSelectionRange(end, end);
+        }, 50);
+      }
+      if (label) label.textContent = formatTalkNumber(index) + ' ' + (talk.charName || '') + ': ' + (talk.text || '').slice(0, 32);
+      openModal('stageDirectionModal');
+    }
+
+    function openCurrentStageDirectionEditor() {
+      if (editingTalkIndex === null) return;
+      openStageDirectionEditor({ stopPropagation() {} }, editingTalkIndex);
+    }
+
+    function saveStageDirection() {
+      const project = state.projects[state.currentProjectId];
+      const index = parseInt(document.getElementById('stageDirectionTarget')?.value, 10);
+      const talk = project?.talks?.[index];
+      if (!talk) return;
+      const value = (document.getElementById('stageDirectionText')?.value || '').trim();
+      pushUndoSnapshot();
+      if (value) {
+        talk.stageDirection = value;
+      } else {
+        delete talk.stageDirection;
+        delete talk.note;
+      }
+      predictedTalks = [];
+      saveState();
+      closeModal('stageDirectionModal');
+      renderTimeline();
+    }
+
     function duplicateTalk(event, index) {
       event.stopPropagation();
       const project = state.projects[state.currentProjectId];
       const original = project.talks[index];
       if (!original) return;
       pushUndoSnapshot();
-      project.talks.splice(index + 1, 0, createTalkRecord(original.charName, original.text));
+      project.talks.splice(index + 1, 0, createTalkRecord(original.charName, original.text, getStageDirection(original)));
       selectedTalkIndexes.clear();
       predictedTalks = [];
       saveState();
@@ -2178,7 +2239,7 @@ ${keptPredictionText}
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>${payload.title || 'ScriptMaker Viewer'}</title>
 <style>
-*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f3f4f6;color:#172033}.app{position:relative;min-height:100dvh;overflow:hidden}.wallpaper{position:fixed;inset:0;background:#f3f4f6 center/cover no-repeat;transition:opacity .45s ease;z-index:0}.wallpaper.next{opacity:0}.header{position:sticky;top:0;z-index:3;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);padding:14px 16px;border-bottom:1px solid rgba(15,23,42,.08)}.label{font-size:12px;color:#64748b;margin:0 0 2px}.title{font-size:19px;margin:0;font-weight:800}.timeline{position:relative;z-index:1;height:calc(100dvh - 62px);overflow:auto;padding:18px 14px 42px}.talk{display:flex;gap:8px;margin:13px 0;align-items:flex-end}.talk.right{justify-content:flex-end}.talk.center{justify-content:center}.avatar{width:44px;height:44px;border-radius:50%;background:#cbd5e1 center/cover no-repeat;flex:0 0 auto;border:2px solid rgba(255,255,255,.85)}.name{font-size:12px;color:#64748b;margin:0 0 3px}.bubble{max-width:min(74vw,520px);padding:11px 14px;border-radius:16px;background:#fff;box-shadow:0 2px 10px rgba(15,23,42,.08);line-height:1.65;white-space:pre-wrap;word-break:break-word}.right .bubble{background:#dff3ff}.scene .bubble{background:rgba(229,231,235,.94);text-align:center;border-radius:4px;color:#374151;max-width:min(86vw,620px)}.number{display:block;font-size:11px;color:#94a3b8;margin-bottom:2px}.password{position:fixed;inset:0;z-index:9;display:flex;align-items:center;justify-content:center;background:#f8fafc;padding:20px}.password.hidden{display:none}.password-box{width:min(420px,100%);background:#fff;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(15,23,42,.16)}.password-box input{width:100%;font-size:16px;padding:12px;border:1px solid #cbd5e1;border-radius:8px}.password-box button{margin-top:12px;width:100%;font-size:16px;font-weight:700;padding:12px;border:0;border-radius:8px;background:#2563eb;color:white}.error{color:#b91c1c;font-size:13px;min-height:18px}</style>
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f3f4f6;color:#172033}.app{position:relative;min-height:100dvh;overflow:hidden}.wallpaper{position:fixed;inset:0;background:#f3f4f6 center/cover no-repeat;transition:opacity .45s ease;z-index:0}.wallpaper.next{opacity:0}.header{position:sticky;top:0;z-index:3;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);padding:14px 16px;border-bottom:1px solid rgba(15,23,42,.08)}.label{font-size:12px;color:#64748b;margin:0 0 2px}.title{font-size:19px;margin:0;font-weight:800}.timeline{position:relative;z-index:1;height:calc(100dvh - 62px);overflow:auto;padding:18px 14px 42px}.talk{display:flex;gap:8px;margin:13px 0;align-items:flex-end}.talk.right{justify-content:flex-end}.talk.center{justify-content:center}.avatar{width:44px;height:44px;border-radius:50%;background:#cbd5e1 center/cover no-repeat;flex:0 0 auto;border:2px solid rgba(255,255,255,.85)}.name{font-size:12px;color:#64748b;margin:0 0 3px}.bubble{max-width:min(74vw,520px);padding:11px 14px;border-radius:16px;background:#fff;box-shadow:0 2px 10px rgba(15,23,42,.08);line-height:1.65;white-space:pre-wrap;word-break:break-word}.right .bubble{background:#dff3ff}.scene .bubble{background:rgba(229,231,235,.94);text-align:center;border-radius:4px;color:#374151;max-width:min(86vw,620px)}.stage{margin-top:6px;padding:7px 10px;border-radius:8px;background:rgba(100,116,139,.18);color:#475569;font-size:12px;line-height:1.5;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid rgba(100,116,139,.18)}.number{display:block;font-size:11px;color:#94a3b8;margin-bottom:2px}.password{position:fixed;inset:0;z-index:9;display:flex;align-items:center;justify-content:center;background:#f8fafc;padding:20px}.password.hidden{display:none}.password-box{width:min(420px,100%);background:#fff;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(15,23,42,.16)}.password-box input{width:100%;font-size:16px;padding:12px;border:1px solid #cbd5e1;border-radius:8px}.password-box button{margin-top:12px;width:100%;font-size:16px;font-weight:700;padding:12px;border:0;border-radius:8px;background:#2563eb;color:white}.error{color:#b91c1c;font-size:13px;min-height:18px}</style>
 </head>
 <body>
 <div class="app"><div id="wallpaperA" class="wallpaper"></div><div id="wallpaperB" class="wallpaper next"></div><header class="header"><p class="label">ScriptMaker Viewer</p><h1 id="title" class="title"></h1></header><main id="timeline" class="timeline"></main></div>
@@ -2195,13 +2256,14 @@ function project(){return SHARE_PAYLOAD.project||{}}
 function character(name){return (project().characters||[]).find(c=>c.name===name)||{}}
 function isRight(name){return !!character(name).isProtagonist}
 function isSpecial(talk){return talk.charName===SCENE_NAME||talk.charName===SYSTEM_NAME}
+function stageHtml(talk){const text=String(talk?.stageDirection||talk?.note||"").trim();return text?'<div class="stage">'+esc(text)+'</div>':""}
 function avatarHtml(name){const c=character(name);const image=c.avatar||"";const zoom=c.zoom||100;const ox=c.offsetX??50;const oy=c.offsetY??50;const radius=c.roundAvatar===false?"18%":"50%";const bg=image?"background-image:url("+image+");background-size:"+zoom+"%;background-position:"+ox+"% "+oy+"%;":"";return '<div class="avatar" style="border-radius:'+radius+';'+bg+'"></div>'}
 function sceneForTalk(talkId){const settings=project().sceneWallpaperSettings||{};if(!settings.enabled)return null;return (settings.scenes||[]).find(s=>s.image&&Array.isArray(s.talkIds)&&s.talkIds.includes(talkId))||null}
 function wallpaperForTalk(talkId){return sceneForTalk(talkId)||project().wallpaper||null}
 function wallpaperKey(w){return w&&w.image?[w.image.slice(0,60),w.size||100,w.offsetX??50,w.offsetY??50].join("|"):"none"}
 function applyWallpaper(w){const key=wallpaperKey(w);if(key===currentWallpaperKey)return;const layers=[document.getElementById("wallpaperA"),document.getElementById("wallpaperB")];const next=layers[1-activeWallpaper];const current=layers[activeWallpaper];if(w&&w.image){next.style.backgroundImage="url("+w.image+")";next.style.backgroundSize=(w.size||100)===100?"cover":(w.size||100)+"%";next.style.backgroundPosition=(w.offsetX??50)+"% "+(w.offsetY??50)+"%"}else{next.style.backgroundImage=""}next.classList.remove("next");current.classList.add("next");activeWallpaper=1-activeWallpaper;currentWallpaperKey=key}
 function currentTalkId(){const items=[...document.querySelectorAll("[data-talk-id]")];const mid=innerHeight/2;let best=null;let dist=Infinity;for(const item of items){const r=item.getBoundingClientRect();const d=Math.abs((r.top+r.bottom)/2-mid);if(d<dist){dist=d;best=item}}return best?.dataset.talkId||""}
-function render(){const p=project();document.getElementById("title").textContent=p.title||SHARE_PAYLOAD.title||"台本";const talks=p.talks||[];document.getElementById("timeline").innerHTML=talks.map((talk,index)=>{const special=isSpecial(talk);const side=special?"center":(isRight(talk.charName)?"right":"left");const num=String(index+1).padStart(3,"0");const name=esc(talk.charName||"");const text=esc(talk.text||"");if(special)return '<section class="talk center scene" data-talk-id="'+esc(talk.id||"")+'"><div class="bubble"><span class="number">'+num+'</span>'+text+'</div></section>';return '<section class="talk '+side+'" data-talk-id="'+esc(talk.id||"")+'">'+(side==="right"?"":avatarHtml(talk.charName))+'<div><p class="name">'+name+'</p><div class="bubble"><span class="number">'+num+'</span>'+text+'</div></div>'+(side==="right"?avatarHtml(talk.charName):"")+'</section>'}).join("");applyWallpaper(wallpaperForTalk(talks[0]?.id));document.getElementById("timeline").addEventListener("scroll",()=>applyWallpaper(wallpaperForTalk(currentTalkId())),{passive:true})}
+function render(){const p=project();document.getElementById("title").textContent=p.title||SHARE_PAYLOAD.title||"台本";const talks=p.talks||[];document.getElementById("timeline").innerHTML=talks.map((talk,index)=>{const special=isSpecial(talk);const side=special?"center":(isRight(talk.charName)?"right":"left");const num=String(index+1).padStart(3,"0");const name=esc(talk.charName||"");const text=esc(talk.text||"");if(special)return '<section class="talk center scene" data-talk-id="'+esc(talk.id||"")+'"><div class="bubble"><span class="number">'+num+'</span>'+text+stageHtml(talk)+'</div></section>';return '<section class="talk '+side+'" data-talk-id="'+esc(talk.id||"")+'">'+(side==="right"?"":avatarHtml(talk.charName))+'<div><p class="name">'+name+'</p><div class="bubble"><span class="number">'+num+'</span>'+text+stageHtml(talk)+'</div></div>'+(side==="right"?avatarHtml(talk.charName):"")+'</section>'}).join("");applyWallpaper(wallpaperForTalk(talks[0]?.id));document.getElementById("timeline").addEventListener("scroll",()=>applyWallpaper(wallpaperForTalk(currentTalkId())),{passive:true})}
 async function unlock(){const expected=SHARE_PAYLOAD.viewerPasswordHash||"";if(!expected){render();return}document.getElementById("passwordGate").classList.remove("hidden");document.getElementById("passwordButton").onclick=async()=>{const hash=await hashPasswordText(document.getElementById("passwordInput").value);if(hash===expected){document.getElementById("passwordGate").classList.add("hidden");render()}else{document.getElementById("passwordError").textContent="パスワードが違います"}}}
 unlock();
 </script>

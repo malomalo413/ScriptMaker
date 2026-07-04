@@ -216,6 +216,19 @@ html, body {
   border-radius: 4px;
   box-shadow: none;
 }
+.viewer-stage-direction {
+  margin-top: 6px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(100, 116, 139, .18);
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid rgba(100, 116, 139, .18);
+}
 .viewer-name {
   display: block;
   margin-bottom: 2px;
@@ -578,6 +591,17 @@ html, body {
   .viewer-print-text {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+
+  .viewer-print-stage-direction {
+    display: block;
+    margin-top: 4px;
+    padding: 4px 6px;
+    border-radius: 5px;
+    background: #e5e7eb;
+    color: #475569;
+    font-size: 10px;
+    line-height: 1.5;
   }
 
   .viewer-header {

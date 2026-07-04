@@ -466,6 +466,41 @@
       outline-offset: 2px;
     }
 
+    .stage-direction {
+      margin-top: 6px;
+      padding: 7px 10px;
+      border-radius: 8px;
+      background: rgba(100, 116, 139, 0.18);
+      color: #475569;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      border: 1px solid rgba(100, 116, 139, 0.18);
+    }
+    .chat-bubble.right .stage-direction {
+      text-align: left;
+    }
+    .stage-direction-target-label {
+      margin: 0 0 8px;
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    .stage-direction-textarea {
+      width: 100%;
+      min-height: 120px;
+      resize: vertical;
+      padding: 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      font-size: 16px;
+      line-height: 1.5;
+      font-family: inherit;
+    }
+
     body.edit-mode-active .chat-bubble:not(.ai-predicted) {
       cursor: pointer;
       border: 1px dashed #f97316;

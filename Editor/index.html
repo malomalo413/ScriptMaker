@@ -14,11 +14,11 @@
   <link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="../assets/icons/icon-512.png">
-  <link rel="stylesheet" href="../css/styles.css?v=33">
+  <link rel="stylesheet" href="../css/styles.css?v=34">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
   <script src="../js/firebase-config.js?v=30" defer></script>
   <script src="../js/firebase-share.js?v=31" defer></script>
-  <script src="../js/app.js?v=37" defer></script>
+  <script src="../js/app.js?v=38" defer></script>
 </head>
 <body class="auth-locked">
 
@@ -96,6 +96,7 @@
     <div class="bottom-input-bar" id="bottomInputBar">
       <div class="char-selector-container" id="charSelectorContainer"></div>
       <div class="inline-edit-status hidden" id="inlineEditStatus">
+        <button type="button" onclick="openCurrentStageDirectionEditor()">&#12488;&#26360;&#12365;</button>
         <button type="button" onclick="cancelInlineTalkEdit()">キャンセル</button>
       </div>
       <div class="input-row">
@@ -209,6 +210,21 @@
       </div>
       <div class="modal-actions">
         <button class="btn-modal-confirm" onclick="saveAiConfig()">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="stageDirectionModal" class="custom-modal hidden">
+    <div class="modal-content">
+      <h4>&#12488;&#26360;&#12365;</h4>
+      <p id="stageDirectionTalkLabel" class="stage-direction-target-label"></p>
+      <input type="hidden" id="stageDirectionTarget">
+      <div class="modal-row">
+        <textarea id="stageDirectionText" class="stage-direction-textarea" rows="5" placeholder="&#28436;&#25216;&#25351;&#31034;&#12420;&#35036;&#36275;&#35500;&#26126;&#12434;&#20837;&#21147;"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" type="button" onclick="closeModal('stageDirectionModal')">&#12461;&#12515;&#12531;&#12475;&#12523;</button>
+        <button class="btn-modal-confirm" type="button" onclick="saveStageDirection()">&#20445;&#23384;</button>
       </div>
     </div>
   </div>
