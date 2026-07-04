@@ -17,8 +17,8 @@
   <link rel="stylesheet" href="./css/styles.css?v=33">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
   <script src="./js/firebase-config.js?v=30" defer></script>
-  <script src="./js/firebase-share.js?v=30" defer></script>
-  <script src="./js/app.js?v=33" defer></script>
+  <script src="./js/firebase-share.js?v=31" defer></script>
+  <script src="./js/app.js?v=34" defer></script>
 </head>
 <body class="auth-locked">
 
@@ -228,21 +228,23 @@
   <div id="shareModal" class="custom-modal hidden">
     <div class="modal-content share-modal-content">
       <h4>&#20849;&#26377;URL&#12434;&#20316;&#25104;</h4>
-      <p class="share-help">&#21488;&#26412;&#12434;Viewer&#12391;&#38283;&#12369;&#12427;&#30701;&#12356;&#20849;&#26377;URL&#12434;&#20316;&#25104;&#12375;&#12414;&#12377;&#12290;&#36890;&#24120;&#12399;&#12300;&#20849;&#26377;URL&#12434;&#20316;&#25104;&#12301;&#8594;&#12300;URL&#12434;&#12467;&#12500;&#12540;&#12301;&#12398;&#38918;&#12395;&#25276;&#12375;&#12390;&#12367;&#12384;&#12373;&#12356;&#12290;</p>
+      <p class="share-help">&#21488;&#26412;&#12434;Viewer&#12391;&#38283;&#12369;&#12427;&#20844;&#38283;URL&#12434;&#31649;&#29702;&#12375;&#12414;&#12377;&#12290;&#19968;&#24230;&#20316;&#25104;&#12375;&#12383;URL&#12399;&#22266;&#23450;&#12373;&#12428;&#12289;&#21516;&#12376;URL&#12391;&#26368;&#26032;&#29256;&#12434;&#35211;&#12425;&#12428;&#12414;&#12377;&#12290;</p>
       <div class="modal-row share-password-row"><label for="shareViewerPassword">Viewer&#38322;&#35239;&#12497;&#12473;&#12527;&#12540;&#12489;&#65288;&#20219;&#24847;&#65289;</label><input type="password" id="shareViewerPassword" autocomplete="new-password" placeholder="&#26410;&#35373;&#23450;&#12394;&#12425;&#12497;&#12473;&#12527;&#12540;&#12489;&#12394;&#12375;"><button class="share-clear-password" type="button" onclick="clearStoredSharePassword()">&#20445;&#23384;&#12375;&#12383;&#12497;&#12473;&#12527;&#12540;&#12489;&#12434;&#21066;&#38500;</button></div>
       <textarea id="shareUrlText" class="share-url-textarea share-url-output hidden" readonly placeholder="&#20849;&#26377;URL&#12364;&#12371;&#12371;&#12395;&#34920;&#31034;&#12373;&#12428;&#12414;&#12377;"></textarea>
       <div class="share-meta" id="shareMetaText"></div>
       <div class="share-meta share-status" id="shareStatusText"></div>
       <div class="modal-actions share-modal-actions share-main-actions">
-        <button class="btn-modal-confirm" type="button" onclick="publishFirebaseShareUrl()">&#20849;&#26377;URL&#12434;&#20316;&#25104;</button>
-        <button id="shareCopyButton" class="btn-modal-confirm hidden" type="button" onclick="copyShareUrl()">URL&#12434;&#12467;&#12500;&#12540;</button>
-        <button class="btn-modal-cancel" type="button" onclick="openSharedViewer()">Viewer&#12391;&#38283;&#12367;</button>
+        <button id="shareCreateButton" class="btn-modal-confirm" type="button" onclick="publishFirebaseShareUrl()">&#20844;&#38283;URL&#12434;&#20316;&#25104;</button>
+        <button id="shareCopyButton" class="btn-modal-confirm hidden" type="button" onclick="copyShareUrl()">&#20844;&#38283;URL&#12434;&#12467;&#12500;&#12540;</button>
+        <button id="shareOpenButton" class="btn-modal-cancel hidden" type="button" onclick="openSharedViewer()">Viewer&#12391;&#38283;&#12367;</button>
+        <button id="shareUpdateButton" class="btn-modal-cancel hidden" type="button" onclick="publishFirebaseShareUrl()">&#20849;&#26377;&#12487;&#12540;&#12479;&#12434;&#26356;&#26032;</button>
         <button class="btn-modal-cancel" type="button" onclick="closeModal('shareModal')">&#38281;&#12376;&#12427;</button>
       </div>
       <details class="share-advanced">
         <summary>&#35443;&#32048;&#35373;&#23450;&#12539;&#38283;&#30330;&#32773;&#21521;&#12369;</summary>
         <div class="modal-row"><label for="shareFirebaseConfig">Firebase config</label><textarea id="shareFirebaseConfig" class="share-url-textarea share-config-textarea" placeholder="Firebase&#12398;&#35373;&#23450;&#12458;&#12502;&#12472;&#12455;&#12463;&#12488;&#12434;&#36028;&#12426;&#20184;&#12369;&#65288;js/firebase-config.js&#12395;&#35373;&#23450;&#28168;&#12415;&#12394;&#12425;&#31354;&#12391;OK&#65289;"></textarea></div>
         <div class="modal-actions share-modal-actions share-advanced-actions">
+          <button class="btn-modal-cancel" type="button" onclick="recreateProjectShareUrl()">&#26032;&#12375;&#12356;&#20844;&#38283;URL&#12434;&#20316;&#12426;&#30452;&#12377;</button>
           <button class="btn-modal-cancel" type="button" onclick="downloadDriveViewerHtml()">HTML&#26360;&#12365;&#20986;&#12375;</button>
           <button class="btn-modal-cancel" type="button" onclick="shareDriveViewerHtml()">Drive&#12408;&#20849;&#26377;</button>
           <button class="btn-modal-cancel" type="button" onclick="selectShareUrl()">URL&#12434;&#36984;&#25246;</button>

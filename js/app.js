@@ -1976,14 +1976,19 @@ ${keptPredictionText}
     }
 
 
-    function buildViewerSharePayload(project, viewerPasswordHash) {
+    function generateShareId() {
+      return 'share_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+    }
+
+    function buildViewerSharePayload(project, viewerPasswordHash, shareId) {
       const snapshot = cloneProject(project);
       ensureTalkIds(snapshot);
       normalizeSceneWallpaperSettings(snapshot);
       return {
-        shareId: 'share_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
+        shareId: shareId || project.shareId || generateShareId(),
         title: snapshot.title || '\u53f0\u672c',
-        createdAt: new Date().toISOString(),
+        createdAt: project.shareCreatedAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         viewerPasswordHash: viewerPasswordHash || '',
         project: snapshot
       };
@@ -2039,6 +2044,19 @@ ${keptPredictionText}
     function currentShareUrl() {
       const text = document.getElementById('shareUrlText');
       return text ? text.value.trim() : '';
+    }
+
+    function updateShareModalMode(isPublished) {
+      const output = document.getElementById('shareUrlText');
+      const createButton = document.getElementById('shareCreateButton');
+      const copyButton = document.getElementById('shareCopyButton');
+      const openButton = document.getElementById('shareOpenButton');
+      const updateButton = document.getElementById('shareUpdateButton');
+      if (output) output.classList.toggle('hidden', !isPublished);
+      if (createButton) createButton.classList.toggle('hidden', !!isPublished);
+      if (copyButton) copyButton.classList.toggle('hidden', !isPublished);
+      if (openButton) openButton.classList.toggle('hidden', !isPublished);
+      if (updateButton) updateButton.classList.toggle('hidden', !isPublished);
     }
 
     function selectShareUrl() {
@@ -2173,22 +2191,23 @@ unlock();
       }
       const viewerPassword = passwordInput?.value || '';
       const viewerPasswordHash = viewerPassword ? await hashPasswordText(viewerPassword) : '';
-      pendingSharePayload = buildViewerSharePayload(project, viewerPasswordHash);
-      pendingSharePublished = false;
+      const isPublished = !!project.shareId;
+      pendingSharePayload = buildViewerSharePayload(project, viewerPasswordHash, project.shareId);
+      pendingSharePublished = isPublished;
       const output = document.getElementById('shareUrlText');
       const meta = document.getElementById('shareMetaText');
       const firebaseInput = document.getElementById('shareFirebaseConfig');
       if (firebaseInput && window.ScriptMakerFirebaseShare) {
         firebaseInput.value = window.ScriptMakerFirebaseShare.configTextForInput();
       }
-      const copyButton = document.getElementById('shareCopyButton');
       if (output) {
-        output.value = '';
-        output.classList.add('hidden');
+        output.value = isPublished ? buildViewerShareUrl(pendingSharePayload) : '';
       }
-      if (copyButton) copyButton.classList.add('hidden');
       if (meta) meta.innerText = (pendingSharePayload.title || '\u53f0\u672c') + ' / ' + pendingSharePayload.project.talks.length + '\u4ef6 / id: ' + pendingSharePayload.shareId;
-      setShareStatus('\u300c\u5171\u6709URL\u3092\u4f5c\u6210\u300d\u3092\u62bc\u3059\u3068Firestore\u306b\u4fdd\u5b58\u3057\u3066URL\u3092\u8868\u793a\u3057\u307e\u3059\u3002', '');
+      updateShareModalMode(isPublished);
+      setShareStatus(isPublished
+        ? '\u516c\u958b\u6e08\u307f\u3067\u3059\u3002\u53f0\u672c\u3092\u5909\u66f4\u3057\u305f\u5834\u5408\u306f\u300c\u5171\u6709\u30c7\u30fc\u30bf\u3092\u66f4\u65b0\u300d\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002'
+        : '\u521d\u56de\u306f\u300c\u516c\u958bURL\u3092\u4f5c\u6210\u300d\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002', '');
       openModal('shareModal');
     }
 
@@ -2244,6 +2263,8 @@ unlock();
         await openShareModal();
         if (!pendingSharePayload) return;
       }
+      const project = state.projects[state.currentProjectId];
+      if (!project) return;
       const helper = window.ScriptMakerFirebaseShare;
       if (!helper) {
         setShareStatus('Firebase\u5171\u6709\u30e2\u30b8\u30e5\u30fc\u30eb\u3092\u8aad\u307f\u8fbc\u3081\u307e\u305b\u3093\u3002', 'error');
@@ -2251,7 +2272,6 @@ unlock();
       }
       const output = document.getElementById('shareUrlText');
       const meta = document.getElementById('shareMetaText');
-      const copyButton = document.getElementById('shareCopyButton');
       const configText = document.getElementById('shareFirebaseConfig')?.value || '';
       try {
         setShareStatus('Firestore\u3078\u5171\u6709\u30c7\u30fc\u30bf\u3092\u4fdd\u5b58\u4e2d...', '');
@@ -2261,19 +2281,27 @@ unlock();
         } else {
           localStorage.removeItem(SCRIPTMAKER_SHARE_VIEWER_PASSWORD_KEY);
         }
-        pendingSharePayload.viewerPasswordHash = viewerPassword ? await hashPasswordText(viewerPassword) : '';
+        const wasPublished = !!project.shareId;
+        if (!project.shareId) {
+          project.shareId = pendingSharePayload.shareId || generateShareId();
+          project.shareCreatedAt = new Date().toISOString();
+        }
+        pendingSharePayload = buildViewerSharePayload(project, viewerPassword ? await hashPasswordText(viewerPassword) : '', project.shareId);
         const config = helper.configuredConfig(configText);
         helper.saveConfig(config);
         await helper.saveShare(pendingSharePayload, config);
+        saveState();
         const url = buildViewerShareUrl(pendingSharePayload);
         if (output) {
           output.value = url;
           output.classList.remove('hidden');
         }
-        if (copyButton) copyButton.classList.remove('hidden');
+        updateShareModalMode(true);
         if (meta) meta.innerText = (pendingSharePayload.title || '\u53f0\u672c') + ' / ' + pendingSharePayload.project.talks.length + '\u4ef6 / id: ' + pendingSharePayload.shareId;
         pendingSharePublished = true;
-        setShareStatus('\u5171\u6709URL\u3092\u4f5c\u6210\u3057\u307e\u3057\u305f\u3002\u6b21\u306b\u300cURL\u3092\u30b3\u30d4\u30fc\u300d\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002', 'success');
+        setShareStatus(wasPublished
+          ? '\u5171\u6709\u30c7\u30fc\u30bf\u3092\u66f4\u65b0\u3057\u307e\u3057\u305f\u3002\u3053\u306eURL\u3067\u6700\u65b0\u7248\u3092\u898b\u3089\u308c\u307e\u3059\u3002'
+          : '\u516c\u958bURL\u3092\u4f5c\u6210\u3057\u307e\u3057\u305f\u3002\u6b21\u306b\u300c\u516c\u958bURL\u3092\u30b3\u30d4\u30fc\u300d\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002', 'success');
       } catch (error) {
         console.error('Firebase share failed:', error);
         setShareStatus((error.message || 'Firebase\u3078\u306e\u4fdd\u5b58\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002') + ' JSON\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u65b9\u5f0f\u306f\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3068\u3057\u3066\u5229\u7528\u3067\u304d\u307e\u3059\u3002', 'error');
@@ -2321,6 +2349,19 @@ unlock();
       link.remove();
       URL.revokeObjectURL(url);
       setShareStatus('JSON\u3092\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u3057\u307e\u3057\u305f\u3002Share/data/ \u306b\u8ffd\u52a0\u3059\u308b\u3068Viewer\u3067\u958b\u3051\u307e\u3059\u3002', 'success');
+    }
+
+    async function recreateProjectShareUrl() {
+      const project = state.projects[state.currentProjectId];
+      if (!project) return;
+      if (!confirm('\u65b0\u3057\u3044\u516c\u958bURL\u3092\u4f5c\u308a\u76f4\u3057\u307e\u3059\u304b\uff1f\u65e7URL\u306f\u305d\u306e\u307e\u307e\u6b8b\u308a\u307e\u3059\u304c\u3001\u4eca\u5f8c\u306e\u66f4\u65b0\u306f\u65b0URL\u5074\u306b\u53cd\u6620\u3055\u308c\u307e\u3059\u3002')) return;
+      project.shareId = generateShareId();
+      project.shareCreatedAt = new Date().toISOString();
+      saveState();
+      const viewerPassword = document.getElementById('shareViewerPassword')?.value || '';
+      pendingSharePayload = buildViewerSharePayload(project, viewerPassword ? await hashPasswordText(viewerPassword) : '', project.shareId);
+      pendingSharePublished = false;
+      await publishFirebaseShareUrl();
     }
 
     async function copyShareUrl() {

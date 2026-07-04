@@ -157,7 +157,8 @@
     const chunkQuery = query(collection(rootRef, "chunks"), orderBy("index", "asc"));
     const chunkSnap = await getDocs(chunkQuery);
     if (chunkSnap.empty) return null;
-    const json = chunkSnap.docs.map(item => item.data().data || "").join("");
+    const docs = Number.isFinite(root.chunkCount) ? chunkSnap.docs.slice(0, root.chunkCount) : chunkSnap.docs;
+    const json = docs.map(item => item.data().data || "").join("");
     return JSON.parse(json);
   }
 
