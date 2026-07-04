@@ -69,8 +69,12 @@ pwa/
 アプリ内データはこれまで通り `localStorage` の `script_assistant_data_v21` に保存されます。PWA化により保存キーは変更していません。
 
 注意: URLが変わるとブラウザ上は別アプリ扱いになり、既存localStorageは自動移行されません。同じ公開URLで使い続ける場合は保存データを維持できます。
-## Google Drive共有機能
+## Firebase Firestore sharing
 
-ScriptMakerの標準共有方式はGoogle Drive向けの閲覧専用HTML共有です。
+The standard sharing flow uses Firebase Firestore. The Editor saves a read-only share payload to Firestore and creates a short Viewer URL:
 
-使い方、Google Driveへの保存方法、声優さんへ共有リンクを送る手順は `DRIVE-SETUP.md` を確認してください。
+`https://malomalo413.github.io/ScriptMaker/Viewer/?id=share_id`
+
+See `FIREBASE-SETUP.md` for Firebase project setup, Firestore rules, and `js/firebase-config.js` configuration.
+
+Google Drive is kept as an optional HTML export path. Use the share modal's HTML export buttons when you need a standalone read-only HTML file. See `DRIVE-SETUP.md` for that fallback flow.

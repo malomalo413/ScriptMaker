@@ -2099,10 +2099,16 @@ unlock();
     }
 
     async function openSharedViewer() {
-      const payload = ensureSharePayload();
-      const url = URL.createObjectURL(driveViewerBlob(payload));
+      ensureSharePayload();
+      if (!pendingSharePublished) {
+        await publishFirebaseShareUrl();
+      }
+      const url = currentShareUrl();
+      if (!url) {
+        setShareStatus('Firebase\u3067\u5171\u6709URL\u3092\u4f5c\u6210\u3057\u3066\u304b\u3089Viewer\u3092\u958b\u3044\u3066\u304f\u3060\u3055\u3044\u3002', 'error');
+        return;
+      }
       window.open(url, '_blank');
-      setTimeout(() => URL.revokeObjectURL(url), 30000);
     }
 
     async function postShareToWorker(payload, workerUrl) {
@@ -2135,9 +2141,13 @@ unlock();
       pendingSharePublished = false;
       const output = document.getElementById('shareUrlText');
       const meta = document.getElementById('shareMetaText');
-      if (output) output.value = '';
-      if (meta) meta.innerText = (pendingSharePayload.title || '\u53f0\u672c') + ' / ' + pendingSharePayload.project.talks.length + '\u4ef6 / HTML\u5171\u6709';
-      setShareStatus('HTML\u3092\u4fdd\u5b58\u3057\u3066Google Drive\u306b\u30a2\u30c3\u30d7\u30ed\u30fc\u30c9\u3057\u3001Drive\u3067\u5171\u6709\u30ea\u30f3\u30af\u3092\u4f5c\u6210\u3057\u3066\u304f\u3060\u3055\u3044\u3002', '');
+      const firebaseInput = document.getElementById('shareFirebaseConfig');
+      if (firebaseInput && window.ScriptMakerFirebaseShare) {
+        firebaseInput.value = window.ScriptMakerFirebaseShare.configTextForInput();
+      }
+      if (output) output.value = buildViewerShareUrl(pendingSharePayload);
+      if (meta) meta.innerText = (pendingSharePayload.title || '\u53f0\u672c') + ' / ' + pendingSharePayload.project.talks.length + '\u4ef6 / id: ' + pendingSharePayload.shareId;
+      setShareStatus('Firebase Firestore\u306b\u4fdd\u5b58\u3059\u308b\u3068\u3001\u3053\u306e\u77ed\u3044URL\u3067Viewer\u304c\u958b\u3051\u307e\u3059\u3002Google Drive\u7528HTML\u306f\u300cHTML\u66f8\u304d\u51fa\u3057\u300d\u304b\u3089\u4fdd\u5b58\u3067\u304d\u307e\u3059\u3002', '');
       openModal('shareModal');
     }
 
@@ -2255,9 +2265,12 @@ unlock();
 
     async function copyShareUrl() {
       const text = document.getElementById('shareUrlText');
+      if (pendingSharePayload && !pendingSharePublished) {
+        await publishFirebaseShareUrl();
+      }
       const value = text ? text.value.trim() : '';
       if (!value) {
-        setShareStatus('Google Driveで共有リンクを作成し、この欄に貼り付けてからコピーしてください。', 'error');
+        setShareStatus('Firebase config\u3092\u8a2d\u5b9a\u3057\u3066\u5171\u6709URL\u3092\u4f5c\u6210\u3057\u3066\u304f\u3060\u3055\u3044\u3002\u30b3\u30d4\u30fc\u3067\u304d\u306a\u3044\u5834\u5408\u306fURL\u3092\u9577\u62bc\u3057\u3057\u3066\u30b3\u30d4\u30fc\u3057\u3066\u304f\u3060\u3055\u3044\u3002', 'error');
         return;
       }
       const ok = await tryClipboardCopy(value);
