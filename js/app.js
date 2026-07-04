@@ -826,6 +826,47 @@ let state = {
       return '\u9078\u629e\u4e2d: ' + count + '\u4ef6';
     }
 
+    function captureSceneWallpaperScrollState(sceneId, talkId) {
+      const modalContent = document.querySelector('#wallpaperModal .modal-content');
+      const sceneList = document.getElementById('sceneWallpaperList');
+      const talkList = sceneId ? document.getElementById('sceneTalkList_' + sceneId) : null;
+      const target = sceneId && talkId ? document.querySelector('#sceneTalkList_' + sceneId + ' .scene-talk-option[data-talk-id="' + talkId + '"]') : null;
+      return {
+        modalScrollTop: modalContent ? modalContent.scrollTop : 0,
+        sceneListScrollTop: sceneList ? sceneList.scrollTop : 0,
+        talkListScrollTop: talkList ? talkList.scrollTop : 0,
+        sceneId,
+        talkId,
+        targetTop: target ? target.getBoundingClientRect().top : null
+      };
+    }
+
+    function restoreSceneWallpaperScrollState(scrollState) {
+      if (!scrollState) return;
+      const modalContent = document.querySelector('#wallpaperModal .modal-content');
+      const sceneList = document.getElementById('sceneWallpaperList');
+      const talkList = scrollState.sceneId ? document.getElementById('sceneTalkList_' + scrollState.sceneId) : null;
+      if (modalContent) modalContent.scrollTop = scrollState.modalScrollTop || 0;
+      if (sceneList) sceneList.scrollTop = scrollState.sceneListScrollTop || 0;
+      if (talkList) talkList.scrollTop = scrollState.talkListScrollTop || 0;
+
+      if (scrollState.targetTop === null || !scrollState.sceneId || !scrollState.talkId) return;
+      requestAnimationFrame(() => {
+        const target = document.querySelector('#sceneTalkList_' + scrollState.sceneId + ' .scene-talk-option[data-talk-id="' + scrollState.talkId + '"]');
+        if (!target) return;
+        const nextTop = target.getBoundingClientRect().top;
+        const delta = nextTop - scrollState.targetTop;
+        if (talkList && Math.abs(delta) > 1) talkList.scrollTop += delta;
+        else if (modalContent && Math.abs(delta) > 1) modalContent.scrollTop += delta;
+      });
+    }
+
+    function rerenderSceneWallpaperListKeepingScroll(sceneId, talkId) {
+      const scrollState = captureSceneWallpaperScrollState(sceneId, talkId);
+      renderSceneWallpaperList();
+      restoreSceneWallpaperScrollState(scrollState);
+    }
+
     function addSceneWallpaper() {
       const nextIndex = editingSceneWallpapers.length + 1;
       editingSceneWallpapers.push({ id: 'scene_' + Date.now() + '_' + Math.floor(Math.random() * 1000), name: '\u30b7\u30fc\u30f3' + nextIndex, talkIds: [], image: '', size: 100, offsetX: 50, offsetY: 50 });
@@ -854,7 +895,7 @@ let state = {
       });
       if (checked) scene.talkIds = [...(scene.talkIds || []), talkId];
       enforceUniqueSceneTalkSelections(editingSceneWallpapers);
-      renderSceneWallpaperList();
+      rerenderSceneWallpaperListKeepingScroll(sceneId, talkId);
     }
 
     function selectAllSceneTalks(sceneId) {
@@ -869,14 +910,14 @@ let state = {
       });
       scene.talkIds = [...new Set([...(scene.talkIds || []), ...ids])];
       enforceUniqueSceneTalkSelections(editingSceneWallpapers);
-      renderSceneWallpaperList();
+      rerenderSceneWallpaperListKeepingScroll(sceneId);
     }
 
     function clearSceneTalks(sceneId) {
       const scene = editingSceneWallpapers.find(item => item.id === sceneId);
       if (!scene) return;
       scene.talkIds = [];
-      renderSceneWallpaperList();
+      rerenderSceneWallpaperListKeepingScroll(sceneId);
     }
 
     function getVisibleSceneTalkIds(sceneId) {
