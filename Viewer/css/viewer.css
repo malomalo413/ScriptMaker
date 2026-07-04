@@ -114,6 +114,16 @@ html, body {
   font-size: 12px;
   font-weight: 800;
 }
+.viewer-count-field span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.viewer-count-field span input[type="checkbox"] {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 19px;
+}
 .viewer-count-field input {
   width: 100%;
   min-height: 38px;
@@ -121,6 +131,10 @@ html, body {
   border-radius: 8px;
   padding: 8px 10px;
   font-size: 15px;
+}
+.viewer-count-field span input[type="checkbox"] {
+  min-height: auto;
+  padding: 0;
 }
 .viewer-count-check {
   display: flex;

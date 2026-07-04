@@ -3,6 +3,7 @@ const VIEWER_SYSTEM_NAME = '\u30b7\u30b9\u30c6\u30e0';
 const VIEWER_RIGHT_SIDE_PREFIX = 'scriptmaker_viewer_right_side_v1:';
 const VIEWER_PASSWORD_HASH_PREFIX = 'scriptmaker_viewer_password_hash_v1:';
 const VIEWER_COUNT_SETTING_PREFIX = 'scriptmaker_viewer_count_settings_v1:';
+const VIEWER_DEFAULT_EXCLUDE_CHARS = '\u3001\u3002\u300c\u300d\uff08\uff09\u30fc\u301c\uff1f\uff01.';
 const SCRIPTMAKER_SHARE_DATA_BASE_URL = '../Share/data/';
 const SCRIPTMAKER_SHARE_WORKER_URL = '';
 
@@ -11,7 +12,7 @@ let viewerShareKey = 'default';
 let viewerPasswordHash = '';
 let pendingViewerProject = null;
 let rightSideSetting = { mode: 'editor', names: [] };
-let countSetting = { excludeChars: '', showNumbers: true, outputNumbers: false };
+let countSetting = { useExcludeChars: false, excludeChars: VIEWER_DEFAULT_EXCLUDE_CHARS, showNumbers: true };
 let activeLayer = 0;
 let currentWallpaperKey = '';
 let raf = 0;
@@ -142,13 +143,13 @@ function loadCountSetting() {
   try {
     const stored = JSON.parse(localStorage.getItem(countStorageKey()) || 'null');
     countSetting = {
-      excludeChars: typeof stored?.excludeChars === 'string' ? stored.excludeChars : '',
+      useExcludeChars: !!stored?.useExcludeChars,
+      excludeChars: typeof stored?.excludeChars === 'string' ? stored.excludeChars : VIEWER_DEFAULT_EXCLUDE_CHARS,
       showNumbers: stored?.showNumbers !== false,
-      outputNumbers: !!stored?.outputNumbers
     };
   } catch (error) {
     console.warn('Viewer count setting load failed', error);
-    countSetting = { excludeChars: '', showNumbers: true, outputNumbers: false };
+    countSetting = { useExcludeChars: false, excludeChars: VIEWER_DEFAULT_EXCLUDE_CHARS, showNumbers: true };
   }
 }
 
@@ -161,6 +162,7 @@ function formatNo(index) {
 }
 
 function countedText(text) {
+  if (!countSetting.useExcludeChars) return text || '';
   const customChars = countSetting.excludeChars || '';
   if (!customChars) return text || '';
   const excluded = new Set([...customChars]);
@@ -184,14 +186,14 @@ function renderCountPanel() {
   const total = document.getElementById('viewerCountTotal');
   const breakdown = document.getElementById('viewerCountBreakdown');
   const exclude = document.getElementById('viewerExcludeChars');
+  const useExclude = document.getElementById('viewerUseExcludeChars');
   const showNumbers = document.getElementById('viewerShowNumbers');
-  const outputNumbers = document.getElementById('viewerOutputNumbers');
   if (!panel || !total || !breakdown || !viewerProject) return;
 
   panel.classList.remove('hidden');
   if (exclude && exclude.value !== countSetting.excludeChars) exclude.value = countSetting.excludeChars;
+  if (useExclude) useExclude.checked = !!countSetting.useExcludeChars;
   if (showNumbers) showNumbers.checked = countSetting.showNumbers !== false;
-  if (outputNumbers) outputNumbers.checked = !!countSetting.outputNumbers;
 
   const result = calculateTextCounts(viewerProject);
   total.textContent = '\u5408\u8a08\u6587\u5b57\u6570\uff1a' + result.total + '\u6587\u5b57';
@@ -328,8 +330,15 @@ function useEditorSetting() {
 
 function initCountControls() {
   const exclude = document.getElementById('viewerExcludeChars');
+  const useExclude = document.getElementById('viewerUseExcludeChars');
   const showNumbers = document.getElementById('viewerShowNumbers');
-  const outputNumbers = document.getElementById('viewerOutputNumbers');
+  if (useExclude) {
+    useExclude.addEventListener('change', () => {
+      countSetting.useExcludeChars = useExclude.checked;
+      saveCountSetting();
+      renderCountPanel();
+    });
+  }
   if (exclude) {
     exclude.addEventListener('input', () => {
       countSetting.excludeChars = exclude.value || '';
@@ -342,12 +351,6 @@ function initCountControls() {
       countSetting.showNumbers = showNumbers.checked;
       saveCountSetting();
       updateNumberVisibility();
-    });
-  }
-  if (outputNumbers) {
-    outputNumbers.addEventListener('change', () => {
-      countSetting.outputNumbers = outputNumbers.checked;
-      saveCountSetting();
     });
   }
 }
