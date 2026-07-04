@@ -498,20 +498,30 @@ function currentTalkId() {
   const timeline = document.getElementById('viewerTimeline');
   const rows = [...timeline.querySelectorAll('.viewer-talk')];
   if (!rows.length) return null;
-  const rect = timeline.getBoundingClientRect();
-  const anchor = rect.top + Math.min(90, Math.max(24, rect.height * 0.18));
-  let best = rows[0];
-  let distance = Infinity;
-  for (const row of rows) {
+  const viewportHeight = window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight || 0;
+  const anchor = viewportHeight * 0.6;
+  const visibleRows = rows.filter(row => {
     const rowRect = row.getBoundingClientRect();
-    const target = Math.max(rowRect.top, Math.min(rowRect.bottom, anchor));
-    const diff = Math.abs(target - anchor);
-    if (diff < distance) {
-      best = row;
-      distance = diff;
+    return rowRect.bottom >= 0 && rowRect.top <= viewportHeight;
+  });
+  const candidates = visibleRows.length ? visibleRows : rows;
+  let current = candidates[0];
+  let hasPassedAnchor = false;
+  let nearestDistance = Infinity;
+  for (const row of candidates) {
+    const rowRect = row.getBoundingClientRect();
+    if (rowRect.top <= anchor) {
+      current = row;
+      hasPassedAnchor = true;
+      continue;
+    }
+    const distance = Math.abs(rowRect.top - anchor);
+    if (!hasPassedAnchor && distance < nearestDistance) {
+      current = row;
+      nearestDistance = distance;
     }
   }
-  return best.dataset.talkId;
+  return current.dataset.talkId;
 }
 
 function applyWallpaper(force = false) {
