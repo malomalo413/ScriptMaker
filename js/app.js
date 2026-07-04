@@ -867,6 +867,35 @@ let state = {
       restoreSceneWallpaperScrollState(scrollState);
     }
 
+    function updateSceneTalkCountLabels() {
+      editingSceneWallpapers.forEach(scene => {
+        const countLabel = document.getElementById('sceneTalkCount_' + scene.id);
+        if (countLabel) countLabel.textContent = getSceneTalkCountLabel(scene);
+      });
+    }
+
+    function syncSceneTalkSelectionDom(talkId) {
+      const owner = editingSceneWallpapers.find(scene => Array.isArray(scene.talkIds) && scene.talkIds.includes(talkId)) || null;
+      document.querySelectorAll('.scene-talk-option').forEach(row => {
+        if (row.dataset.talkId !== talkId) return;
+        const list = row.closest('.scene-talk-list');
+        const sceneId = list ? list.id.replace(/^sceneTalkList_/, '') : '';
+        const input = row.querySelector('input[type="checkbox"]');
+        const textWrap = row.querySelector('span');
+        const oldOwnerLabel = row.querySelector('small');
+        const isOwnerScene = !!owner && owner.id === sceneId;
+        if (input) input.checked = isOwnerScene;
+        row.classList.toggle('scene-talk-owned', !!owner && !isOwnerScene);
+        if (oldOwnerLabel) oldOwnerLabel.remove();
+        if (owner && !isOwnerScene && textWrap) {
+          const ownerLabel = document.createElement('small');
+          ownerLabel.textContent = owner.name + '\u3067\u9078\u629e\u4e2d';
+          textWrap.appendChild(ownerLabel);
+        }
+      });
+      updateSceneTalkCountLabels();
+    }
+
     function addSceneWallpaper() {
       const nextIndex = editingSceneWallpapers.length + 1;
       editingSceneWallpapers.push({ id: 'scene_' + Date.now() + '_' + Math.floor(Math.random() * 1000), name: '\u30b7\u30fc\u30f3' + nextIndex, talkIds: [], image: '', size: 100, offsetX: 50, offsetY: 50 });
@@ -895,7 +924,7 @@ let state = {
       });
       if (checked) scene.talkIds = [...(scene.talkIds || []), talkId];
       enforceUniqueSceneTalkSelections(editingSceneWallpapers);
-      rerenderSceneWallpaperListKeepingScroll(sceneId, talkId);
+      syncSceneTalkSelectionDom(talkId);
     }
 
     function selectAllSceneTalks(sceneId) {
