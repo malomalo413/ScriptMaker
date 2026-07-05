@@ -238,8 +238,8 @@
       flex-shrink: 0;
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 7px 12px;
+      gap: 8px;
+      padding: 9px 12px;
       background: rgba(255, 255, 255, 0.9);
       border-bottom: 1px solid var(--border-color);
       color: #475569;
@@ -247,19 +247,37 @@
       font-weight: 800;
       backdrop-filter: blur(8px);
     }
+    .display-mode-bar > span {
+      flex-shrink: 0;
+      font-size: 13px;
+      color: #334155;
+    }
     .display-mode-bar label {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      min-height: 28px;
-      padding: 4px 8px;
-      border-radius: 999px;
-      background: rgba(241, 245, 249, .92);
+      justify-content: center;
+      min-height: 36px;
+      min-width: 92px;
+      padding: 7px 12px;
+      border: 1px solid rgba(148, 163, 184, .55);
+      border-radius: 10px;
+      background: rgba(248, 250, 252, .96);
+      color: #334155;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, .08);
       white-space: nowrap;
+      cursor: pointer;
+      transition: background .15s ease, color .15s ease, border-color .15s ease, transform .15s ease;
+    }
+    .display-mode-bar label:has(input:checked) {
+      background: #3b82f6;
+      border-color: #2563eb;
+      color: #fff;
+      transform: translateY(-1px);
     }
     .display-mode-bar input {
-      width: 16px;
-      height: 16px;
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
     }
     .meta-stats {
       padding: 8px 12px;
