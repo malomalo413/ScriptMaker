@@ -279,6 +279,21 @@
       opacity: 0;
       pointer-events: none;
     }
+    .orientation-hint {
+      min-height: 32px;
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 9px;
+      background: #fff7ed;
+      color: #9a3412;
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .orientation-hint.hidden {
+      display: none;
+    }
     .meta-stats {
       padding: 8px 12px;
       font-size: 12px;

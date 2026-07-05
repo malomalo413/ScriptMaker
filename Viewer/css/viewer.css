@@ -121,6 +121,21 @@ html, body {
   opacity: 0;
   pointer-events: none;
 }
+.viewer-orientation-hint {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 9px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.viewer-orientation-hint.hidden {
+  display: none;
+}
 .viewer-count-panel {
   position: relative;
   z-index: 2;

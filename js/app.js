@@ -47,6 +47,7 @@ let state = {
     let pendingSharePayload = null;
     let pendingSharePublished = false;
     let editorDisplayMode = localStorage.getItem(SCRIPTMAKER_EDITOR_DISPLAY_MODE_KEY) === 'script' ? 'script' : 'chat';
+    let editorRequestedFullscreenForOrientation = false;
 
     let originalViewportHeight = window.innerHeight;
     const GEMINI_MODEL_CANDIDATES = [
@@ -216,6 +217,7 @@ let state = {
       initSceneWallpaperScroll();
       initNumberSettingsControls();
       initEditorDisplayModeControls();
+      syncEditorOrientationForDisplayMode(false);
     };
 
     setTimeout(initEditorAuthGate, 0);
@@ -1328,6 +1330,7 @@ let state = {
         input.checked = input.value === editorDisplayMode;
       });
       applyEditorDisplayModeClass();
+      updateEditorOrientationHint(false);
     }
 
     function setEditorDisplayMode(mode) {
@@ -1336,6 +1339,80 @@ let state = {
       initEditorDisplayModeControls();
       renderTimeline();
       applyProjectWallpaper(true);
+      syncEditorOrientationForDisplayMode(true);
+    }
+
+    function isTouchScreenForOrientationLock() {
+      return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+    }
+
+    function updateEditorOrientationHint(show) {
+      document.getElementById('editorOrientationHint')?.classList.toggle('hidden', !show);
+    }
+
+    async function requestEditorFullscreenForOrientation() {
+      if (document.fullscreenElement || !document.documentElement.requestFullscreen) return true;
+      try {
+        await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+        editorRequestedFullscreenForOrientation = true;
+        return true;
+      } catch (error) {
+        console.warn('Fullscreen request before orientation lock failed', error);
+        return false;
+      }
+    }
+
+    async function lockEditorLandscapeOrientation(fromUserGesture) {
+      if (!isTouchScreenForOrientationLock()) {
+        updateEditorOrientationHint(false);
+        return;
+      }
+      if (!screen.orientation?.lock) {
+        updateEditorOrientationHint(true);
+        return;
+      }
+      try {
+        await screen.orientation.lock('landscape');
+        updateEditorOrientationHint(false);
+        return;
+      } catch (error) {
+        console.warn('Landscape orientation lock failed', error);
+      }
+      if (fromUserGesture && await requestEditorFullscreenForOrientation()) {
+        try {
+          await screen.orientation.lock('landscape');
+          updateEditorOrientationHint(false);
+          return;
+        } catch (error) {
+          console.warn('Landscape orientation lock after fullscreen failed', error);
+        }
+      }
+      updateEditorOrientationHint(true);
+    }
+
+    async function unlockEditorOrientation() {
+      updateEditorOrientationHint(false);
+      try {
+        screen.orientation?.unlock?.();
+      } catch (error) {
+        console.warn('Orientation unlock failed', error);
+      }
+      if (editorRequestedFullscreenForOrientation && document.fullscreenElement && document.exitFullscreen) {
+        try {
+          await document.exitFullscreen();
+        } catch (error) {
+          console.warn('Exit fullscreen after orientation unlock failed', error);
+        }
+      }
+      editorRequestedFullscreenForOrientation = false;
+    }
+
+    function syncEditorOrientationForDisplayMode(fromUserGesture = false) {
+      if (editorDisplayMode === 'script') {
+        lockEditorLandscapeOrientation(fromUserGesture);
+      } else {
+        unlockEditorOrientation();
+      }
     }
 
     function applyEditorDisplayModeClass() {

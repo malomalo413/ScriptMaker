@@ -21,6 +21,7 @@ let viewerShareIdMissing = false;
 let viewerLoadErrorType = '';
 let printAssetsReadyPromise = Promise.resolve();
 let viewerDisplayMode = 'chat';
+let viewerRequestedFullscreenForOrientation = false;
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -270,6 +271,7 @@ function applyViewerDisplayModeClass() {
   document.querySelectorAll('input[name="viewerDisplayMode"]').forEach(input => {
     input.checked = input.value === viewerDisplayMode;
   });
+  updateViewerOrientationHint(false);
 }
 
 function setViewerDisplayMode(mode) {
@@ -279,6 +281,80 @@ function setViewerDisplayMode(mode) {
   renderTimeline();
   preparePrintPages();
   applyWallpaper(true);
+  syncViewerOrientationForDisplayMode(true);
+}
+
+function isTouchScreenForOrientationLock() {
+  return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+}
+
+function updateViewerOrientationHint(show) {
+  document.getElementById('viewerOrientationHint')?.classList.toggle('hidden', !show);
+}
+
+async function requestViewerFullscreenForOrientation() {
+  if (document.fullscreenElement || !document.documentElement.requestFullscreen) return true;
+  try {
+    await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+    viewerRequestedFullscreenForOrientation = true;
+    return true;
+  } catch (error) {
+    console.warn('Viewer fullscreen request before orientation lock failed', error);
+    return false;
+  }
+}
+
+async function lockViewerLandscapeOrientation(fromUserGesture) {
+  if (!isTouchScreenForOrientationLock()) {
+    updateViewerOrientationHint(false);
+    return;
+  }
+  if (!screen.orientation?.lock) {
+    updateViewerOrientationHint(true);
+    return;
+  }
+  try {
+    await screen.orientation.lock('landscape');
+    updateViewerOrientationHint(false);
+    return;
+  } catch (error) {
+    console.warn('Viewer landscape orientation lock failed', error);
+  }
+  if (fromUserGesture && await requestViewerFullscreenForOrientation()) {
+    try {
+      await screen.orientation.lock('landscape');
+      updateViewerOrientationHint(false);
+      return;
+    } catch (error) {
+      console.warn('Viewer landscape orientation lock after fullscreen failed', error);
+    }
+  }
+  updateViewerOrientationHint(true);
+}
+
+async function unlockViewerOrientation() {
+  updateViewerOrientationHint(false);
+  try {
+    screen.orientation?.unlock?.();
+  } catch (error) {
+    console.warn('Viewer orientation unlock failed', error);
+  }
+  if (viewerRequestedFullscreenForOrientation && document.fullscreenElement && document.exitFullscreen) {
+    try {
+      await document.exitFullscreen();
+    } catch (error) {
+      console.warn('Viewer exit fullscreen after orientation unlock failed', error);
+    }
+  }
+  viewerRequestedFullscreenForOrientation = false;
+}
+
+function syncViewerOrientationForDisplayMode(fromUserGesture = false) {
+  if (viewerDisplayMode === 'script') {
+    lockViewerLandscapeOrientation(fromUserGesture);
+  } else {
+    unlockViewerOrientation();
+  }
 }
 
 function loadCountSetting() {
@@ -386,6 +462,7 @@ function renderViewer(project) {
   loadCountSetting();
   loadViewerDisplayMode();
   applyViewerDisplayModeClass();
+  syncViewerOrientationForDisplayMode(false);
   document.getElementById('viewerTitle').innerText = viewerProject.title || '\u53f0\u672c';
   document.getElementById('viewerPdfButton')?.classList.remove('hidden');
   renderSettingsOptions();
