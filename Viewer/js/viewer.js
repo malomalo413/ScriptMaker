@@ -3,7 +3,6 @@ const VIEWER_SYSTEM_NAME = '\u30b7\u30b9\u30c6\u30e0';
 const VIEWER_RIGHT_SIDE_PREFIX = 'scriptmaker_viewer_right_side_v1:';
 const VIEWER_PASSWORD_HASH_PREFIX = 'scriptmaker_viewer_password_hash_v1:';
 const VIEWER_COUNT_SETTING_PREFIX = 'scriptmaker_viewer_count_settings_v1:';
-const VIEWER_DISPLAY_MODE_PREFIX = 'scriptmaker_viewer_display_mode_v1:';
 const VIEWER_DEFAULT_EXCLUDE_CHARS = '\u3001\u3002\u300c\u300d\uff08\uff09\u30fc\u301c\uff1f\uff01.';
 const SCRIPTMAKER_SHARE_DATA_BASE_URL = '../Share/data/';
 const SCRIPTMAKER_SHARE_WORKER_URL = '';
@@ -251,16 +250,8 @@ function countStorageKey() {
   return VIEWER_COUNT_SETTING_PREFIX + viewerShareKey;
 }
 
-function displayModeStorageKey() {
-  return VIEWER_DISPLAY_MODE_PREFIX + viewerShareKey;
-}
-
 function loadViewerDisplayMode() {
-  viewerDisplayMode = localStorage.getItem(displayModeStorageKey()) === 'script' ? 'script' : 'chat';
-}
-
-function saveViewerDisplayMode() {
-  localStorage.setItem(displayModeStorageKey(), viewerDisplayMode);
+  viewerDisplayMode = 'chat';
 }
 
 function applyViewerDisplayModeClass() {
@@ -276,7 +267,6 @@ function applyViewerDisplayModeClass() {
 
 function setViewerDisplayMode(mode) {
   viewerDisplayMode = mode === 'script' ? 'script' : 'chat';
-  saveViewerDisplayMode();
   applyViewerDisplayModeClass();
   renderTimeline();
   preparePrintPages();

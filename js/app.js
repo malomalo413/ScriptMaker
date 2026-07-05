@@ -5,7 +5,6 @@ const SCRIPTMAKER_PUBLIC_VIEWER_URL = 'https://malomalo413.github.io/ScriptMaker
 const SCRIPTMAKER_SHARE_WORKER_URL = '';
 const SCRIPTMAKER_SHARE_WORKER_URL_KEY = 'scriptmaker_share_worker_url_v1';
 const SCRIPTMAKER_SHARE_VIEWER_PASSWORD_KEY = 'scriptmaker_share_viewer_password_v1';
-const SCRIPTMAKER_EDITOR_DISPLAY_MODE_KEY = 'scriptmaker_editor_display_mode_v1';
 
 let state = {
       currentProjectId: null,
@@ -46,7 +45,7 @@ let state = {
     let isApplyingHistory = false;
     let pendingSharePayload = null;
     let pendingSharePublished = false;
-    let editorDisplayMode = localStorage.getItem(SCRIPTMAKER_EDITOR_DISPLAY_MODE_KEY) === 'script' ? 'script' : 'chat';
+    let editorDisplayMode = 'chat';
     let editorRequestedFullscreenForOrientation = false;
 
     let originalViewportHeight = window.innerHeight;
@@ -1335,7 +1334,6 @@ let state = {
 
     function setEditorDisplayMode(mode) {
       editorDisplayMode = mode === 'script' ? 'script' : 'chat';
-      localStorage.setItem(SCRIPTMAKER_EDITOR_DISPLAY_MODE_KEY, editorDisplayMode);
       initEditorDisplayModeControls();
       renderTimeline();
       applyProjectWallpaper(true);
