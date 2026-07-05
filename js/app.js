@@ -20,6 +20,7 @@ let state = {
     let avatarOffsetX = 50;
     let avatarOffsetY = 50;
     let editingTalkIndex = null;
+    let editingTalkId = null;
     let selectedTalkIndexes = new Set();
     let predictedTalks = []; 
     let selectedWallpaperBase64 = "";
@@ -335,6 +336,7 @@ let state = {
       updateHistoryButtons();
       predictedTalks = [];
       editingTalkIndex = null;
+      editingTalkId = null;
       selectedTalkIndexes.clear();
       updateInlineEditState();
       applyProjectWallpaper(true);
@@ -1017,6 +1019,7 @@ let state = {
 
       predictedTalks = [];
       editingTalkIndex = null;
+      editingTalkId = null;
       updateInlineEditState();
       applyProjectWallpaper();
       renderCharSelector();
@@ -1035,6 +1038,7 @@ let state = {
       document.getElementById('modeToggleBtn').classList.remove('editing');
       predictedTalks = [];
       editingTalkIndex = null;
+      editingTalkId = null;
       updateInlineEditState();
       renderProjectList();
     }
@@ -1153,7 +1157,7 @@ let state = {
       document.querySelectorAll('.char-icon-btn').forEach(b => b.classList.remove('active'));
       element.classList.add('active');
       currentCharacter = name;
-      if (editingTalkIndex !== null) updateInlineEditState();
+      if (editingTalkId !== null) updateInlineEditState();
 
       if (shouldKeepKeyboard) {
         setTimeout(() => input.focus({ preventScroll: true }), 0);
@@ -1441,12 +1445,12 @@ let state = {
         if (!talk.id) talk.id = createTalkId();
         const scene = sceneWallpaperForTalk(project, talk);
         const row = document.createElement('article');
-        row.className = 'script-row' + (editingTalkIndex === index ? ' inline-edit-target' : '');
+        row.className = 'script-row' + (editingTalkId === talk.id ? ' inline-edit-target' : '');
         row.dataset.index = index;
         row.dataset.talkId = talk.id;
         row.onclick = function() {
           if (Date.now() < suppressTalkClickUntil || isSortingTalks) return;
-          startInlineTalkEdit(index);
+          startInlineTalkEditById(row.dataset.talkId);
         };
         row.innerHTML =
           '<div class="script-col script-dialogue">' +
@@ -1485,12 +1489,12 @@ let state = {
 
       // 1. 確定済みのトークを描画
       project.talks.forEach((talk, index) => {
+        if (!talk.id) talk.id = createTalkId();
         const isScene = talk.charName === '情景描写';
         const isRight = isProtagonistTalk(project, talk.charName) && !isScene;
         const bubble = document.createElement('div');
-        bubble.className = `chat-bubble ${isScene ? 'scene' : (isRight ? 'right' : 'left')}${editingTalkIndex === index ? ' inline-edit-target' : ''}`;
+        bubble.className = `chat-bubble ${isScene ? 'scene' : (isRight ? 'right' : 'left')}${editingTalkId === talk.id ? ' inline-edit-target' : ''}`;
         if (state.settings?.showTalkNumbers !== false) bubble.classList.add('with-number');
-        if (!talk.id) talk.id = createTalkId();
         bubble.dataset.index = index;
         bubble.dataset.talkId = talk.id;
 
@@ -1498,12 +1502,12 @@ let state = {
           if (Date.now() < suppressTalkClickUntil || isSortingTalks) return;
           if (e.pointerType === 'touch') {
             e.preventDefault();
-            openEditTalkModal(index);
+            startInlineTalkEditById(bubble.dataset.talkId);
           }
         };
         bubble.onclick = function() {
           if (Date.now() < suppressTalkClickUntil || isSortingTalks) return;
-          openEditTalkModal(index);
+          startInlineTalkEditById(bubble.dataset.talkId);
         };
 
         let avatarHtml = '';
@@ -1599,13 +1603,14 @@ let state = {
       const project = state.projects[state.currentProjectId];
       if (!project) return;
 
-      if (editingTalkIndex !== null) {
-        if (editingTalkIndex < 0 || editingTalkIndex >= project.talks.length) {
+      if (editingTalkId !== null) {
+        const resolved = talkById(editingTalkId);
+        if (!resolved) {
           cancelInlineTalkEdit();
           return;
         }
         pushUndoSnapshot();
-        project.talks[editingTalkIndex] = { ...project.talks[editingTalkIndex], charName: currentCharacter, text: text };
+        project.talks[resolved.index] = { ...resolved.talk, charName: currentCharacter, text: text };
         predictedTalks = [];
         saveState();
         finishInlineTalkEdit();
@@ -1928,15 +1933,48 @@ ${keptPredictionText}
     }
 
     function openEditTalkModal(index) {
-      startInlineTalkEdit(index);
+      const project = state.projects[state.currentProjectId];
+      const talk = project?.talks?.[index];
+      startInlineTalkEditById(talk?.id);
+    }
+
+    function talkIndexById(talkId) {
+      const project = state.projects[state.currentProjectId];
+      if (!project || !talkId) return -1;
+      return project.talks.findIndex(talk => talk.id === talkId);
+    }
+
+    function talkById(talkId) {
+      const project = state.projects[state.currentProjectId];
+      const index = talkIndexById(talkId);
+      return index >= 0 ? { talk: project.talks[index], index } : null;
+    }
+
+    function setEditingTalkTarget(talkId) {
+      const resolved = talkById(talkId);
+      if (!resolved) {
+        editingTalkId = null;
+        editingTalkIndex = null;
+        return null;
+      }
+      editingTalkId = resolved.talk.id;
+      editingTalkIndex = resolved.index;
+      return resolved;
     }
 
     function startInlineTalkEdit(index) {
       const project = state.projects[state.currentProjectId];
-      if (!project || index < 0 || index >= project.talks.length) return;
+      const talk = project?.talks?.[index];
+      startInlineTalkEditById(talk?.id);
+    }
 
-      const talk = project.talks[index];
-      editingTalkIndex = index;
+    function startInlineTalkEditById(talkId) {
+      const resolved = setEditingTalkTarget(talkId);
+      if (!resolved) return;
+
+      const talk = resolved.talk;
+      const timeline = document.getElementById('talkTimeline');
+      const previousScrollTop = timeline ? timeline.scrollTop : 0;
       currentCharacter = talk.charName;
       const input = document.getElementById('inputSpeech');
       input.value = talk.text;
@@ -1944,20 +1982,38 @@ ${keptPredictionText}
       updateInlineEditState();
       renderCharSelector();
       renderTimeline();
+      restoreEditingTalkScrollPosition(previousScrollTop);
       input.focus({ preventScroll: true });
       const end = input.value.length;
       input.setSelectionRange(end, end);
-      setTimeout(scrollToBottom, 50);
+    }
+
+    function restoreEditingTalkScrollPosition(previousScrollTop) {
+      const timeline = document.getElementById('talkTimeline');
+      if (!timeline) return;
+      timeline.scrollTop = previousScrollTop;
+      setTimeout(() => {
+        timeline.scrollTop = previousScrollTop;
+        const target = Array.from(timeline.querySelectorAll('[data-talk-id]')).find(item => item.dataset.talkId === editingTalkId);
+        if (!target) return;
+        const timelineRect = timeline.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        if (targetRect.top < timelineRect.top || targetRect.bottom > timelineRect.bottom) {
+          target.scrollIntoView({ block: 'nearest' });
+        }
+      }, 0);
     }
 
     function finishInlineTalkEdit() {
       editingTalkIndex = null;
+      editingTalkId = null;
       clearInputSpeech();
       updateInlineEditState();
     }
 
     function cancelInlineTalkEdit() {
       editingTalkIndex = null;
+      editingTalkId = null;
       clearInputSpeech();
       updateInlineEditState();
       renderTimeline();
@@ -1981,7 +2037,8 @@ ${keptPredictionText}
       const status = document.getElementById('inlineEditStatus');
       const sendButton = document.getElementById('sendButton');
       if (!status || !sendButton) return;
-      const isEditing = editingTalkIndex !== null;
+      const isEditing = editingTalkId !== null && talkIndexById(editingTalkId) >= 0;
+      if (isEditing) editingTalkIndex = talkIndexById(editingTalkId);
       status.classList.toggle('hidden', !isEditing);
       document.body.classList.toggle('inline-talk-editing', isEditing);
       sendButton.innerText = isEditing ? '\u66f4\u65b0' : '\u9001\u4fe1';
@@ -2036,6 +2093,11 @@ ${keptPredictionText}
       pushUndoSnapshot();
       project.talks = project.talks.filter((_, index) => !selectedTalkIndexes.has(index));
       removeTalkIdsFromSceneSettings(project, removedIds);
+      if (editingTalkId && removedIds.includes(editingTalkId)) {
+        editingTalkId = null;
+        editingTalkIndex = null;
+        clearInputSpeech();
+      }
       selectedTalkIndexes.clear();
       predictedTalks = [];
       saveState();
@@ -2050,6 +2112,11 @@ ${keptPredictionText}
       const removed = project.talks[index];
       project.talks.splice(index, 1);
       removeTalkIdsFromSceneSettings(project, removed?.id ? [removed.id] : []);
+      if (removed?.id && removed.id === editingTalkId) {
+        editingTalkId = null;
+        editingTalkIndex = null;
+        clearInputSpeech();
+      }
       normalizeSelectedTalksAfterMutation();
       predictedTalks = [];
       saveState();
@@ -2079,8 +2146,9 @@ ${keptPredictionText}
     }
 
     function openCurrentStageDirectionEditor() {
-      if (editingTalkIndex === null) return;
-      openStageDirectionEditor({ stopPropagation() {} }, editingTalkIndex);
+      const index = talkIndexById(editingTalkId);
+      if (index < 0) return;
+      openStageDirectionEditor({ stopPropagation() {} }, index);
     }
 
     function saveStageDirection() {
