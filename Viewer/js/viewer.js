@@ -12,7 +12,7 @@ let viewerShareKey = 'default';
 let viewerPasswordHash = '';
 let pendingViewerProject = null;
 let rightSideSetting = { mode: 'editor', names: [] };
-let countSetting = { useExcludeChars: false, excludeChars: VIEWER_DEFAULT_EXCLUDE_CHARS, showNumbers: true };
+let countSetting = { useExcludeChars: false, excludeChars: VIEWER_DEFAULT_EXCLUDE_CHARS, showNumbers: true, excludeEmoji: false };
 let activeLayer = 0;
 let currentWallpaperKey = '';
 let raf = 0;
@@ -354,10 +354,11 @@ function loadCountSetting() {
       useExcludeChars: !!stored?.useExcludeChars,
       excludeChars: typeof stored?.excludeChars === 'string' ? stored.excludeChars : VIEWER_DEFAULT_EXCLUDE_CHARS,
       showNumbers: stored?.showNumbers !== false,
+      excludeEmoji: !!stored?.excludeEmoji,
     };
   } catch (error) {
     console.warn('Viewer count setting load failed', error);
-    countSetting = { useExcludeChars: false, excludeChars: VIEWER_DEFAULT_EXCLUDE_CHARS, showNumbers: true };
+    countSetting = { useExcludeChars: false, excludeChars: VIEWER_DEFAULT_EXCLUDE_CHARS, showNumbers: true, excludeEmoji: false };
   }
 }
 
@@ -370,17 +371,32 @@ function formatNo(index) {
 }
 
 function countedText(text) {
-  if (!countSetting.useExcludeChars) return text || '';
-  const customChars = countSetting.excludeChars || '';
-  if (!customChars) return text || '';
-  const excluded = new Set([...customChars]);
-  return [...(text || '')].filter(char => !excluded.has(char)).join('');
+  let result = text || '';
+  if (countSetting.useExcludeChars) {
+    const customChars = countSetting.excludeChars || '';
+    if (customChars) {
+      const excluded = new Set([...customChars]);
+      result = [...result].filter(char => !excluded.has(char)).join('');
+    }
+  }
+  if (countSetting.excludeEmoji) {
+    result = removeEmojiLikeChars(result);
+  }
+  return result;
+}
+
+function removeEmojiLikeChars(text) {
+  return String(text || '').replace(/\p{Extended_Pictographic}[\uFE0F\uFE0E]?(?:\u200D\p{Extended_Pictographic}[\uFE0F\uFE0E]?)*|\p{Emoji_Presentation}/gu, '');
+}
+
+function isCountableTalk(talk) {
+  return talk?.charName !== VIEWER_SCENE_NAME && talk?.charName !== VIEWER_SYSTEM_NAME;
 }
 
 function calculateTextCounts(project) {
   const counts = {};
   let total = 0;
-  (project?.talks || []).forEach(talk => {
+  (project?.talks || []).filter(isCountableTalk).forEach(talk => {
     const count = [...countedText(talk.text)].length;
     total += count;
     const name = talk.charName || '\u672a\u8a2d\u5b9a';
@@ -395,12 +411,14 @@ function renderCountPanel() {
   const breakdown = document.getElementById('viewerCountBreakdown');
   const exclude = document.getElementById('viewerExcludeChars');
   const useExclude = document.getElementById('viewerUseExcludeChars');
+  const excludeEmoji = document.getElementById('viewerExcludeEmoji');
   const showNumbers = document.getElementById('viewerShowNumbers');
   if (!panel || !total || !breakdown || !viewerProject) return;
 
   panel.classList.remove('hidden');
   if (exclude && exclude.value !== countSetting.excludeChars) exclude.value = countSetting.excludeChars;
   if (useExclude) useExclude.checked = !!countSetting.useExcludeChars;
+  if (excludeEmoji) excludeEmoji.checked = !!countSetting.excludeEmoji;
   if (showNumbers) showNumbers.checked = countSetting.showNumbers !== false;
 
   const result = calculateTextCounts(viewerProject);
@@ -587,6 +605,7 @@ function useEditorSetting() {
 function initCountControls() {
   const exclude = document.getElementById('viewerExcludeChars');
   const useExclude = document.getElementById('viewerUseExcludeChars');
+  const excludeEmoji = document.getElementById('viewerExcludeEmoji');
   const showNumbers = document.getElementById('viewerShowNumbers');
   if (useExclude) {
     useExclude.addEventListener('change', () => {
@@ -598,6 +617,13 @@ function initCountControls() {
   if (exclude) {
     exclude.addEventListener('input', () => {
       countSetting.excludeChars = exclude.value || '';
+      saveCountSetting();
+      renderCountPanel();
+    });
+  }
+  if (excludeEmoji) {
+    excludeEmoji.addEventListener('change', () => {
+      countSetting.excludeEmoji = excludeEmoji.checked;
       saveCountSetting();
       renderCountPanel();
     });

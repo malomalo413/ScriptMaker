@@ -5,6 +5,7 @@ const SCRIPTMAKER_PUBLIC_VIEWER_URL = 'https://malomalo413.github.io/ScriptMaker
 const SCRIPTMAKER_SHARE_WORKER_URL = '';
 const SCRIPTMAKER_SHARE_WORKER_URL_KEY = 'scriptmaker_share_worker_url_v1';
 const SCRIPTMAKER_SHARE_VIEWER_PASSWORD_KEY = 'scriptmaker_share_viewer_password_v1';
+const SCRIPTMAKER_EDITOR_COUNT_SETTING_KEY = 'scriptmaker_editor_count_settings_v1';
 
 let state = {
       currentProjectId: null,
@@ -2208,12 +2209,19 @@ ${keptPredictionText}
     function initCountControls() {
       const punctuationCheck = document.getElementById('excludePunctuationCheck');
       const customCheck = document.getElementById('excludeCustomCheck');
+      const emojiCheck = document.getElementById('excludeEmojiCheck');
       const customInput = document.getElementById('customExcludeChars');
       const showNumbers = document.getElementById('showTalkNumbersCheck');
       const outputNumbers = document.getElementById('outputTalkNumbersCheck');
+      const storedCountSetting = loadEditorCountSetting();
+      if (emojiCheck) emojiCheck.checked = !!storedCountSetting.excludeEmoji;
       if (showNumbers) showNumbers.checked = state.settings?.showTalkNumbers !== false;
       if (outputNumbers) outputNumbers.checked = !!state.settings?.outputTalkNumbers;
-      [punctuationCheck, customCheck].forEach(el => { el.addEventListener('change', updateMetaStats); });
+      [punctuationCheck, customCheck].forEach(el => { el?.addEventListener('change', updateMetaStats); });
+      emojiCheck?.addEventListener('change', function() {
+        saveEditorCountSetting({ excludeEmoji: this.checked });
+        updateMetaStats();
+      });
       customInput.addEventListener('input', updateMetaStats);
     }
 
@@ -2224,10 +2232,33 @@ ${keptPredictionText}
       if (outputNumbers) outputNumbers.addEventListener('change', function() { state.settings.outputTalkNumbers = this.checked; saveState(); });
     }
 
+    function loadEditorCountSetting() {
+      try {
+        return JSON.parse(localStorage.getItem(SCRIPTMAKER_EDITOR_COUNT_SETTING_KEY) || '{}') || {};
+      } catch (error) {
+        console.warn('Editor count setting load failed', error);
+        return {};
+      }
+    }
+
+    function saveEditorCountSetting(next) {
+      const current = loadEditorCountSetting();
+      localStorage.setItem(SCRIPTMAKER_EDITOR_COUNT_SETTING_KEY, JSON.stringify({ ...current, ...next }));
+    }
+
+    function isCountableTalk(talk) {
+      return talk?.charName !== '\u60c5\u666f\u63cf\u5199' && talk?.charName !== '\u30b7\u30b9\u30c6\u30e0';
+    }
+
+    function removeEmojiLikeChars(text) {
+      return String(text || '').replace(/\p{Extended_Pictographic}[\uFE0F\uFE0E]?(?:\u200D\p{Extended_Pictographic}[\uFE0F\uFE0E]?)*|\p{Emoji_Presentation}/gu, '');
+    }
+
     function getCountedText(text) {
       let result = text || "";
       const excludePunctuation = document.getElementById('excludePunctuationCheck')?.checked;
       const excludeCustom = document.getElementById('excludeCustomCheck')?.checked;
+      const excludeEmoji = document.getElementById('excludeEmojiCheck')?.checked;
       const customChars = document.getElementById('customExcludeChars')?.value || "";
 
       if (excludePunctuation) {
@@ -2237,6 +2268,10 @@ ${keptPredictionText}
       if (excludeCustom && customChars) {
         const customSet = new Set([...customChars]);
         result = [...result].filter(ch => !customSet.has(ch)).join("");
+      }
+
+      if (excludeEmoji) {
+        result = removeEmojiLikeChars(result);
       }
 
       return result;
@@ -2259,7 +2294,7 @@ ${keptPredictionText}
 
       const counts = {};
       let total = 0;
-      project.talks.forEach(t => {
+      project.talks.filter(isCountableTalk).forEach(t => {
         const count = [...getCountedText(t.text)].length;
         total += count;
         counts[t.charName] = (counts[t.charName] || 0) + count;
