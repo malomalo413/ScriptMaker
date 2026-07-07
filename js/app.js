@@ -6,6 +6,7 @@ const SCRIPTMAKER_SHARE_WORKER_URL = '';
 const SCRIPTMAKER_SHARE_WORKER_URL_KEY = 'scriptmaker_share_worker_url_v1';
 const SCRIPTMAKER_SHARE_VIEWER_PASSWORD_KEY = 'scriptmaker_share_viewer_password_v1';
 const SCRIPTMAKER_EDITOR_COUNT_SETTING_KEY = 'scriptmaker_editor_count_settings_v1';
+const SCRIPTMAKER_CHARACTER_LIBRARY_KEY = 'scriptmaker_character_library_v1';
 
 let state = {
       currentProjectId: null,
@@ -17,6 +18,8 @@ let state = {
     let currentCharacter = 'らん';
     let isEditMode = false;
     let editingCharName = null;
+    let charModalMode = 'project-add';
+    let editingLibraryCharacterSignature = null;
     let selectedAvatarBase64 = "";
     let avatarOffsetX = 50;
     let avatarOffsetY = 50;
@@ -203,6 +206,7 @@ let state = {
       }
 
       normalizeProjectData();
+      syncCharacterLibraryFromProjects();
 
       document.getElementById('apiKey').value = state.apiKey;
       document.getElementById('aiToggle').checked = state.aiToggle;
@@ -241,6 +245,7 @@ let state = {
         ensureTalkIds(project);
         normalizeSceneWallpaperSettings(project);
       });
+      syncCharacterLibraryFromProjects();
     }
 
     function createTalkId() {
@@ -263,6 +268,81 @@ let state = {
       const record = { id: createTalkId(), charName, text };
       if (stageDirection && stageDirection.trim()) record.stageDirection = stageDirection.trim();
       return record;
+    }
+
+    function characterLibrarySignature(character) {
+      return String(character?.name || '').trim() + '\u0000' + String(character?.avatar || '');
+    }
+
+    function normalizeLibraryCharacter(character) {
+      const name = String(character?.name || '').trim();
+      if (!name || name === '\u60c5\u666f\u63cf\u5199' || name === '\u30b7\u30b9\u30c6\u30e0') return null;
+      return {
+        name,
+        avatar: character.avatar || '',
+        isRound: character.isRound !== false,
+        zoom: Number(character.zoom) || 100,
+        offsetX: character.offsetX ?? 50,
+        offsetY: character.offsetY ?? 50,
+        createdAt: character.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+    }
+
+    function loadCharacterLibrary() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(SCRIPTMAKER_CHARACTER_LIBRARY_KEY) || '[]');
+        if (!Array.isArray(raw)) return [];
+        const merged = [];
+        raw.forEach(character => mergeCharacterIntoLibraryList(merged, character));
+        return merged;
+      } catch (error) {
+        console.warn('Character library load failed', error);
+        return [];
+      }
+    }
+
+    function saveCharacterLibrary(list) {
+      localStorage.setItem(SCRIPTMAKER_CHARACTER_LIBRARY_KEY, JSON.stringify(list || []));
+    }
+
+    function mergeCharacterIntoLibraryList(list, character) {
+      const normalized = normalizeLibraryCharacter(character);
+      if (!normalized) return list;
+      const signature = characterLibrarySignature(normalized);
+      const index = list.findIndex(item => characterLibrarySignature(item) === signature);
+      if (index >= 0) {
+        list[index] = { ...list[index], ...normalized, createdAt: list[index].createdAt || normalized.createdAt };
+      } else {
+        list.push(normalized);
+      }
+      return list;
+    }
+
+    function registerCharacterInLibrary(character) {
+      const list = loadCharacterLibrary();
+      mergeCharacterIntoLibraryList(list, character);
+      saveCharacterLibrary(list);
+    }
+
+    function syncCharacterLibraryFromProjects() {
+      const list = loadCharacterLibrary();
+      Object.values(state.projects || {}).forEach(project => {
+        (project.characters || []).forEach(character => mergeCharacterIntoLibraryList(list, character));
+      });
+      saveCharacterLibrary(list);
+    }
+
+    function cloneLibraryCharacterForProject(character, isProtagonist) {
+      return {
+        name: character.name,
+        avatar: character.avatar || '',
+        isRound: character.isRound !== false,
+        zoom: Number(character.zoom) || 100,
+        offsetX: character.offsetX ?? 50,
+        offsetY: character.offsetY ?? 50,
+        isProtagonist: !!isProtagonist
+      };
     }
 
     function normalizeSceneWallpaperSettings(project) {
@@ -530,6 +610,7 @@ let state = {
         talks: [],
         folderId: state.currentFolderId || UNCLASSIFIED_FOLDER_ID
       };
+      syncCharacterLibraryFromProjects();
       saveState();
       renderProjectList();
       closeModal('projectModal');
@@ -1080,7 +1161,7 @@ let state = {
 
       const addBtn = document.createElement('button');
       addBtn.className = 'char-add-btn';
-      addBtn.onclick = openCharAddModal;
+      addBtn.onclick = openCharacterLibraryModal;
       addBtn.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>`;
       container.appendChild(addBtn);
 
@@ -1177,7 +1258,9 @@ let state = {
 
     function openCharAddModal() {
       resetAvatarGesture();
+      charModalMode = 'project-add';
       editingCharName = null;
+      editingLibraryCharacterSignature = null;
       selectedAvatarBase64 = "";
       avatarOffsetX = 50;
       avatarOffsetY = 50;
@@ -1196,7 +1279,9 @@ let state = {
 
     function openCharEditModal(name) {
       resetAvatarGesture();
+      charModalMode = 'project-edit';
       editingCharName = name;
+      editingLibraryCharacterSignature = null;
       const project = state.projects[state.currentProjectId];
       const char = project.characters.find(c => c.name === name);
 
@@ -1218,6 +1303,31 @@ let state = {
       avatarOffsetX = char.offsetX ?? 50;
       avatarOffsetY = char.offsetY ?? 50;
       updatePreviewStyle();
+      openModal('charModal');
+    }
+
+    function openLibraryCharacterEdit(signature) {
+      const character = findLibraryCharacter(signature);
+      if (!character) return;
+      resetAvatarGesture();
+      charModalMode = 'library-edit';
+      editingCharName = null;
+      editingLibraryCharacterSignature = signature;
+
+      document.getElementById('charModalTitle').innerText = 'ライブラリのキャラクター編集';
+      document.getElementById('newCharName').value = character.name;
+      document.getElementById('newCharName').disabled = false;
+      selectedAvatarBase64 = character.avatar || '';
+      document.getElementById('charRoundCheck').checked = character.isRound !== false;
+      document.getElementById('charProtagonistCheck').checked = false;
+      document.getElementById('charZoomSlider').value = character.zoom || 100;
+      avatarOffsetX = character.offsetX ?? 50;
+      avatarOffsetY = character.offsetY ?? 50;
+
+      const preview = document.getElementById('avatarPreview');
+      preview.style.backgroundImage = character.avatar ? `url(${character.avatar})` : '';
+      updatePreviewStyle();
+      closeModal('charLibraryModal');
       openModal('charModal');
     }
 
@@ -1265,6 +1375,26 @@ let state = {
       const isProtagonist = document.getElementById('charProtagonistCheck').checked;
       const zoom = parseInt(document.getElementById('charZoomSlider').value);
 
+      if (charModalMode === 'library-edit') {
+        const updated = normalizeLibraryCharacter({
+          name,
+          avatar: selectedAvatarBase64,
+          isRound,
+          zoom,
+          offsetX: avatarOffsetX,
+          offsetY: avatarOffsetY
+        });
+        if (!updated) return;
+        const library = loadCharacterLibrary().filter(item => characterLibrarySignature(item) !== editingLibraryCharacterSignature);
+        mergeCharacterIntoLibraryList(library, updated);
+        saveCharacterLibrary(library);
+        editingLibraryCharacterSignature = null;
+        closeModal('charModal');
+        renderCharacterLibrary();
+        openModal('charLibraryModal');
+        return;
+      }
+
       pushUndoSnapshot();
       if (editingCharName === null) {
         if (project.characters.some(c => c.name === name) || name === '情景描写') {
@@ -1272,7 +1402,9 @@ let state = {
           return;
         }
         if (isProtagonist) project.characters.forEach(c => c.isProtagonist = false);
-        project.characters.push({ name: name, avatar: selectedAvatarBase64, isRound: isRound, zoom: zoom, offsetX: avatarOffsetX, offsetY: avatarOffsetY, isProtagonist: isProtagonist });
+        const newCharacter = { name: name, avatar: selectedAvatarBase64, isRound: isRound, zoom: zoom, offsetX: avatarOffsetX, offsetY: avatarOffsetY, isProtagonist: isProtagonist };
+        project.characters.push(newCharacter);
+        registerCharacterInLibrary(newCharacter);
         currentCharacter = name;
       } else {
         const char = project.characters.find(c => c.name === editingCharName);
@@ -1295,6 +1427,7 @@ let state = {
           char.zoom = zoom;
           char.offsetX = avatarOffsetX;
           char.offsetY = avatarOffsetY;
+          registerCharacterInLibrary(char);
           if (isProtagonist) {
             project.characters.forEach(c => {
               if (c !== char) c.isProtagonist = false;
@@ -1363,6 +1496,94 @@ let state = {
         console.warn('Fullscreen request before orientation lock failed', error);
         return false;
       }
+    }
+
+    function libraryAvatarHtml(character) {
+      if (character.avatar) {
+        const size = Number(character.zoom) || 100;
+        const posX = character.offsetX ?? 50;
+        const posY = character.offsetY ?? 50;
+        return '<div class="character-library-avatar" style="background-image:url(' + character.avatar + ');background-size:' + size + '%;background-position:' + posX + '% ' + posY + '%;"></div>';
+      }
+      return '<div class="character-library-avatar">' + escapeHtml((character.name || '?').slice(0, 2)) + '</div>';
+    }
+
+    function openCharacterLibraryModal() {
+      syncCharacterLibraryFromProjects();
+      renderCharacterLibrary();
+      openModal('charLibraryModal');
+    }
+
+    function renderCharacterLibrary() {
+      const list = document.getElementById('characterLibraryList');
+      const project = state.projects[state.currentProjectId];
+      if (!list || !project) return;
+      const library = loadCharacterLibrary();
+      if (!library.length) {
+        list.innerHTML = '<div class="character-library-empty">まだライブラリにキャラクターがありません。</div>';
+        return;
+      }
+      list.innerHTML = '';
+      library.forEach(character => {
+        const signature = characterLibrarySignature(character);
+        const isAdded = project.characters.some(item => item.name === character.name);
+        const row = document.createElement('div');
+        row.className = 'character-library-item' + (isAdded ? ' is-added' : '');
+        row.dataset.signature = signature;
+        row.innerHTML =
+          libraryAvatarHtml(character) +
+          '<button class="character-library-main" type="button">' +
+            '<span class="character-library-name">' + escapeHtml(character.name) + '</span>' +
+            '<span class="character-library-status">' + (isAdded ? '追加済み' : 'タップして追加') + '</span>' +
+          '</button>' +
+          '<button class="character-library-action" type="button">編集</button>' +
+          '<button class="character-library-action character-library-delete" type="button">削除</button>';
+        row.querySelector('.character-library-main').onclick = () => addCharacterFromLibrary(signature);
+        row.querySelector('.character-library-action').onclick = () => openLibraryCharacterEdit(signature);
+        row.querySelector('.character-library-delete').onclick = () => deleteLibraryCharacter(signature);
+        row.oncontextmenu = event => {
+          event.preventDefault();
+          openLibraryCharacterEdit(signature);
+        };
+        list.appendChild(row);
+      });
+    }
+
+    function findLibraryCharacter(signature) {
+      return loadCharacterLibrary().find(item => characterLibrarySignature(item) === signature) || null;
+    }
+
+    function addCharacterFromLibrary(signature) {
+      const character = findLibraryCharacter(signature);
+      const project = state.projects[state.currentProjectId];
+      if (!character || !project) return;
+      const existing = project.characters.find(item => item.name === character.name);
+      if (existing) {
+        currentCharacter = existing.name;
+        closeModal('charLibraryModal');
+        renderCharSelector();
+        return;
+      }
+      pushUndoSnapshot();
+      const isProtagonist = !project.characters.some(item => item.isProtagonist);
+      if (isProtagonist) project.characters.forEach(item => item.isProtagonist = false);
+      project.characters.push(cloneLibraryCharacterForProject(character, isProtagonist));
+      currentCharacter = character.name;
+      saveState();
+      renderCharSelector();
+      renderTimeline();
+      closeModal('charLibraryModal');
+    }
+
+    function deleteLibraryCharacter(signature) {
+      const library = loadCharacterLibrary().filter(item => characterLibrarySignature(item) !== signature);
+      saveCharacterLibrary(library);
+      renderCharacterLibrary();
+    }
+
+    function openNewCharacterFromLibrary() {
+      closeModal('charLibraryModal');
+      openCharAddModal();
     }
 
     async function lockEditorLandscapeOrientation(fromUserGesture) {

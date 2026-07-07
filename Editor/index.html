@@ -14,11 +14,11 @@
   <link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="../assets/icons/icon-512.png">
-  <link rel="stylesheet" href="../css/styles.css?v=38">
+  <link rel="stylesheet" href="../css/styles.css?v=39">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
   <script src="../js/firebase-config.js?v=30" defer></script>
   <script src="../js/firebase-share.js?v=31" defer></script>
-  <script src="../js/app.js?v=43" defer></script>
+  <script src="../js/app.js?v=44" defer></script>
 </head>
 <body class="auth-locked">
 
@@ -162,6 +162,18 @@
       <div class="modal-actions">
         <button class="btn-modal-cancel" onclick="closeModal('charModal')">キャンセル</button>
         <button class="btn-modal-confirm" id="charConfirmBtn" type="button" ontouchstart="confirmSaveCharacter(); return false;" onpointerdown="confirmSaveCharacter(); return false;" onclick="confirmSaveCharacter(); return false;">決定</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="charLibraryModal" class="custom-modal hidden">
+    <div class="modal-content character-library-modal">
+      <h4>キャラクターライブラリ</h4>
+      <p class="library-help">これまで使ったキャラクターを選んで追加できます。</p>
+      <div id="characterLibraryList" class="character-library-list"></div>
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" onclick="closeModal('charLibraryModal')">閉じる</button>
+        <button class="btn-modal-confirm" onclick="openNewCharacterFromLibrary()">新規キャラクターを作成</button>
       </div>
     </div>
   </div>
