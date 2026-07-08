@@ -39,11 +39,35 @@ service cloud.firestore {
       allow create, update: if request.resource.data.keys().hasOnly([
         'id',
         'title',
+        'data',
         'chunkCount',
         'schemaVersion',
         'createdAt',
         'updatedAt'
       ]);
+      allow delete: if false;
+
+      match /chunks/{chunkId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.keys().hasOnly(['index', 'data'])
+          && request.resource.data.index is int
+          && request.resource.data.data is string;
+        allow delete: if false;
+      }
+    }
+
+    match /editorProjects/{projectId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.keys().hasOnly([
+        'id',
+        'title',
+        'data',
+        'chunkCount',
+        'schemaVersion',
+        'createdAt',
+        'updatedAt'
+      ])
+      && request.resource.data.id == projectId;
       allow delete: if false;
 
       match /chunks/{chunkId} {

@@ -7,6 +7,8 @@ const SCRIPTMAKER_SHARE_WORKER_URL_KEY = 'scriptmaker_share_worker_url_v1';
 const SCRIPTMAKER_SHARE_VIEWER_PASSWORD_KEY = 'scriptmaker_share_viewer_password_v1';
 const SCRIPTMAKER_EDITOR_COUNT_SETTING_KEY = 'scriptmaker_editor_count_settings_v1';
 const SCRIPTMAKER_CHARACTER_LIBRARY_KEY = 'scriptmaker_character_library_v1';
+const SCRIPTMAKER_EDITOR_CLOUD_URL = 'https://malomalo413.github.io/ScriptMaker/Editor/';
+const SCRIPTMAKER_EDITOR_CLOUD_LAST_ID_KEY = 'scriptmaker_editor_cloud_last_project_id_v1';
 
 let state = {
       currentProjectId: null,
@@ -52,6 +54,7 @@ let state = {
     let pendingSharePublished = false;
     let editorDisplayMode = 'chat';
     let editorRequestedFullscreenForOrientation = false;
+    let cloudSyncUrlHandled = false;
 
     let originalViewportHeight = window.innerHeight;
     const GEMINI_MODEL_CANDIDATES = [
@@ -83,6 +86,7 @@ let state = {
       if (hash) sessionStorage.setItem(EDITOR_AUTH_SESSION_KEY, hash);
       document.body.classList.remove('auth-locked');
       document.getElementById('editorAuthGate')?.classList.add('hidden');
+      setTimeout(initCloudSyncFromUrl, 80);
     }
 
     function showEditorAuthGate() {
@@ -223,6 +227,7 @@ let state = {
       initNumberSettingsControls();
       initEditorDisplayModeControls();
       syncEditorOrientationForDisplayMode(false);
+      initCloudSyncFromUrl();
     };
 
     setTimeout(initEditorAuthGate, 0);
@@ -2699,6 +2704,277 @@ ${keptPredictionText}
         console.warn('execCommand copy failed:', error);
         return false;
       }
+    }
+
+    function generateCloudProjectId() {
+      return 'editor_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+    }
+
+    function getCurrentProject() {
+      return state.projects[state.currentProjectId] || null;
+    }
+
+    function buildCloudSyncUrl(projectId) {
+      return SCRIPTMAKER_EDITOR_CLOUD_URL + '#cloud=' + encodeURIComponent(projectId);
+    }
+
+    function parseCloudProjectIdFromText(value) {
+      const raw = String(value || '').trim();
+      if (!raw) return '';
+      const direct = raw.match(/^(editor_[a-z0-9_,-]+)$/i);
+      if (direct) return direct[1];
+      const decoded = safeDecode(raw);
+      const patterns = [
+        /[#?&]cloud=([^&#]+)/i,
+        /[#?&]cloudProject=([^&#]+)/i,
+        /[#?&]editorProject=([^&#]+)/i,
+        /#\/cloud\/([^/?#&]+)/i
+      ];
+      for (const pattern of patterns) {
+        const match = decoded.match(pattern);
+        if (match && match[1]) return safeDecode(match[1]).trim();
+      }
+      const loose = decoded.match(/editor_[a-z0-9_,-]+/i);
+      return loose ? loose[0] : '';
+    }
+
+    function safeDecode(value) {
+      try {
+        return decodeURIComponent(String(value || ''));
+      } catch (_) {
+        return String(value || '');
+      }
+    }
+
+    function initCloudSyncFromUrl() {
+      if (cloudSyncUrlHandled) return;
+      const cloudId = parseCloudProjectIdFromText(location.href);
+      if (!cloudId) return;
+      localStorage.setItem(SCRIPTMAKER_EDITOR_CLOUD_LAST_ID_KEY, cloudId);
+      setTimeout(() => {
+        if (document.body.classList.contains('auth-locked')) return;
+        cloudSyncUrlHandled = true;
+        openCloudSyncModal(cloudId);
+      }, 250);
+    }
+
+    function setCloudSyncStatus(message, type) {
+      const status = document.getElementById('cloudSyncStatus');
+      if (!status) return;
+      status.className = 'share-meta share-status' + (type ? ' is-' + type : '');
+      status.innerText = message || '';
+    }
+
+    function editorCloudFirebaseConfig() {
+      const helper = window.ScriptMakerFirebaseShare;
+      if (!helper) throw new Error('Firebaseモジュールを読み込めませんでした。');
+      const config = helper.configuredConfig('');
+      helper.saveConfig(config);
+      return config;
+    }
+
+    function currentCloudProjectId() {
+      const project = getCurrentProject();
+      return project?.cloudProjectId || localStorage.getItem(SCRIPTMAKER_EDITOR_CLOUD_LAST_ID_KEY) || '';
+    }
+
+    function updateCloudSyncModalFields(projectId) {
+      const input = document.getElementById('cloudProjectIdInput');
+      const urlText = document.getElementById('cloudSyncUrlText');
+      const id = String(projectId || '').trim();
+      if (input) input.value = id;
+      if (urlText) {
+        urlText.value = id ? buildCloudSyncUrl(id) : '';
+        urlText.classList.toggle('hidden', !id);
+      }
+    }
+
+    function openCloudSyncModal(projectId) {
+      const input = document.getElementById('inputSpeech');
+      if (input) input.blur();
+      document.body.classList.remove('keyboard-focused');
+      const id = projectId || currentCloudProjectId();
+      updateCloudSyncModalFields(id);
+      setCloudSyncStatus(id ? 'このIDでクラウド同期できます。' : '初回は「クラウドに保存」を押すと同期IDが作成されます。', '');
+      openModal('cloudSyncModal');
+    }
+
+    function buildEditorCloudPayload(project, projectId) {
+      const snapshot = cloneProject(project);
+      ensureTalkIds(snapshot);
+      normalizeSceneWallpaperSettings(snapshot);
+      const now = new Date().toISOString();
+      const id = projectId || snapshot.cloudProjectId || generateCloudProjectId();
+      snapshot.cloudProjectId = id;
+      snapshot.cloudUpdatedAt = now;
+      if (!snapshot.cloudCreatedAt) snapshot.cloudCreatedAt = project.cloudCreatedAt || now;
+      return {
+        id,
+        title: snapshot.title || 'ScriptMaker',
+        data: snapshot,
+        schemaVersion: 1,
+        createdAt: snapshot.cloudCreatedAt,
+        updatedAt: now
+      };
+    }
+
+    function normalizeCloudPayload(payload) {
+      if (!payload) return null;
+      const data = payload.data || payload.project || payload;
+      if (!data || typeof data !== 'object') return null;
+      const project = cloneProject(data);
+      project.cloudProjectId = payload.id || project.cloudProjectId;
+      project.cloudCreatedAt = payload.createdAt || project.cloudCreatedAt || new Date().toISOString();
+      project.cloudUpdatedAt = payload.updatedAt || project.cloudUpdatedAt || '';
+      if (!project.folderId || !state.folders?.[project.folderId]) project.folderId = state.currentFolderId || UNCLASSIFIED_FOLDER_ID;
+      ensureTalkIds(project);
+      normalizeSceneWallpaperSettings(project);
+      return { payload, project };
+    }
+
+    function findLocalProjectIdByCloudId(cloudId) {
+      return Object.keys(state.projects || {}).find(id => state.projects[id]?.cloudProjectId === cloudId) || '';
+    }
+
+    async function fetchEditorCloudPayload(cloudId) {
+      const helper = window.ScriptMakerFirebaseShare;
+      if (!helper?.loadEditorProject) throw new Error('Firebase同期モジュールを読み込めませんでした。');
+      const config = editorCloudFirebaseConfig();
+      return helper.loadEditorProject(cloudId, config);
+    }
+
+    async function saveCurrentProjectToCloud(options = {}) {
+      const project = getCurrentProject();
+      if (!project) {
+        setCloudSyncStatus('クラウド保存するプロジェクトがありません。', 'error');
+        return;
+      }
+      const helper = window.ScriptMakerFirebaseShare;
+      if (!helper?.saveEditorProject) {
+        setCloudSyncStatus('Firebase同期モジュールを読み込めませんでした。', 'error');
+        return;
+      }
+      const inputId = parseCloudProjectIdFromText(document.getElementById('cloudProjectIdInput')?.value || '');
+      const cloudId = inputId || project.cloudProjectId || generateCloudProjectId();
+      try {
+        setCloudSyncStatus('クラウド側を確認中...', '');
+        if (!options.force) {
+          const remote = await fetchEditorCloudPayload(cloudId).catch(error => {
+            console.warn('Cloud project check failed:', error);
+            return null;
+          });
+          const remoteUpdated = Date.parse(remote?.updatedAt || '');
+          const localKnownUpdated = Date.parse(project.cloudUpdatedAt || '');
+          if (remote && remoteUpdated && (!localKnownUpdated || remoteUpdated > localKnownUpdated)) {
+            const ok = confirm('クラウド側に、この端末より新しいデータがあります。この端末の内容で上書き保存しますか？');
+            if (!ok) {
+              setCloudSyncStatus('上書き保存をキャンセルしました。「最新データを読み込む」でクラウド版を確認できます。', 'error');
+              return;
+            }
+          }
+        }
+        setCloudSyncStatus('Firestoreへクラウド保存中...', '');
+        const payload = buildEditorCloudPayload(project, cloudId);
+        const config = editorCloudFirebaseConfig();
+        await helper.saveEditorProject(payload, config);
+        project.cloudProjectId = payload.id;
+        project.cloudCreatedAt = payload.createdAt;
+        project.cloudUpdatedAt = payload.updatedAt;
+        localStorage.setItem(SCRIPTMAKER_EDITOR_CLOUD_LAST_ID_KEY, payload.id);
+        updateCloudSyncModalFields(payload.id);
+        saveState();
+        setCloudSyncStatus('クラウドに保存しました。同じ同期URLで別端末から開けます。', 'success');
+      } catch (error) {
+        console.error('Editor cloud save failed:', error);
+        setCloudSyncStatus(error.message || 'クラウド保存に失敗しました。', 'error');
+      }
+    }
+
+    async function overwriteCloudProject() {
+      await saveCurrentProjectToCloud({ force: true });
+    }
+
+    async function openCloudProjectFromInput() {
+      const cloudId = parseCloudProjectIdFromText(document.getElementById('cloudProjectIdInput')?.value || location.href);
+      if (!cloudId) {
+        setCloudSyncStatus('クラウドプロジェクトID、または同期URLを入力してください。', 'error');
+        return;
+      }
+      try {
+        setCloudSyncStatus('クラウドから読み込み中...', '');
+        const payload = await fetchEditorCloudPayload(cloudId);
+        const normalized = normalizeCloudPayload(payload);
+        if (!normalized) {
+          setCloudSyncStatus('クラウドプロジェクトが見つかりませんでした。', 'error');
+          return;
+        }
+        const localId = findLocalProjectIdByCloudId(cloudId) || ('p_cloud_' + Date.now());
+        state.projects[localId] = normalized.project;
+        state.projects[localId].cloudProjectId = cloudId;
+        state.projects[localId].cloudUpdatedAt = normalized.payload.updatedAt || '';
+        state.currentProjectId = localId;
+        localStorage.setItem(SCRIPTMAKER_EDITOR_CLOUD_LAST_ID_KEY, cloudId);
+        saveState();
+        closeModal('cloudSyncModal');
+        openProject(localId);
+      } catch (error) {
+        console.error('Editor cloud load failed:', error);
+        setCloudSyncStatus(error.message || 'クラウドからの読み込みに失敗しました。', 'error');
+      }
+    }
+
+    async function loadLatestCloudProject() {
+      const project = getCurrentProject();
+      const cloudId = parseCloudProjectIdFromText(document.getElementById('cloudProjectIdInput')?.value || project?.cloudProjectId || '');
+      if (!cloudId) {
+        setCloudSyncStatus('読み込むクラウドプロジェクトIDがありません。', 'error');
+        return;
+      }
+      if (project && project.cloudProjectId && !confirm('クラウドの最新データで、この端末のプロジェクト内容を置き換えますか？')) return;
+      await openCloudProjectFromInput();
+    }
+
+    function selectCloudSyncUrl() {
+      const text = document.getElementById('cloudSyncUrlText');
+      if (!text || !text.value) return false;
+      text.classList.remove('hidden');
+      text.removeAttribute('readonly');
+      text.focus({ preventScroll: true });
+      text.select();
+      text.setSelectionRange?.(0, text.value.length);
+      text.setAttribute('readonly', 'readonly');
+      return true;
+    }
+
+    async function copyCloudSyncUrl() {
+      const inputId = parseCloudProjectIdFromText(document.getElementById('cloudProjectIdInput')?.value || '');
+      const project = getCurrentProject();
+      const cloudId = inputId || project?.cloudProjectId || '';
+      if (!cloudId) {
+        setCloudSyncStatus('先に「クラウドに保存」で同期IDを作成してください。', 'error');
+        return;
+      }
+      updateCloudSyncModalFields(cloudId);
+      const url = buildCloudSyncUrl(cloudId);
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(url);
+          setCloudSyncStatus('同期URLをコピーしました。別端末のEditorで開けます。', 'success');
+          return;
+        } catch (error) {
+          console.warn('Cloud URL clipboard failed:', error);
+        }
+      }
+      try {
+        if (selectCloudSyncUrl() && document.execCommand && document.execCommand('copy') === true) {
+          setCloudSyncStatus('同期URLをコピーしました。', 'success');
+          return;
+        }
+      } catch (error) {
+        console.warn('Cloud URL execCommand failed:', error);
+      }
+      selectCloudSyncUrl();
+      setCloudSyncStatus('コピーできませんでした。同期URLを長押ししてコピーしてください。', 'error');
     }
 
     function shareFileName(payload) {

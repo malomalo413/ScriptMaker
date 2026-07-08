@@ -1381,6 +1381,26 @@
     .share-modal-content {
       max-width: 360px;
     }
+    .btn-nav-cloud {
+      background: #0ea5e9;
+      color: #fff;
+    }
+    .cloud-open-btn {
+      margin-top: 10px;
+      background: #0ea5e9;
+    }
+    .cloud-sync-modal {
+      max-width: 380px;
+    }
+    .cloud-sync-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    .cloud-sync-actions button {
+      min-width: 0;
+      white-space: normal;
+    }
     .share-help {
       margin: 0;
       color: #64748b;

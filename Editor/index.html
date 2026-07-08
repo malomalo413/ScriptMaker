@@ -14,11 +14,11 @@
   <link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="../assets/icons/icon-512.png">
-  <link rel="stylesheet" href="../css/styles.css?v=39">
+  <link rel="stylesheet" href="../css/styles.css?v=40">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
   <script src="../js/firebase-config.js?v=30" defer></script>
-  <script src="../js/firebase-share.js?v=31" defer></script>
-  <script src="../js/app.js?v=44" defer></script>
+  <script src="../js/firebase-share.js?v=32" defer></script>
+  <script src="../js/app.js?v=45" defer></script>
 </head>
 <body class="auth-locked">
 
@@ -50,6 +50,7 @@
       </div>
       <div class="project-list" id="projectList"></div>
       <button class="create-btn" onclick="openCreateProjectModal()">+ 新規プロジェクト作成</button>
+      <button class="create-btn cloud-open-btn" onclick="openCloudSyncModal()">クラウドから開く</button>
     </div>
   </div>
 
@@ -65,6 +66,7 @@
         <button class="nav-btn btn-nav-save" onclick="saveDataAlert()">保存</button>
         <button class="nav-btn btn-nav-export" onclick="exportDataAlert()">出力</button>
         <button class="nav-btn btn-nav-share" onclick="openShareModal()">&#20849;&#26377;</button>
+        <button class="nav-btn btn-nav-cloud" onclick="openCloudSyncModal()">&#21516;&#26399;</button>
         <button class="nav-btn btn-nav-wallpaper" onclick="openWallpaperModal()">壁紙</button>
         <button class="nav-btn btn-nav-mode" id="modeToggleBtn" onclick="toggleEditMode()">編集</button>
         <button class="nav-btn btn-nav-logout" onclick="logoutEditorAuth()">&#12525;&#12464;&#12450;&#12454;&#12488;</button>
@@ -286,6 +288,27 @@
           <button class="btn-modal-cancel" type="button" onclick="selectShareUrl()">URL&#12434;&#36984;&#25246;</button>
         </div>
       </details>
+    </div>
+  </div>
+
+  <div id="cloudSyncModal" class="custom-modal hidden">
+    <div class="modal-content cloud-sync-modal">
+      <h4>Editor&#12463;&#12521;&#12454;&#12489;&#21516;&#26399;</h4>
+      <p class="share-help">&#20316;&#32773;&#26412;&#20154;&#12364;&#12473;&#12510;&#12507;&#12392;PC&#12391;&#21516;&#12376;&#21488;&#26412;&#12434;&#32154;&#12365;&#12363;&#12425;&#32232;&#38598;&#12377;&#12427;&#12383;&#12417;&#12398;&#25163;&#21205;&#21516;&#26399;&#12391;&#12377;&#12290;Viewer&#20849;&#26377;&#12392;&#12399;&#21029;&#12398;&#27231;&#33021;&#12391;&#12377;&#12290;</p>
+      <div class="modal-row">
+        <label for="cloudProjectIdInput">&#12463;&#12521;&#12454;&#12489;&#12503;&#12525;&#12472;&#12455;&#12463;&#12488;ID / &#21516;&#26399;URL</label>
+        <input id="cloudProjectIdInput" type="text" placeholder="editor_xxxxx &#12414;&#12383;&#12399; &#21516;&#26399;URL">
+      </div>
+      <textarea id="cloudSyncUrlText" class="share-url-textarea share-url-output hidden" readonly placeholder="&#21516;&#26399;URL&#12364;&#12371;&#12371;&#12395;&#34920;&#31034;&#12373;&#12428;&#12414;&#12377;"></textarea>
+      <div class="share-meta share-status" id="cloudSyncStatus"></div>
+      <div class="modal-actions cloud-sync-actions">
+        <button class="btn-modal-confirm" type="button" onclick="saveCurrentProjectToCloud()">&#12463;&#12521;&#12454;&#12489;&#12395;&#20445;&#23384;</button>
+        <button class="btn-modal-cancel" type="button" onclick="openCloudProjectFromInput()">&#12463;&#12521;&#12454;&#12489;&#12363;&#12425;&#38283;&#12367;</button>
+        <button class="btn-modal-confirm" type="button" onclick="copyCloudSyncUrl()">&#21516;&#26399;URL&#12434;&#12467;&#12500;&#12540;</button>
+        <button class="btn-modal-cancel" type="button" onclick="loadLatestCloudProject()">&#26368;&#26032;&#12487;&#12540;&#12479;&#12434;&#35501;&#12415;&#36796;&#12416;</button>
+        <button class="btn-modal-cancel" type="button" onclick="overwriteCloudProject()">&#12371;&#12398;&#31471;&#26411;&#12398;&#20869;&#23481;&#12391;&#19978;&#26360;&#12365;&#20445;&#23384;</button>
+        <button class="btn-modal-cancel" type="button" onclick="closeModal('cloudSyncModal')">&#38281;&#12376;&#12427;</button>
+      </div>
     </div>
   </div>
 

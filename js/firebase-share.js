@@ -1,7 +1,8 @@
 (function() {
   const FIREBASE_SDK_VERSION = "10.12.5";
   const FIREBASE_CONFIG_STORAGE_KEY = "scriptmaker_firebase_config_v1";
-  const FIREBASE_COLLECTION = "scriptShares";
+  const FIREBASE_SHARE_COLLECTION = "scriptShares";
+  const FIREBASE_EDITOR_PROJECT_COLLECTION = "editorProjects";
   const FIREBASE_CHUNK_SIZE = 650000;
 
   let modulesPromise = null;
@@ -54,7 +55,10 @@
 
   function configuredConfig(inputValue) {
     const parsed = parseFirebaseConfigText(inputValue || "");
-    const config = cleanConfig(parsed || savedConfig() || firebaseConfigFromGlobal());
+    const stored = savedConfig();
+    const globalConfig = cleanConfig(firebaseConfigFromGlobal());
+    const source = parsed || (isConfigured(stored) ? stored : globalConfig);
+    const config = cleanConfig(source);
     if (!isConfigured(config)) {
       throw new Error("Firebase configが未設定です。共有画面にFirebase configを入力するか、js/firebase-config.jsに設定してください。");
     }
@@ -111,20 +115,23 @@
     return chunks;
   }
 
-  async function saveShare(payload, config) {
-    if (!payload || !payload.shareId) throw new Error("共有データがありません。");
+  async function saveChunkedPayload(collectionName, documentId, payload, config) {
+    if (!collectionName || !documentId || !payload) throw new Error("保存するデータがありません。");
     const db = await dbForConfig(config);
     const { doc, collection, setDoc, writeBatch, serverTimestamp } = (await modules()).firestore;
-    const rootRef = doc(db, FIREBASE_COLLECTION, payload.shareId);
+    const rootRef = doc(db, collectionName, documentId);
     const chunks = chunksForPayload(payload);
     const meta = {
-      id: payload.shareId,
+      id: documentId,
       title: payload.title || "",
       chunkCount: chunks.length,
-      schemaVersion: 1,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
+      schemaVersion: payload.schemaVersion || 1,
+      createdAt: payload.createdAt || serverTimestamp(),
+      updatedAt: payload.updatedAt || serverTimestamp()
     };
+    if (chunks.length === 1 && chunks[0].length <= FIREBASE_CHUNK_SIZE) {
+      meta.data = chunks[0];
+    }
 
     if (chunks.length <= 450) {
       const batch = writeBatch(db);
@@ -134,7 +141,7 @@
         batch.set(doc(collection(rootRef, "chunks"), chunkId), { index, data });
       });
       await batch.commit();
-      return payload.shareId;
+      return documentId;
     }
 
     await setDoc(rootRef, meta);
@@ -142,24 +149,43 @@
       const chunkId = String(index).padStart(4, "0");
       return setDoc(doc(collection(rootRef, "chunks"), chunkId), { index, data });
     }));
-    return payload.shareId;
+    return documentId;
   }
 
-  async function loadShare(shareId, config) {
-    if (!shareId) return null;
+  async function loadChunkedPayload(collectionName, documentId, config) {
+    if (!documentId) return null;
     const db = await dbForConfig(config || configuredConfig(""));
     const { doc, collection, getDoc, getDocs, query, orderBy } = (await modules()).firestore;
-    const rootRef = doc(db, FIREBASE_COLLECTION, shareId);
+    const rootRef = doc(db, collectionName, documentId);
     const rootSnap = await getDoc(rootRef);
     if (!rootSnap.exists()) return null;
     const root = rootSnap.data();
     if (root.payload) return root.payload;
+    if (root.data && typeof root.data === "string") return JSON.parse(root.data);
     const chunkQuery = query(collection(rootRef, "chunks"), orderBy("index", "asc"));
     const chunkSnap = await getDocs(chunkQuery);
     if (chunkSnap.empty) return null;
     const docs = Number.isFinite(root.chunkCount) ? chunkSnap.docs.slice(0, root.chunkCount) : chunkSnap.docs;
     const json = docs.map(item => item.data().data || "").join("");
     return JSON.parse(json);
+  }
+
+  async function saveShare(payload, config) {
+    if (!payload || !payload.shareId) throw new Error("共有データがありません。");
+    return saveChunkedPayload(FIREBASE_SHARE_COLLECTION, payload.shareId, payload, config);
+  }
+
+  async function loadShare(shareId, config) {
+    return loadChunkedPayload(FIREBASE_SHARE_COLLECTION, shareId, config);
+  }
+
+  async function saveEditorProject(payload, config) {
+    if (!payload || !payload.id) throw new Error("クラウドプロジェクトがありません。");
+    return saveChunkedPayload(FIREBASE_EDITOR_PROJECT_COLLECTION, payload.id, payload, config);
+  }
+
+  async function loadEditorProject(projectId, config) {
+    return loadChunkedPayload(FIREBASE_EDITOR_PROJECT_COLLECTION, projectId, config);
   }
 
   window.ScriptMakerFirebaseShare = {
@@ -171,6 +197,8 @@
     saveConfig,
     saveShare,
     loadShare,
+    saveEditorProject,
+    loadEditorProject,
     isConfigured
   };
 })();
