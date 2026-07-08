@@ -54,23 +54,70 @@ function paramsFromFragment(fragment) {
   return new URLSearchParams(clean);
 }
 
-function readParamFromHref(name) {
-  const match = String(location.href || '').match(new RegExp('[?#&]' + name + '=([^&#]+)'));
-  return match ? decodeURIComponent(match[1].replace(/\+/g, ' ')) : '';
+function safeDecodeUrlPart(value) {
+  let result = String(value || '');
+  for (let i = 0; i < 3; i++) {
+    try {
+      const decoded = decodeURIComponent(result.replace(/\+/g, ' '));
+      if (decoded === result) break;
+      result = decoded;
+    } catch (error) {
+      break;
+    }
+  }
+  return result;
+}
+
+function cleanShareId(value) {
+  return safeDecodeUrlPart(value || '').trim().replace(/^["'`]+|["'`]+$/g, '').replace(/[)\].,;]+$/g, '');
+}
+
+function readParamFromText(text, name) {
+  const source = safeDecodeUrlPart(text || '');
+  const direct = source.match(new RegExp('(?:^|[?#&])' + name + '=([^&#?\\s]+)'));
+  if (direct) return cleanShareId(direct[1]);
+  const hashRoute = source.match(new RegExp('(?:^|[#/])' + name + '(?:/|=)(share_[A-Za-z0-9_-]+)'));
+  if (hashRoute) return cleanShareId(hashRoute[1]);
+  return '';
+}
+
+function readShareIdFromAnyUrlPart() {
+  const sources = [
+    location.search,
+    location.hash,
+    location.href,
+    safeDecodeUrlPart(location.href),
+    safeDecodeUrlPart(location.search),
+    safeDecodeUrlPart(location.hash)
+  ];
+  for (const source of sources) {
+    const fromId = readParamFromText(source, 'id');
+    if (fromId) return fromId;
+    const fromShare = readParamFromText(source, 'share');
+    if (fromShare) return fromShare;
+    const route = safeDecodeUrlPart(source).match(/#\/id\/(share_[A-Za-z0-9_-]+)|\/id\/(share_[A-Za-z0-9_-]+)/);
+    if (route) return cleanShareId(route[1] || route[2]);
+    const fallback = safeDecodeUrlPart(source).match(/\bshare_[A-Za-z0-9_-]+\b/);
+    if (fallback) return cleanShareId(fallback[0]);
+  }
+  return '';
 }
 
 function resolveViewerShareInfo() {
   const searchParams = new URLSearchParams(location.search || '');
   const hashParams = paramsFromFragment(location.hash);
-  const shareId = searchParams.get('id') || searchParams.get('share') ||
+  const shareId = cleanShareId(
+    searchParams.get('id') || searchParams.get('share') ||
     hashParams.get('id') || hashParams.get('share') ||
-    readParamFromHref('id') || readParamFromHref('share') || '';
-  const worker = searchParams.get('worker') || hashParams.get('worker') || readParamFromHref('worker') || '';
+    readShareIdFromAnyUrlPart()
+  );
+  const worker = searchParams.get('worker') || hashParams.get('worker') || readParamFromText(location.href, 'worker') || '';
   console.log('ScriptMaker Viewer URL debug', {
     href: location.href,
     search: location.search,
     hash: location.hash,
-    shareId
+    resolvedShareId: shareId,
+    firestoreDocumentPath: shareId ? 'scriptShares/' + shareId : ''
   });
   return {
     shareId,
@@ -154,22 +201,35 @@ async function loadSharedProject() {
       viewerShareKey = shareId;
       let share = null;
       let firebase = { helper: window.ScriptMakerFirebaseShare || null, config: viewerFirebaseConfig() };
+      console.log('ScriptMaker Viewer Firestore document path', 'scriptShares/' + shareId);
       if (!firebase.helper || !firebase.config) {
         try {
           firebase = await ensureViewerFirebaseShare();
+          console.log('ScriptMaker Viewer Firebase config load success', {
+            hasHelper: !!firebase.helper,
+            hasConfig: !!firebase.config,
+            projectId: firebase.config?.projectId || ''
+          });
         } catch (firebaseScriptError) {
           console.warn('Viewer Firebase scripts load failed', firebaseScriptError);
+          console.log('ScriptMaker Viewer Firebase connection failed', firebaseScriptError);
         }
       }
       if (!firebase.helper || !firebase.config) {
+        console.log('ScriptMaker Viewer Firebase connection failed', 'missing config or helper');
         viewerLoadErrorType = 'missing-firebase-config';
         return null;
       }
       if (firebase.helper && firebase.config) {
         try {
+          console.log('ScriptMaker Viewer Firebase connection success', {
+            projectId: firebase.config.projectId || '',
+            firestoreDocumentPath: 'scriptShares/' + shareId
+          });
           share = await firebase.helper.loadShare(shareId, firebase.config);
         } catch (firebaseError) {
           console.warn('Viewer Firebase share load failed', firebaseError);
+          console.log('ScriptMaker Viewer Firebase connection failed', firebaseError);
           viewerLoadErrorType = 'firebase-connect-failed';
           return null;
         }
@@ -1136,7 +1196,7 @@ function showViewerEmptyMessage() {
   const text = empty.querySelector('p');
   if (viewerShareIdMissing) {
     if (title) title.textContent = '\u5171\u6709URL\u306eID\u3092\u8aad\u307f\u53d6\u308c\u307e\u305b\u3093\u3067\u3057\u305f';
-    if (text) text.textContent = 'LINE\u5185\u30d6\u30e9\u30a6\u30b6\u306e\u5834\u5408\u306f\u3001\u53f3\u4e0b\u30e1\u30cb\u30e5\u30fc\u304b\u3089\u5916\u90e8\u30d6\u30e9\u30a6\u30b6\u3067\u958b\u3044\u3066\u304f\u3060\u3055\u3044\u3002';
+    if (text) text.textContent = '\u5171\u6709URL\u306eID\u3092\u8aad\u307f\u53d6\u308c\u307e\u305b\u3093\u3067\u3057\u305f\u3002LINE\u3084Discord\u3067\u958b\u3051\u306a\u3044\u5834\u5408\u306f\u3001\u5916\u90e8\u30d6\u30e9\u30a6\u30b6\u3067\u958b\u3044\u3066\u304f\u3060\u3055\u3044\u3002';
   } else if (viewerLoadErrorType === 'missing-firebase-config') {
     if (title) title.textContent = 'Firebase\u8a2d\u5b9a\u3092\u8aad\u307f\u8fbc\u3081\u307e\u305b\u3093\u3067\u3057\u305f';
     if (text) text.textContent = 'Viewer\u304cFirebase\u306b\u63a5\u7d9a\u3067\u304d\u308b\u8a2d\u5b9a\u3092\u8aad\u307f\u8fbc\u3081\u3066\u3044\u307e\u305b\u3093\u3002\u30da\u30fc\u30b8\u3092\u518d\u8aad\u307f\u8fbc\u307f\u3057\u3066\u3082\u6539\u5584\u3057\u306a\u3044\u5834\u5408\u306f\u4f5c\u6210\u8005\u306b\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002';
