@@ -156,10 +156,10 @@ function loadViewerScriptOnce(src, globalCheck) {
 
 async function ensureViewerFirebaseShare() {
   if (!window.SCRIPTMAKER_FIREBASE_CONFIG) {
-    await loadViewerScriptOnce('../js/firebase-config.js?v=30', () => !!window.SCRIPTMAKER_FIREBASE_CONFIG);
+    await loadViewerScriptOnce('./js/firebase-config.js?v=30', () => !!window.SCRIPTMAKER_FIREBASE_CONFIG);
   }
   if (!window.ScriptMakerFirebaseShare) {
-    await loadViewerScriptOnce('../js/firebase-share.js?v=31', () => !!window.ScriptMakerFirebaseShare);
+    await loadViewerScriptOnce('./js/firebase-share.js?v=32', () => !!window.ScriptMakerFirebaseShare);
   }
   return {
     helper: window.ScriptMakerFirebaseShare || null,

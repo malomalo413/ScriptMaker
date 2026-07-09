@@ -73,7 +73,7 @@ pwa/
 
 The standard sharing flow uses Firebase Firestore. The Editor saves a read-only share payload to Firestore and creates a short Viewer URL:
 
-`https://malomalo413.github.io/ScriptMaker/Viewer/?id=share_id`
+`https://small-4c16f.web.app/?id=share_id`
 
 See `FIREBASE-SETUP.md` for Firebase project setup, Firestore rules, and `js/firebase-config.js` configuration.
 

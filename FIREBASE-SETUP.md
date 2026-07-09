@@ -109,7 +109,7 @@ service cloud.firestore {
 URL形式:
 
 ```txt
-https://malomalo413.github.io/ScriptMaker/Viewer/?id=share_xxxxx
+https://small-4c16f.web.app/?id=share_xxxxx
 ```
 
 ## 5. 注意

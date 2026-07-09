@@ -9,9 +9,11 @@
     "cf:whoami": "wrangler whoami",
     "deploy": "wrangler deploy",
     "cf:deploy": "wrangler deploy",
-    "cf:tail": "wrangler tail scriptmaker-share"
+    "cf:tail": "wrangler tail scriptmaker-share",
+    "firebase:deploy": "firebase deploy --only hosting"
   },
   "devDependencies": {
+    "firebase-tools": "^15.22.4",
     "wrangler": "^4.0.0"
   }
 }

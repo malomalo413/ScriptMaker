@@ -1,7 +1,7 @@
 const EDITOR_AUTH_HASH_KEY = 'scriptmaker_editor_password_hash_v1';
 const EDITOR_AUTH_SESSION_KEY = 'scriptmaker_editor_auth_ok_v1';
 const EDITOR_AUTH_SAVED_HASH_KEY = 'scriptmaker_editor_saved_password_hash_v1';
-const SCRIPTMAKER_PUBLIC_VIEWER_URL = 'https://malomalo413.github.io/ScriptMaker/Viewer/';
+const SCRIPTMAKER_PUBLIC_VIEWER_URL = 'https://small-4c16f.web.app/';
 const SCRIPTMAKER_SHARE_WORKER_URL = '';
 const SCRIPTMAKER_SHARE_WORKER_URL_KEY = 'scriptmaker_share_worker_url_v1';
 const SCRIPTMAKER_SHARE_VIEWER_PASSWORD_KEY = 'scriptmaker_share_viewer_password_v1';
@@ -2642,7 +2642,7 @@ ${keptPredictionText}
 
     function buildViewerShareUrl(payload, workerUrl) {
       const id = encodeURIComponent(payload.shareId);
-      return SCRIPTMAKER_PUBLIC_VIEWER_URL + '#id=' + id;
+      return SCRIPTMAKER_PUBLIC_VIEWER_URL + '?id=' + id;
     }
 
     function buildLongViewerShareUrl(payload) {
