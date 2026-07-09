@@ -97,8 +97,8 @@ npx wrangler deploy
 設定済み:
 
 ```text
-PUBLIC_VIEWER_URL=https://malomalo413.github.io/ScriptMaker/Viewer
-ALLOWED_ORIGIN=https://malomalo413.github.io
+PUBLIC_VIEWER_URL=https://small-4c16f.web.app
+ALLOWED_ORIGIN=https://small-4c16f.web.app
 SHARE_TTL_SECONDS=15552000
 ```
 

@@ -52,7 +52,7 @@ function viewerUrl(share) {
     updatedAt: share.updatedAt,
     project: share.project
   });
-  return new URL('../Viewer/index.html#data=' + payload, location.href).href;
+  return 'https://small-4c16f.web.app/#data=' + payload;
 }
 
 function renderProjects() {

@@ -11,7 +11,7 @@ Request body: ScriptMaker share JSON payload.
 Response:
 
 ```json
-{ "id": "share_xxxxx", "url": "https://malomalo413.github.io/ScriptMaker/Viewer/?id=share_xxxxx" }
+{ "id": "share_xxxxx", "url": "https://small-4c16f.web.app/?id=share_xxxxx" }
 ```
 
 ### `GET /share/{id}`
@@ -43,8 +43,8 @@ Configure it in Cloudflare Dashboard > Workers & Pages > Your subdomain.
 ## Environment Variables
 
 ```text
-PUBLIC_VIEWER_URL=https://malomalo413.github.io/ScriptMaker/Viewer
-ALLOWED_ORIGIN=https://malomalo413.github.io
+PUBLIC_VIEWER_URL=https://small-4c16f.web.app
+ALLOWED_ORIGIN=https://small-4c16f.web.app
 SHARE_TTL_SECONDS=15552000
 ```
 
@@ -87,13 +87,13 @@ The Worker URL is saved in localStorage for future share operations on that devi
 Viewer opens URLs like:
 
 ```text
-https://malomalo413.github.io/ScriptMaker/Viewer/?id=share_xxxxx&worker=https%3A%2F%2Fscriptmaker-share.your-name.workers.dev
+https://small-4c16f.web.app/?id=share_xxxxx&worker=https%3A%2F%2Fscriptmaker-share.your-name.workers.dev
 ```
 
 When `SCRIPTMAKER_SHARE_WORKER_URL` is configured in `Viewer/js/viewer.js`, the URL can be shortened to:
 
 ```text
-https://malomalo413.github.io/ScriptMaker/Viewer/?id=share_xxxxx
+https://small-4c16f.web.app/?id=share_xxxxx
 ```
 
 Loading order:
