@@ -14,11 +14,11 @@
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="./assets/icons/icon-512.png">
-  <link rel="stylesheet" href="./css/styles.css?v=40">
+  <link rel="stylesheet" href="./css/styles.css?v=41">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
   <script src="./js/firebase-config.js?v=30" defer></script>
   <script src="./js/firebase-share.js?v=32" defer></script>
-  <script src="./js/app.js?v=46" defer></script>
+  <script src="./js/app.js?v=47" defer></script>
 </head>
 <body class="auth-locked">
 
@@ -77,6 +77,7 @@
       <span>表示モード</span>
       <label><input type="radio" name="editorDisplayMode" value="chat" onchange="setEditorDisplayMode(this.value)"> チャット型</label>
       <label><input type="radio" name="editorDisplayMode" value="script" onchange="setEditorDisplayMode(this.value)"> 台本型</label>
+      <button class="script-color-settings-button" type="button" onclick="openScriptColorModal()">&#33394;&#35373;&#23450;</button>
       <span id="editorOrientationHint" class="orientation-hint hidden">横画面で閲覧してください</span>
     </div>
 
@@ -247,6 +248,18 @@
       <div class="modal-actions">
         <button class="btn-modal-cancel" type="button" onclick="closeModal('stageDirectionModal')">&#12461;&#12515;&#12531;&#12475;&#12523;</button>
         <button class="btn-modal-confirm" type="button" onclick="saveStageDirection()">&#20445;&#23384;</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="scriptColorModal" class="custom-modal hidden">
+    <div class="modal-content script-color-modal">
+      <h4>&#21488;&#26412;&#22411;&#12398;&#12475;&#12522;&#12501;&#33394;</h4>
+      <p class="script-color-help">&#21488;&#26412;&#22411;&#12391;&#34920;&#31034;&#12377;&#12427;&#12461;&#12515;&#12521;&#12463;&#12479;&#12540;&#12372;&#12392;&#12398;&#12475;&#12522;&#12501;&#33394;&#12434;&#36984;&#12409;&#12414;&#12377;&#12290;</p>
+      <div id="scriptColorList" class="script-color-list"></div>
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" type="button" onclick="resetScriptColorSettings()">&#12522;&#12475;&#12483;&#12488;</button>
+        <button class="btn-modal-confirm" type="button" onclick="closeModal('scriptColorModal')">&#38281;&#12376;&#12427;</button>
       </div>
     </div>
   </div>

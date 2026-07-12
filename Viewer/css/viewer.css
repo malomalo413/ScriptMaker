@@ -437,6 +437,70 @@ html, body {
   font-size: 11px;
   line-height: 1.45;
 }
+.viewer-mode-script .viewer-print-talk.script-color-red {
+  border-left-color: #ef4444;
+  background: #fff1f2;
+}
+.viewer-mode-script .viewer-print-talk.script-color-red .viewer-print-name,
+.viewer-mode-script .viewer-print-talk.script-color-red .viewer-print-text {
+  color: #991b1b;
+}
+.viewer-mode-script .viewer-print-talk.script-color-blue {
+  border-left-color: #3b82f6;
+  background: #eff6ff;
+}
+.viewer-mode-script .viewer-print-talk.script-color-blue .viewer-print-name,
+.viewer-mode-script .viewer-print-talk.script-color-blue .viewer-print-text {
+  color: #1e3a8a;
+}
+.viewer-mode-script .viewer-print-talk.script-color-green {
+  border-left-color: #22c55e;
+  background: #f0fdf4;
+}
+.viewer-mode-script .viewer-print-talk.script-color-green .viewer-print-name,
+.viewer-mode-script .viewer-print-talk.script-color-green .viewer-print-text {
+  color: #166534;
+}
+.viewer-mode-script .viewer-print-talk.script-color-yellow {
+  border-left-color: #eab308;
+  background: #fefce8;
+}
+.viewer-mode-script .viewer-print-talk.script-color-yellow .viewer-print-name,
+.viewer-mode-script .viewer-print-talk.script-color-yellow .viewer-print-text {
+  color: #854d0e;
+}
+.viewer-print-talk.script-color-red {
+  border-left-color: #ef4444;
+  background: #fff1f2;
+}
+.viewer-print-talk.script-color-red .viewer-print-name,
+.viewer-print-talk.script-color-red .viewer-print-text {
+  color: #991b1b;
+}
+.viewer-print-talk.script-color-blue {
+  border-left-color: #3b82f6;
+  background: #eff6ff;
+}
+.viewer-print-talk.script-color-blue .viewer-print-name,
+.viewer-print-talk.script-color-blue .viewer-print-text {
+  color: #1e3a8a;
+}
+.viewer-print-talk.script-color-green {
+  border-left-color: #22c55e;
+  background: #f0fdf4;
+}
+.viewer-print-talk.script-color-green .viewer-print-name,
+.viewer-print-talk.script-color-green .viewer-print-text {
+  color: #166534;
+}
+.viewer-print-talk.script-color-yellow {
+  border-left-color: #eab308;
+  background: #fefce8;
+}
+.viewer-print-talk.script-color-yellow .viewer-print-name,
+.viewer-print-talk.script-color-yellow .viewer-print-text {
+  color: #854d0e;
+}
 .viewer-empty {
   position: absolute;
   z-index: 3;
@@ -538,6 +602,49 @@ html, body {
   width: 36px;
   height: 36px;
   flex-basis: 36px;
+}
+.viewer-script-color-section {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
+}
+.viewer-script-color-section h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  color: #0f172a;
+}
+.viewer-script-color-section p {
+  margin: 0 0 10px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.viewer-script-color-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.viewer-script-color-option {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 100px;
+  align-items: center;
+  gap: 9px;
+  min-height: 52px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  font-weight: 800;
+}
+.viewer-script-color-option select {
+  min-height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 6px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 800;
 }
 .viewer-settings-empty {
   margin: 8px 0 0;

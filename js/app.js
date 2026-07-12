@@ -9,6 +9,7 @@ const SCRIPTMAKER_EDITOR_COUNT_SETTING_KEY = 'scriptmaker_editor_count_settings_
 const SCRIPTMAKER_CHARACTER_LIBRARY_KEY = 'scriptmaker_character_library_v1';
 const SCRIPTMAKER_EDITOR_CLOUD_URL = 'https://malomalo413.github.io/ScriptMaker/Editor/';
 const SCRIPTMAKER_EDITOR_CLOUD_LAST_ID_KEY = 'scriptmaker_editor_cloud_last_project_id_v1';
+const SCRIPTMAKER_SCRIPT_COLOR_PREFIX = 'scriptmaker_editor_script_colors_v1:';
 
 let state = {
       currentProjectId: null,
@@ -55,6 +56,7 @@ let state = {
     let editorDisplayMode = 'chat';
     let editorRequestedFullscreenForOrientation = false;
     let cloudSyncUrlHandled = false;
+    let editorScriptColorSettings = {};
 
     let originalViewportHeight = window.innerHeight;
     const GEMINI_MODEL_CANDIDATES = [
@@ -1467,6 +1469,98 @@ let state = {
       return '<div class="stage-direction">' + escapeHtml(stageDirection) + '</div>';
     }
 
+    function scriptColorStorageKey() {
+      return SCRIPTMAKER_SCRIPT_COLOR_PREFIX + (state.currentProjectId || 'default');
+    }
+
+    function sanitizeScriptColor(value) {
+      return ['red', 'blue', 'green', 'yellow'].includes(value) ? value : '';
+    }
+
+    function scriptColorClassForCharacter(name) {
+      const color = sanitizeScriptColor(editorScriptColorSettings[name] || '');
+      return color ? ' script-color-' + color : '';
+    }
+
+    function loadEditorScriptColorSettings() {
+      try {
+        editorScriptColorSettings = JSON.parse(localStorage.getItem(scriptColorStorageKey()) || '{}') || {};
+      } catch (error) {
+        console.warn('Script color setting load failed', error);
+        editorScriptColorSettings = {};
+      }
+    }
+
+    function saveEditorScriptColorSettings() {
+      localStorage.setItem(scriptColorStorageKey(), JSON.stringify(editorScriptColorSettings || {}));
+    }
+
+    function scriptColorCharacterNames(project) {
+      const names = new Set();
+      const excluded = new Set(['情景描写', 'システム', '諠・勹謠丞・']);
+      (project?.characters || []).forEach(character => {
+        if (character?.name && !excluded.has(character.name)) names.add(character.name);
+      });
+      (project?.talks || []).forEach(talk => {
+        if (talk?.charName && !excluded.has(talk.charName)) names.add(talk.charName);
+      });
+      return [...names];
+    }
+
+    function scriptColorSelectHtml(name, value) {
+      const options = [
+        ['', '\u306a\u3057'],
+        ['red', '\u8d64'],
+        ['blue', '\u9752'],
+        ['green', '\u7dd1'],
+        ['yellow', '\u9ec4\u8272']
+      ];
+      return '<select data-character="' + escapeHtml(name) + '">' + options.map(([color, label]) =>
+        '<option value="' + color + '"' + (value === color ? ' selected' : '') + '>' + label + '</option>'
+      ).join('') + '</select>';
+    }
+
+    function renderScriptColorSettings() {
+      const list = document.getElementById('scriptColorList');
+      const project = state.projects[state.currentProjectId];
+      if (!list || !project) return;
+      loadEditorScriptColorSettings();
+      const names = scriptColorCharacterNames(project);
+      if (!names.length) {
+        list.innerHTML = '<div class="script-color-empty">\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u304c\u3042\u308a\u307e\u305b\u3093\u3002</div>';
+        return;
+      }
+      list.innerHTML = names.map(name => {
+        const color = sanitizeScriptColor(editorScriptColorSettings[name] || '');
+        return '<label class="script-color-item">' +
+          '<span class="script-color-name">' + escapeHtml(name) + '</span>' +
+          scriptColorSelectHtml(name, color) +
+        '</label>';
+      }).join('');
+      list.querySelectorAll('select').forEach(select => {
+        select.addEventListener('change', () => {
+          const name = select.dataset.character;
+          const color = sanitizeScriptColor(select.value);
+          if (color) editorScriptColorSettings[name] = color;
+          else delete editorScriptColorSettings[name];
+          saveEditorScriptColorSettings();
+          renderTimeline();
+        });
+      });
+    }
+
+    function openScriptColorModal() {
+      renderScriptColorSettings();
+      openModal('scriptColorModal');
+    }
+
+    function resetScriptColorSettings() {
+      editorScriptColorSettings = {};
+      saveEditorScriptColorSettings();
+      renderScriptColorSettings();
+      renderTimeline();
+    }
+
     function initEditorDisplayModeControls() {
       document.querySelectorAll('input[name="editorDisplayMode"]').forEach(input => {
         input.checked = input.value === editorDisplayMode;
@@ -1668,11 +1762,12 @@ let state = {
 
     function renderScriptTimeline(project, timeline) {
       timeline.innerHTML = '';
+      loadEditorScriptColorSettings();
       (project.talks || []).forEach((talk, index) => {
         if (!talk.id) talk.id = createTalkId();
         const scene = sceneWallpaperForTalk(project, talk);
         const row = document.createElement('article');
-        row.className = 'script-row' + (editingTalkId === talk.id ? ' inline-edit-target' : '');
+        row.className = 'script-row' + scriptColorClassForCharacter(talk.charName) + (editingTalkId === talk.id ? ' inline-edit-target' : '');
         row.dataset.index = index;
         row.dataset.talkId = talk.id;
         row.onclick = function() {

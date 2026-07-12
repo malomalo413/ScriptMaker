@@ -3,6 +3,7 @@ const VIEWER_SYSTEM_NAME = '\u30b7\u30b9\u30c6\u30e0';
 const VIEWER_RIGHT_SIDE_PREFIX = 'scriptmaker_viewer_right_side_v1:';
 const VIEWER_PASSWORD_HASH_PREFIX = 'scriptmaker_viewer_password_hash_v1:';
 const VIEWER_COUNT_SETTING_PREFIX = 'scriptmaker_viewer_count_settings_v1:';
+const VIEWER_SCRIPT_COLOR_PREFIX = 'scriptmaker_viewer_script_colors_v1:';
 const VIEWER_DEFAULT_EXCLUDE_CHARS = '\u3001\u3002\u300c\u300d\uff08\uff09\u30fc\u301c\uff1f\uff01.';
 const SCRIPTMAKER_SHARE_DATA_BASE_URL = '../Share/data/';
 const SCRIPTMAKER_SHARE_WORKER_URL = '';
@@ -13,6 +14,7 @@ let viewerPasswordHash = '';
 let pendingViewerProject = null;
 let rightSideSetting = { mode: 'editor', names: [] };
 let countSetting = { useExcludeChars: false, excludeChars: VIEWER_DEFAULT_EXCLUDE_CHARS, showNumbers: true, excludeEmoji: false };
+let viewerScriptColorSettings = {};
 let activeLayer = 0;
 let currentWallpaperKey = '';
 let raf = 0;
@@ -306,6 +308,75 @@ function saveRightSideSetting() {
   localStorage.setItem(storageKey(), JSON.stringify(rightSideSetting));
 }
 
+function scriptColorStorageKey() {
+  return VIEWER_SCRIPT_COLOR_PREFIX + viewerShareKey;
+}
+
+function sanitizeScriptColor(value) {
+  return ['red', 'blue', 'green', 'yellow'].includes(value) ? value : '';
+}
+
+function scriptColorClassForCharacter(name) {
+  const color = sanitizeScriptColor(viewerScriptColorSettings[name] || '');
+  return color ? ' script-color-' + color : '';
+}
+
+function loadViewerScriptColorSettings() {
+  try {
+    viewerScriptColorSettings = JSON.parse(localStorage.getItem(scriptColorStorageKey()) || '{}') || {};
+  } catch (error) {
+    console.warn('Viewer script color setting load failed', error);
+    viewerScriptColorSettings = {};
+  }
+}
+
+function saveViewerScriptColorSettings() {
+  localStorage.setItem(scriptColorStorageKey(), JSON.stringify(viewerScriptColorSettings || {}));
+}
+
+function scriptColorSelectHtml(name, value) {
+  const options = [
+    ['', '\u306a\u3057'],
+    ['red', '\u8d64'],
+    ['blue', '\u9752'],
+    ['green', '\u7dd1'],
+    ['yellow', '\u9ec4\u8272']
+  ];
+  return '<select data-name="' + escapeHtml(name) + '">' + options.map(([color, label]) =>
+    '<option value="' + color + '"' + (value === color ? ' selected' : '') + '>' + label + '</option>'
+  ).join('') + '</select>';
+}
+
+function renderViewerScriptColorOptions() {
+  const list = document.getElementById('viewerScriptColorOptions');
+  if (!list || !viewerProject) return;
+  loadViewerScriptColorSettings();
+  const characters = viewerCharacters(viewerProject).filter(character => !isSpecialTalk({ charName: character.name }));
+  if (!characters.length) {
+    list.innerHTML = '<p class="viewer-settings-empty">\u8a2d\u5b9a\u3067\u304d\u308b\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u304c\u3042\u308a\u307e\u305b\u3093\u3002</p>';
+    return;
+  }
+  list.innerHTML = characters.map(character => {
+    const color = sanitizeScriptColor(viewerScriptColorSettings[character.name] || '');
+    return '<label class="viewer-script-color-option">' +
+      avatarHtml(viewerProject, character) +
+      '<span>' + escapeHtml(character.name) + '</span>' +
+      scriptColorSelectHtml(character.name, color) +
+    '</label>';
+  }).join('');
+  list.querySelectorAll('select').forEach(select => {
+    select.addEventListener('change', () => {
+      const name = select.dataset.name;
+      const color = sanitizeScriptColor(select.value);
+      if (color) viewerScriptColorSettings[name] = color;
+      else delete viewerScriptColorSettings[name];
+      saveViewerScriptColorSettings();
+      renderTimeline();
+      preparePrintPages();
+    });
+  });
+}
+
 function countStorageKey() {
   return VIEWER_COUNT_SETTING_PREFIX + viewerShareKey;
 }
@@ -527,6 +598,7 @@ function avatarHtml(project, talkOrCharacter) {
 function renderViewer(project) {
   viewerProject = JSON.parse(JSON.stringify(project));
   loadRightSideSetting();
+  loadViewerScriptColorSettings();
   loadCountSetting();
   loadViewerDisplayMode();
   applyViewerDisplayModeClass();
@@ -534,6 +606,7 @@ function renderViewer(project) {
   document.getElementById('viewerTitle').innerText = viewerProject.title || '\u53f0\u672c';
   document.getElementById('viewerPdfButton')?.classList.remove('hidden');
   renderSettingsOptions();
+  renderViewerScriptColorOptions();
   renderTimeline();
   renderCountPanel();
   updateNumberVisibility();
@@ -601,6 +674,7 @@ function renderSettingsOptions() {
 
 function openSettings() {
   renderSettingsOptions();
+  renderViewerScriptColorOptions();
   document.getElementById('viewerSettingsPanel').classList.remove('hidden');
 }
 
@@ -795,7 +869,7 @@ function buildScriptPageHtml(group) {
   const talkHtml = group.talks.map(({ talk, index }) => {
     const isSpecial = isSpecialTalk(talk);
     const sideClass = isSpecial ? 'scene' : isRightSideCharacter(talk.charName) ? 'right' : 'left';
-    return '<div class="viewer-print-talk ' + sideClass + '" data-talk-id="' + escapeHtml(talk.id || String(index)) + '">' +
+    return '<div class="viewer-print-talk ' + sideClass + scriptColorClassForCharacter(talk.charName) + '" data-talk-id="' + escapeHtml(talk.id || String(index)) + '">' +
       '<span class="viewer-print-number">' + formatNo(index) + '</span>' +
       '<span class="viewer-print-name">' + escapeHtml(talk.charName || '') + '</span>' +
       '<span class="viewer-print-text">' + escapeHtml(talk.text || '') + '</span>' +
@@ -995,6 +1069,18 @@ function printDocumentStyles() {
       font-size: 10px;
       line-height: 1.5;
     }
+    .viewer-print-talk.script-color-red { border-left-color: #ef4444; background: #fff1f2; }
+    .viewer-print-talk.script-color-red .viewer-print-name,
+    .viewer-print-talk.script-color-red .viewer-print-text { color: #991b1b; }
+    .viewer-print-talk.script-color-blue { border-left-color: #3b82f6; background: #eff6ff; }
+    .viewer-print-talk.script-color-blue .viewer-print-name,
+    .viewer-print-talk.script-color-blue .viewer-print-text { color: #1e3a8a; }
+    .viewer-print-talk.script-color-green { border-left-color: #22c55e; background: #f0fdf4; }
+    .viewer-print-talk.script-color-green .viewer-print-name,
+    .viewer-print-talk.script-color-green .viewer-print-text { color: #166534; }
+    .viewer-print-talk.script-color-yellow { border-left-color: #eab308; background: #fefce8; }
+    .viewer-print-talk.script-color-yellow .viewer-print-name,
+    .viewer-print-talk.script-color-yellow .viewer-print-text { color: #854d0e; }
     @media (max-width: 720px) {
       .viewer-print-pages { padding: 10px; }
       .viewer-print-page {

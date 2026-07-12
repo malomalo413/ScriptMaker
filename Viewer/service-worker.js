@@ -1,5 +1,5 @@
-const CACHE_NAME = 'scriptmaker-viewer-v34';
-const APP_SHELL = ['./','./index.html','./manifest.json','./css/viewer.css?v=22','./js/firebase-config.js?v=30','./js/firebase-share.js?v=32','./js/viewer.js?v=29','./assets/icons/icon-192.png','./assets/icons/icon-512.png'];
+const CACHE_NAME = 'scriptmaker-viewer-v35';
+const APP_SHELL = ['./','./index.html','./manifest.json','./css/viewer.css?v=23','./js/firebase-config.js?v=30','./js/firebase-share.js?v=32','./js/viewer.js?v=30','./assets/icons/icon-192.png','./assets/icons/icon-512.png'];
 self.addEventListener('install', event => { event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', event => { event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))); self.clients.claim(); });
 self.addEventListener('fetch', event => {
