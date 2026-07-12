@@ -564,38 +564,11 @@ function renderTimeline() {
   });
 }
 
-function sceneInfoForTalk(talk) {
-  const settings = viewerProject?.sceneWallpaperSettings;
-  if (settings?.enabled && talk?.id) {
-    const scene = (settings.scenes || []).find(item => Array.isArray(item.talkIds) && item.talkIds.includes(talk.id));
-    if (scene) return { wallpaper: scene.image ? scene : null, sceneName: scene.name || '' };
-  }
-  return { wallpaper: null, sceneName: '' };
-}
-
-function viewerWallpaperStyle(wallpaper) {
-  if (!wallpaper?.image) return '';
-  const size = (wallpaper.size || 100) === 100 ? 'cover' : (wallpaper.size || 100) + '%';
-  return 'background-image:url(' + wallpaper.image + ');background-size:' + size + ';background-position:' + (wallpaper.offsetX ?? 50) + '% ' + (wallpaper.offsetY ?? 50) + '%;';
-}
-
 function renderViewerScriptTimeline(timeline) {
-  (viewerProject.talks || []).forEach((talk, index) => {
-    const info = sceneInfoForTalk(talk);
-    const row = document.createElement('article');
-    row.className = 'viewer-script-row';
-    row.dataset.talkId = talk.id || String(index);
-    row.innerHTML =
-      '<div class="viewer-script-col viewer-script-dialogue">' +
-        '<div class="viewer-script-meta"><span>' + formatNo(index) + '</span><strong>' + escapeHtml(talk.charName || '') + '</strong></div>' +
-        '<div class="viewer-script-text">' + escapeHtml(talk.text || '') + '</div>' +
-      '</div>' +
-      '<div class="viewer-script-col viewer-script-stage">' + escapeHtml(stageDirectionText(talk)) + '</div>' +
-      '<div class="viewer-script-col viewer-script-art">' +
-        (info.wallpaper?.image ? '<div class="viewer-script-art-image" style="' + viewerWallpaperStyle(info.wallpaper) + '"></div><span>' + escapeHtml(info.sceneName || '') + '</span>' : '<div class="viewer-script-art-empty">壁紙なし</div>') +
-      '</div>';
-    timeline.appendChild(row);
-  });
+  const shell = document.createElement('div');
+  shell.className = 'viewer-script-pages';
+  shell.innerHTML = buildPrintGroups().map(group => buildScriptPageHtml(group)).join('');
+  timeline.appendChild(shell);
 }
 
 function renderSettingsOptions() {
@@ -812,35 +785,36 @@ function buildPrintGroups() {
   return groups.length ? groups : [{ key: 'empty', sceneName: '', wallpaper: viewerProject?.wallpaper || null, talks: [] }];
 }
 
+function buildScriptPageHtml(group) {
+  const wallpaper = group.wallpaper;
+  const title = escapeHtml(viewerProject.title || '\u53f0\u672c');
+  const sceneTitle = escapeHtml(group.sceneName || (wallpaper?.image ? '\u58c1\u7d19\u30b7\u30fc\u30f3' : '\u58c1\u7d19\u306a\u3057'));
+  const imageHtml = wallpaper?.image
+    ? '<img class="viewer-print-wallpaper-image" src="' + escapeHtml(wallpaper.image) + '" alt="' + sceneTitle + '">'
+    : '<div class="viewer-print-no-wallpaper">\u58c1\u7d19\u306a\u3057</div>';
+  const talkHtml = group.talks.map(({ talk, index }) => {
+    const isSpecial = isSpecialTalk(talk);
+    const sideClass = isSpecial ? 'scene' : isRightSideCharacter(talk.charName) ? 'right' : 'left';
+    return '<div class="viewer-print-talk ' + sideClass + '" data-talk-id="' + escapeHtml(talk.id || String(index)) + '">' +
+      '<span class="viewer-print-number">' + formatNo(index) + '</span>' +
+      '<span class="viewer-print-name">' + escapeHtml(talk.charName || '') + '</span>' +
+      '<span class="viewer-print-text">' + escapeHtml(talk.text || '') + '</span>' +
+      '<span class="viewer-print-stage-direction">' + escapeHtml(stageDirectionText(talk)) + '</span>' +
+    '</div>';
+  }).join('');
+  return '<section class="viewer-print-page">' +
+    '<header class="viewer-print-head"><h1>' + title + '</h1><p>' + sceneTitle + '</p></header>' +
+    '<div class="viewer-print-layout">' +
+      '<div class="viewer-print-script">' + talkHtml + '</div>' +
+      '<aside class="viewer-print-art">' + imageHtml + '</aside>' +
+    '</div>' +
+  '</section>';
+}
+
 function renderPrintPages() {
   const container = document.getElementById('viewerPrintPages');
   if (!container || !viewerProject) return [];
-  const groups = buildPrintGroups();
-  container.innerHTML = groups.map(group => {
-    const wallpaper = group.wallpaper;
-    const title = escapeHtml(viewerProject.title || '\u53f0\u672c');
-    const sceneTitle = escapeHtml(group.sceneName || (wallpaper?.image ? '\u58c1\u7d19\u30b7\u30fc\u30f3' : '\u58c1\u7d19\u306a\u3057'));
-    const imageHtml = wallpaper?.image
-      ? '<img class="viewer-print-wallpaper-image" src="' + escapeHtml(wallpaper.image) + '" alt="' + sceneTitle + '">'
-      : '<div class="viewer-print-no-wallpaper">\u58c1\u7d19\u306a\u3057</div>';
-    const talkHtml = group.talks.map(({ talk, index }) => {
-      const isSpecial = isSpecialTalk(talk);
-      const sideClass = isSpecial ? 'scene' : isRightSideCharacter(talk.charName) ? 'right' : 'left';
-      return '<div class="viewer-print-talk ' + sideClass + '">' +
-        '<span class="viewer-print-number">' + formatNo(index) + '</span>' +
-        '<span class="viewer-print-name">' + escapeHtml(talk.charName || '') + '</span>' +
-        '<span class="viewer-print-text">' + escapeHtml(talk.text || '') + '</span>' +
-        '<span class="viewer-print-stage-direction">' + escapeHtml(stageDirectionText(talk)) + '</span>' +
-      '</div>';
-    }).join('');
-    return '<section class="viewer-print-page">' +
-      '<header class="viewer-print-head"><h1>' + title + '</h1><p>' + sceneTitle + '</p></header>' +
-      '<div class="viewer-print-layout">' +
-        '<div class="viewer-print-script">' + talkHtml + '</div>' +
-        '<aside class="viewer-print-art">' + imageHtml + '</aside>' +
-      '</div>' +
-    '</section>';
-  }).join('');
+  container.innerHTML = buildPrintGroups().map(group => buildScriptPageHtml(group)).join('');
   return [...container.querySelectorAll('img')];
 }
 

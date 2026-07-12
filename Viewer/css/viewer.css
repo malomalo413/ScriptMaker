@@ -311,84 +311,131 @@ html, body {
   text-align: center;
 }
 .hide-viewer-numbers .viewer-number { display: none; }
+.hide-viewer-numbers .viewer-print-number { visibility: hidden; }
 .viewer-mode-script .viewer-timeline {
   display: block;
-  padding: 12px;
-  background: rgba(248, 250, 252, .72);
-  overflow-x: auto;
+  padding: 24px 16px 36px;
+  background: rgba(241, 245, 249, .78);
+  overflow-x: hidden;
 }
-.viewer-script-row {
-  display: grid;
-  grid-template-columns: minmax(260px, 1.15fr) minmax(220px, .85fr) minmax(220px, .9fr);
-  gap: 10px;
-  align-items: stretch;
-  min-height: 150px;
-  margin: 0 0 10px;
-}
-.viewer-script-col {
-  min-width: 0;
-  border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, .45);
-  background: rgba(255, 255, 255, .92);
-  padding: 12px;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-.viewer-script-dialogue {
+.viewer-script-pages {
+  width: min(100%, 1280px);
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 22px;
 }
-.viewer-script-meta {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 900;
+.viewer-mode-script .viewer-print-page {
+  display: block;
+  min-height: auto;
+  padding: 24px 28px 30px;
+  border: 1px solid rgba(203, 213, 225, .9);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 20px 60px rgba(15, 23, 42, .18);
+  page-break-after: auto;
+  break-after: auto;
 }
-.viewer-script-meta span {
-  min-width: 34px;
-  padding: 2px 5px;
-  border-radius: 5px;
-  background: rgba(226, 232, 240, .92);
-  text-align: center;
+.viewer-mode-script .viewer-print-head {
+  margin-bottom: 14px;
+  padding: 0 0 10px;
+  border-bottom: 2px solid #111827;
 }
-.viewer-script-text {
-  font-size: 16px;
-  line-height: 1.7;
-  color: #0f172a;
+.viewer-mode-script .viewer-print-head h1 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.35;
 }
-.viewer-script-stage {
-  background: rgba(100, 116, 139, .18);
-  color: #334155;
-  font-size: 14px;
-  line-height: 1.7;
-}
-.viewer-script-art {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: rgba(255, 255, 255, .74);
+.viewer-mode-script .viewer-print-head p {
+  margin: 4px 0 0;
   color: #64748b;
   font-size: 12px;
   font-weight: 900;
 }
-.viewer-script-art-image {
-  flex: 1;
-  min-height: 110px;
-  border-radius: 7px;
-  background: #e2e8f0 center / cover no-repeat;
-  border: 1px solid rgba(148, 163, 184, .35);
+.viewer-mode-script .viewer-print-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 28%);
+  gap: 22px;
+  align-items: start;
 }
-.viewer-script-art-empty {
-  flex: 1;
-  min-height: 110px;
+.viewer-mode-script .viewer-print-script {
+  min-width: 0;
+}
+.viewer-mode-script .viewer-print-art {
+  position: sticky;
+  top: 12px;
+  min-height: 360px;
+  max-height: calc(100dvh - 210px);
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.viewer-mode-script .viewer-print-wallpaper-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  max-height: min(58vh, 620px);
+  object-fit: contain;
+}
+.viewer-mode-script .viewer-print-no-wallpaper {
+  width: 100%;
+  min-height: 260px;
   display: grid;
   place-items: center;
-  border-radius: 7px;
-  background: rgba(226, 232, 240, .72);
   color: #94a3b8;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: center;
+}
+.viewer-mode-script .viewer-print-talk {
+  display: grid;
+  grid-template-columns: 42px minmax(62px, .18fr) minmax(0, 1fr) minmax(92px, .34fr);
+  gap: 7px;
+  margin: 0 0 5px;
+  padding-left: 7px;
+  border-left: 3px solid #cbd5e1;
+  font-size: 13px;
+  line-height: 1.55;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.viewer-mode-script .viewer-print-talk.right {
+  border-left-color: #3b82f6;
+}
+.viewer-mode-script .viewer-print-talk.scene {
+  border-left-color: #94a3b8;
+  background: #f1f5f9;
+  padding: 4px 6px 4px 7px;
+}
+.viewer-mode-script .viewer-print-talk.scene .viewer-print-name {
+  color: #64748b;
+}
+.viewer-mode-script .viewer-print-number {
+  color: #6b7280;
+  font-weight: 900;
+}
+.viewer-mode-script .viewer-print-name {
+  color: #111827;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+.viewer-mode-script .viewer-print-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.viewer-mode-script .viewer-print-stage-direction {
+  min-height: 1.55em;
+  display: block;
+  padding: 4px 6px;
+  border-radius: 5px;
+  background: rgba(100, 116, 139, .18);
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.45;
 }
 .viewer-empty {
   position: absolute;
@@ -578,9 +625,56 @@ html, body {
   .viewer-header-actions { gap: 6px; }
   .viewer-logout-button { padding-left: 8px; padding-right: 8px; }
   .viewer-display-mode-bar { overflow-x: auto; gap: 8px; }
-  .viewer-script-row {
-    grid-template-columns: 260px 220px 220px;
-    min-width: 720px;
+}
+
+@media (max-width: 900px) {
+  .viewer-mode-script .viewer-timeline {
+    padding: 12px 8px 18px;
+  }
+  .viewer-script-pages {
+    gap: 14px;
+  }
+  .viewer-mode-script .viewer-print-page {
+    padding: 14px 12px 16px;
+  }
+  .viewer-mode-script .viewer-print-head {
+    margin-bottom: 10px;
+    padding-bottom: 7px;
+  }
+  .viewer-mode-script .viewer-print-head h1 {
+    font-size: 16px;
+  }
+  .viewer-mode-script .viewer-print-head p {
+    font-size: 10px;
+  }
+  .viewer-mode-script .viewer-print-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(150px, 27%);
+    gap: 10px;
+  }
+  .viewer-mode-script .viewer-print-talk {
+    grid-template-columns: 32px minmax(48px, .18fr) minmax(0, 1fr) minmax(72px, .32fr);
+    gap: 5px;
+    margin-bottom: 4px;
+    padding-left: 5px;
+    font-size: 11px;
+    line-height: 1.45;
+  }
+  .viewer-mode-script .viewer-print-stage-direction {
+    padding: 3px 4px;
+    font-size: 10px;
+  }
+  .viewer-mode-script .viewer-print-art {
+    top: 8px;
+    min-height: 220px;
+    max-height: calc(100dvh - 170px);
+    padding: 7px;
+  }
+  .viewer-mode-script .viewer-print-wallpaper-image {
+    max-height: calc(100dvh - 190px);
+  }
+  .viewer-mode-script .viewer-print-no-wallpaper {
+    min-height: 180px;
+    font-size: 10px;
   }
 }
 
