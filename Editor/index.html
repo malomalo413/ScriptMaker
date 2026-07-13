@@ -14,11 +14,11 @@
   <link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="../assets/icons/icon-512.png">
-  <link rel="stylesheet" href="../css/styles.css?v=44">
+  <link rel="stylesheet" href="../css/styles.css?v=45">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
   <script src="../js/firebase-config.js?v=30" defer></script>
   <script src="../js/firebase-share.js?v=32" defer></script>
-  <script src="../js/app.js?v=51" defer></script>
+  <script src="../js/app.js?v=52" defer></script>
 </head>
 <body class="auth-locked">
 
@@ -114,7 +114,10 @@
         <button type="button" onclick="cancelInlineTalkEdit()">キャンセル</button>
       </div>
       <div class="input-row">
-        <textarea class="input-speech" id="inputSpeech" placeholder="セリフを入力..." rows="1"></textarea>
+        <div class="input-highlight-wrap">
+          <div class="input-speech-highlight" id="inputSpeechHighlight" aria-hidden="true"></div>
+          <textarea class="input-speech" id="inputSpeech" placeholder="セリフを入力..." rows="1"></textarea>
+        </div>
         <button class="send-btn" id="sendButton" onclick="sendMessage()">送信</button>
       </div>
     </div>

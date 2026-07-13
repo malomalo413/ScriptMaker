@@ -978,18 +978,62 @@
       flex-shrink: 0;
     }
     .input-row { display: flex; gap: 8px; align-items: flex-end; }
+
+    .input-highlight-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .input-speech-highlight {
+      position: absolute;
+      inset: 0;
+      padding: 10px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      box-sizing: border-box;
+      color: #111827;
+      font-size: 15px;
+      line-height: 1.4;
+      min-height: 42px;
+      max-height: 120px;
+      overflow: hidden;
+      pointer-events: none;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      word-break: break-word;
+      z-index: 1;
+    }
+
+    .input-stage-highlight {
+      background: rgba(59, 130, 246, 0.18);
+      color: #1e3a8a;
+      border-radius: 5px;
+      padding: 1px 2px;
+    }
     
     .input-speech {
-      flex: 1;
+      position: relative;
+      z-index: 2;
+      width: 100%;
       padding: 10px;
       border: 1px solid var(--border-color);
       border-radius: 8px;
+      box-sizing: border-box;
       font-size: 15px;
+      color: transparent;
+      caret-color: #111827;
+      background: transparent;
       resize: none;
       height: 42px;
       max-height: 120px;
       outline: none;
       line-height: 1.4;
+      overflow-wrap: break-word;
+      word-break: break-word;
+    }
+    .input-speech::placeholder {
+      color: #9ca3af;
     }
     .send-btn {
       background: var(--primary-color);

@@ -277,23 +277,36 @@ let state = {
       return record;
     }
 
-    function extractTrailingStageDirections(text) {
-      const original = String(text || '').trim();
-      let body = original;
-      const notes = [];
-      const trailingBracketPattern = /\s*(?:（([^（）]+)）|\(([^()]+)\))\s*$/;
+    function findTrailingStageDirectionRanges(text, options = {}) {
+      const original = String(text || '');
+      let body = original.trimEnd();
+      const ranges = [];
+      const trailingBracketPattern = options.fullWidthOnly
+        ? /\s*(（([^（）]+)）)\s*$/
+        : /\s*(?:(（([^（）]+)）)|(\(([^()]+)\)))\s*$/;
 
       while (true) {
         const match = body.match(trailingBracketPattern);
         if (!match) break;
-        const note = String(match[1] || match[2] || '').trim();
+        const bracketText = options.fullWidthOnly ? match[1] : (match[1] || match[3] || '');
+        const note = String(options.fullWidthOnly ? match[2] : (match[2] || match[4] || '')).trim();
         if (!note) break;
-        notes.unshift(note);
+        const bracketOffset = match[0].indexOf(bracketText);
+        const start = match.index + bracketOffset;
+        ranges.unshift({ start, end: start + bracketText.length, text: bracketText, note });
         body = body.slice(0, match.index).trim();
       }
 
-      if (!body && notes.length) return { text: original, stageDirections: [] };
-      return { text: body, stageDirections: notes };
+      if (!body.trim() && ranges.length) return { text: original.trim(), ranges: [] };
+      return { text: body.trim(), ranges };
+    }
+
+    function extractTrailingStageDirections(text) {
+      const parsed = findTrailingStageDirectionRanges(text);
+      return {
+        text: parsed.text,
+        stageDirections: parsed.ranges.map(range => range.note)
+      };
     }
 
     function mergeStageDirectionLines(existing, additions) {
@@ -1288,6 +1301,7 @@ let state = {
       element.classList.add('active');
       currentCharacter = name;
       if (editingTalkId !== null) updateInlineEditState();
+      renderInputStageDirectionHighlight();
 
       if (shouldKeepKeyboard) {
         setTimeout(() => input.focus({ preventScroll: true }), 0);
@@ -2350,6 +2364,7 @@ ${keptPredictionText}
       const input = document.getElementById('inputSpeech');
       input.value = talk.text;
       resizeInputSpeech(input);
+      renderInputStageDirectionHighlight();
       updateInlineEditState();
       renderCharSelector();
       renderTimeline();
@@ -2394,6 +2409,7 @@ ${keptPredictionText}
       const input = document.getElementById('inputSpeech');
       input.value = '';
       input.style.height = '42px';
+      renderInputStageDirectionHighlight();
     }
 
     function resizeInputSpeech(input) {
@@ -2402,6 +2418,40 @@ ${keptPredictionText}
       if (newHeight < 42) newHeight = 42;
       if (newHeight > 120) newHeight = 120;
       input.style.height = newHeight + 'px';
+      syncInputHighlightLayer(input);
+    }
+
+    function syncInputHighlightLayer(input) {
+      const highlight = document.getElementById('inputSpeechHighlight');
+      if (!input || !highlight) return;
+      highlight.style.height = input.style.height || input.offsetHeight + 'px';
+      highlight.scrollTop = input.scrollTop;
+      highlight.scrollLeft = input.scrollLeft;
+    }
+
+    function renderInputStageDirectionHighlight() {
+      const input = document.getElementById('inputSpeech');
+      const highlight = document.getElementById('inputSpeechHighlight');
+      if (!input || !highlight) return;
+      const value = input.value || '';
+      const ranges = currentCharacter === '情景描写' ? [] : findTrailingStageDirectionRanges(value, { fullWidthOnly: true }).ranges;
+      if (!value) {
+        highlight.innerHTML = '';
+        syncInputHighlightLayer(input);
+        return;
+      }
+
+      let html = '';
+      let cursor = 0;
+      ranges.forEach(range => {
+        html += escapeHtml(value.slice(cursor, range.start));
+        html += '<span class="input-stage-highlight">' + escapeHtml(value.slice(range.start, range.end)) + '</span>';
+        cursor = range.end;
+      });
+      html += escapeHtml(value.slice(cursor));
+      if (value.endsWith('\n')) html += ' ';
+      highlight.innerHTML = html;
+      syncInputHighlightLayer(input);
     }
 
     function updateInlineEditState() {
@@ -3668,8 +3718,12 @@ unlock();
       const timeline = document.getElementById('talkTimeline');
 
       inputSpeech.addEventListener('keydown', sendMessageOnEnter);
+      inputSpeech.addEventListener('scroll', () => syncInputHighlightLayer(inputSpeech));
+      inputSpeech.addEventListener('compositionupdate', () => renderInputStageDirectionHighlight());
+      inputSpeech.addEventListener('compositionend', () => renderInputStageDirectionHighlight());
 
       originalViewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      renderInputStageDirectionHighlight();
       forceResizeViewport();
 
       if (window.visualViewport) {
@@ -3702,6 +3756,7 @@ unlock();
 
       inputSpeech.addEventListener('input', function() {
         resizeInputSpeech(this);
+        renderInputStageDirectionHighlight();
         forceResizeViewport();
         scrollTimelineForKeyboard();
       });
