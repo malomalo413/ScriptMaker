@@ -1007,6 +1007,17 @@
       box-shadow: 0 -8px 24px rgba(0,0,0,0.12);
     }
 
+    body.keyboard-open .nav-bar,
+    body.keyboard-open .display-mode-bar,
+    body.keyboard-open .header-scroll-area {
+      display: none !important;
+    }
+
+    body.keyboard-open .talk-timeline {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+
 
     /* ==========================================
        🎯 カスタムモーダルUI

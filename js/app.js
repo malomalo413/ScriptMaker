@@ -2651,6 +2651,29 @@ ${keptPredictionText}
       timeline.scrollTop = timeline.scrollHeight;
     }
 
+    function keepEditingTalkVisible() {
+      const timeline = document.getElementById('talkTimeline');
+      if (!timeline || !editingTalkId) return false;
+      const target = Array.from(timeline.querySelectorAll('[data-talk-id]')).find(item => item.dataset.talkId === editingTalkId);
+      if (!target) return false;
+
+      const targetTop = target.offsetTop;
+      const targetBottom = targetTop + target.offsetHeight;
+      const visibleTop = timeline.scrollTop + 8;
+      const visibleBottom = timeline.scrollTop + timeline.clientHeight - 8;
+
+      if (targetTop < visibleTop) {
+        timeline.scrollTop = Math.max(0, targetTop - 12);
+      } else if (targetBottom > visibleBottom) {
+        timeline.scrollTop += targetBottom - visibleBottom + 12;
+      }
+      return true;
+    }
+
+    function scrollTimelineForKeyboard() {
+      if (!keepEditingTalkVisible()) scrollToBottom();
+    }
+
     function saveDataAlert() { alert("データを完全に内部保存しました。"); }
     function exportDataAlert() {
       const input = document.getElementById('inputSpeech');
@@ -3603,8 +3626,6 @@ unlock();
       if (window.visualViewport) {
         window.visualViewport.addEventListener('resize', forceResizeViewport);
         window.visualViewport.addEventListener('scroll', forceResizeViewport);
-      } else {
-        window.addEventListener('resize', forceResizeViewport);
       }
 
       // Body/page scrolling must not move the input area. Only the talk timeline scrolls.
@@ -3620,11 +3641,12 @@ unlock();
         forceResizeViewport();
         setTimeout(forceResizeViewport, 50);
         setTimeout(forceResizeViewport, 180);
-        setTimeout(scrollToBottom, 260);
+        setTimeout(scrollTimelineForKeyboard, 260);
       });
 
       inputSpeech.addEventListener('blur', () => {
         document.body.classList.remove('keyboard-focused');
+        document.body.classList.remove('keyboard-open');
         trashZone.style.bottom = '140px';
         setTimeout(forceResizeViewport, 80);
       });
@@ -3632,7 +3654,15 @@ unlock();
       inputSpeech.addEventListener('input', function() {
         resizeInputSpeech(this);
         forceResizeViewport();
-        scrollToBottom();
+        scrollTimelineForKeyboard();
+      });
+
+      window.addEventListener('resize', forceResizeViewport);
+      window.addEventListener('orientationchange', () => {
+        originalViewportHeight = 0;
+        document.body.classList.remove('keyboard-open');
+        setTimeout(forceResizeViewport, 120);
+        setTimeout(forceResizeViewport, 420);
       });
     }
 
@@ -3642,12 +3672,22 @@ unlock();
 
       const viewport = window.visualViewport;
       const vh = Math.max(1, Math.floor(viewport ? viewport.height : window.innerHeight));
+      const viewportWidth = Math.floor(viewport ? viewport.width : window.innerWidth);
+      const isTouchPhone = window.matchMedia && window.matchMedia('(pointer: coarse)').matches && Math.min(viewportWidth, window.innerWidth) <= 900;
+      const referenceHeight = Math.max(originalViewportHeight || 0, window.innerHeight || 0, document.documentElement.clientHeight || 0);
+      if (!document.body.classList.contains('keyboard-focused') && vh > originalViewportHeight) {
+        originalViewportHeight = vh;
+      }
+      const keyboardGap = Math.max(referenceHeight - vh, 0);
+      const keyboardOpen = document.body.classList.contains('keyboard-focused') && isTouchPhone && keyboardGap > Math.max(120, referenceHeight * 0.18);
+      document.body.classList.toggle('keyboard-open', keyboardOpen);
+
       document.documentElement.style.setProperty('--app-height', vh + 'px');
       document.body.style.height = vh + 'px';
       editorView.style.height = vh + 'px';
       editorView.style.maxHeight = vh + 'px';
       editorView.style.transform = '';
-      scrollToBottom();
+      scrollTimelineForKeyboard();
     }
 
     function initWallpaperPan() {
