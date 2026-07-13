@@ -277,6 +277,47 @@ let state = {
       return record;
     }
 
+    function extractTrailingStageDirections(text) {
+      const original = String(text || '').trim();
+      let body = original;
+      const notes = [];
+      const trailingBracketPattern = /\s*(?:（([^（）]+)）|\(([^()]+)\))\s*$/;
+
+      while (true) {
+        const match = body.match(trailingBracketPattern);
+        if (!match) break;
+        const note = String(match[1] || match[2] || '').trim();
+        if (!note) break;
+        notes.unshift(note);
+        body = body.slice(0, match.index).trim();
+      }
+
+      if (!body && notes.length) return { text: original, stageDirections: [] };
+      return { text: body, stageDirections: notes };
+    }
+
+    function mergeStageDirectionLines(existing, additions) {
+      const lines = String(existing || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+      const seen = new Set(lines);
+      additions.map(item => String(item || '').trim()).filter(Boolean).forEach(item => {
+        if (seen.has(item)) return;
+        lines.push(item);
+        seen.add(item);
+      });
+      return lines.join('\n');
+    }
+
+    function prepareTalkInputForSave(charName, text, existingStageDirection = '') {
+      if (charName === '情景描写') {
+        return { text: String(text || '').trim(), stageDirection: existingStageDirection };
+      }
+      const parsed = extractTrailingStageDirections(text);
+      return {
+        text: parsed.text,
+        stageDirection: mergeStageDirectionLines(existingStageDirection, parsed.stageDirections)
+      };
+    }
+
     function characterLibrarySignature(character) {
       return String(character?.name || '').trim() + '\u0000' + String(character?.avatar || '');
     }
@@ -1932,7 +1973,14 @@ let state = {
           return;
         }
         pushUndoSnapshot();
-        project.talks[resolved.index] = { ...resolved.talk, charName: currentCharacter, text: text };
+        const prepared = prepareTalkInputForSave(currentCharacter, text, getStageDirection(resolved.talk));
+        project.talks[resolved.index] = { ...resolved.talk, charName: currentCharacter, text: prepared.text };
+        if (prepared.stageDirection) {
+          project.talks[resolved.index].stageDirection = prepared.stageDirection;
+        } else {
+          delete project.talks[resolved.index].stageDirection;
+          delete project.talks[resolved.index].note;
+        }
         predictedTalks = [];
         saveState();
         finishInlineTalkEdit();
@@ -1944,7 +1992,8 @@ let state = {
       }
 
       pushUndoSnapshot();
-      project.talks.push(createTalkRecord(currentCharacter, text));
+      const prepared = prepareTalkInputForSave(currentCharacter, text);
+      project.talks.push(createTalkRecord(currentCharacter, prepared.text, prepared.stageDirection));
       predictedTalks = [];
 
       saveState();
