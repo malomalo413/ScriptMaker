@@ -2693,6 +2693,12 @@ ${keptPredictionText}
 
     function buildViewerSharePayload(project, viewerPasswordHash, shareId) {
       const snapshot = cloneProject(project);
+      loadEditorScriptColorSettings();
+      snapshot.scriptColorSettings = {};
+      Object.entries(editorScriptColorSettings || {}).forEach(([name, color]) => {
+        const safeColor = sanitizeScriptColor(color);
+        if (name && safeColor) snapshot.scriptColorSettings[name] = safeColor;
+      });
       ensureTalkIds(snapshot);
       normalizeSceneWallpaperSettings(snapshot);
       return {

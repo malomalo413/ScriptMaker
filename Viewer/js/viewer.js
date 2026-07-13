@@ -322,11 +322,17 @@ function scriptColorClassForCharacter(name) {
 }
 
 function loadViewerScriptColorSettings() {
+  const embedded = {};
+  Object.entries(viewerProject?.scriptColorSettings || {}).forEach(([name, color]) => {
+    const safeColor = sanitizeScriptColor(color);
+    if (name && safeColor) embedded[name] = safeColor;
+  });
   try {
-    viewerScriptColorSettings = JSON.parse(localStorage.getItem(scriptColorStorageKey()) || '{}') || {};
+    const stored = localStorage.getItem(scriptColorStorageKey());
+    viewerScriptColorSettings = stored ? JSON.parse(stored) || {} : embedded;
   } catch (error) {
     console.warn('Viewer script color setting load failed', error);
-    viewerScriptColorSettings = {};
+    viewerScriptColorSettings = embedded;
   }
 }
 
