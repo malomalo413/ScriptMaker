@@ -14,11 +14,11 @@
   <link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="../assets/icons/icon-512.png">
-  <link rel="stylesheet" href="../css/styles.css?v=41">
+  <link rel="stylesheet" href="../css/styles.css?v=42">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
   <script src="../js/firebase-config.js?v=30" defer></script>
   <script src="../js/firebase-share.js?v=32" defer></script>
-  <script src="../js/app.js?v=48" defer></script>
+  <script src="../js/app.js?v=49" defer></script>
 </head>
 <body class="auth-locked">
 
@@ -83,14 +83,17 @@
 
     <div class="header-scroll-area">
       <div class="meta-stats" id="metaStats">
-        <div class="count-controls">
-          <label><input type="checkbox" id="excludePunctuationCheck">句読点を除く</label>
-          <label><input type="checkbox" id="excludeCustomCheck">カスタム</label>
-          <label><input type="checkbox" id="excludeEmojiCheck">顔文字</label>
-          <label><input type="checkbox" id="showTalkNumbersCheck" checked>&#30058;&#21495;&#34920;&#31034;</label>
-          <label><input type="checkbox" id="outputTalkNumbersCheck">&#20986;&#21147;&#12395;&#30058;&#21495;</label>
-          <input type="text" id="customExcludeChars" placeholder="除外する文字">
-        </div>
+        <details class="count-options" id="countOptionsDetails">
+          <summary><span>&#25991;&#23383;&#25968;&#25511;&#38500;&#12539;&#34920;&#31034;&#35373;&#23450;</span></summary>
+          <div class="count-controls">
+            <label><input type="checkbox" id="excludePunctuationCheck">&#21477;&#35501;&#28857;&#12434;&#38500;&#12367;</label>
+            <label><input type="checkbox" id="excludeCustomCheck">&#12459;&#12473;&#12479;&#12512;</label>
+            <label><input type="checkbox" id="excludeEmojiCheck">&#38996;&#25991;&#23383;</label>
+            <label><input type="checkbox" id="showTalkNumbersCheck" checked>&#30058;&#21495;&#34920;&#31034;</label>
+            <label><input type="checkbox" id="outputTalkNumbersCheck">&#20986;&#21147;&#12395;&#30058;&#21495;</label>
+            <input type="text" id="customExcludeChars" placeholder="&#38500;&#22806;&#12377;&#12427;&#25991;&#23383;">
+          </div>
+        </details>
         <div class="count-output" id="countOutput"></div>
       </div>
       <div class="batch-edit-bar" id="batchEditBar">

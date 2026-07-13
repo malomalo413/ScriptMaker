@@ -316,12 +316,43 @@
       color: #64748b;
       background: rgba(248, 250, 252, 0.88);
     }
+    .count-options {
+      margin-bottom: 6px;
+    }
+    .count-options summary {
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid rgba(148, 163, 184, .45);
+      border-radius: 9px;
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, .92);
+      color: #334155;
+      font-size: 13px;
+      font-weight: 900;
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+    }
+    .count-options summary::-webkit-details-marker {
+      display: none;
+    }
+    .count-options summary::after {
+      content: "▼";
+      font-size: 10px;
+      color: #64748b;
+      transition: transform .15s ease;
+    }
+    .count-options[open] summary::after {
+      transform: rotate(180deg);
+    }
     .count-controls {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 8px 12px;
-      margin-bottom: 6px;
+      margin-top: 8px;
     }
     .count-controls label {
       display: inline-flex;

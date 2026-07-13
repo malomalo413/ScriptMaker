@@ -2534,16 +2534,23 @@ ${keptPredictionText}
       const customInput = document.getElementById('customExcludeChars');
       const showNumbers = document.getElementById('showTalkNumbersCheck');
       const outputNumbers = document.getElementById('outputTalkNumbersCheck');
+      const countOptions = document.getElementById('countOptionsDetails');
       const storedCountSetting = loadEditorCountSetting();
       if (emojiCheck) emojiCheck.checked = !!storedCountSetting.excludeEmoji;
       if (showNumbers) showNumbers.checked = state.settings?.showTalkNumbers !== false;
       if (outputNumbers) outputNumbers.checked = !!state.settings?.outputTalkNumbers;
+      if (countOptions) {
+        countOptions.open = !!storedCountSetting.countOptionsOpen;
+        countOptions.addEventListener('toggle', function() {
+          saveEditorCountSetting({ countOptionsOpen: this.open });
+        });
+      }
       [punctuationCheck, customCheck].forEach(el => { el?.addEventListener('change', updateMetaStats); });
       emojiCheck?.addEventListener('change', function() {
         saveEditorCountSetting({ excludeEmoji: this.checked });
         updateMetaStats();
       });
-      customInput.addEventListener('input', updateMetaStats);
+      customInput?.addEventListener('input', updateMetaStats);
     }
 
     function initNumberSettingsControls() {
