@@ -1,6 +1,7 @@
 const EDITOR_AUTH_HASH_KEY = 'scriptmaker_editor_password_hash_v1';
 const EDITOR_AUTH_SESSION_KEY = 'scriptmaker_editor_auth_ok_v1';
 const EDITOR_AUTH_SAVED_HASH_KEY = 'scriptmaker_editor_saved_password_hash_v1';
+const EDITOR_AUTH_AUTO_LOGIN_KEY = 'scriptmaker_editor_auto_login_v1';
 const SCRIPTMAKER_PUBLIC_VIEWER_URL = 'https://small-4c16f.web.app/';
 const SCRIPTMAKER_SHARE_WORKER_URL = '';
 const SCRIPTMAKER_SHARE_WORKER_URL_KEY = 'scriptmaker_share_worker_url_v1';
@@ -96,6 +97,14 @@ let state = {
       return localStorage.getItem(EDITOR_AUTH_SAVED_HASH_KEY) || '';
     }
 
+    function editorAutoLoginEnabled() {
+      return localStorage.getItem(EDITOR_AUTH_AUTO_LOGIN_KEY) === '1';
+    }
+
+    function setEditorAutoLoginEnabled(enabled) {
+      localStorage.setItem(EDITOR_AUTH_AUTO_LOGIN_KEY, enabled ? '1' : '0');
+    }
+
     function unlockEditorAuth(hash) {
       if (hash) sessionStorage.setItem(EDITOR_AUTH_SESSION_KEY, hash);
       document.body.classList.remove('auth-locked');
@@ -119,37 +128,22 @@ let state = {
         item.style.display = passwordMode ? '' : 'none';
       });
       if (googleButton) {
-        googleButton.classList.toggle('hidden', passwordMode);
-        googleButton.hidden = passwordMode;
-        googleButton.style.display = passwordMode ? 'none' : '';
-      }
-    }
-
-    function showEditorGoogleAuthGate(message = '') {
-      const gate = document.getElementById('editorAuthGate');
-      const title = document.getElementById('editorAuthTitle');
-      const help = document.getElementById('editorAuthHelp');
-      const authMessage = document.getElementById('editorAuthMessage');
-      if (!gate || !title || !help) return;
-      document.body.classList.add('auth-locked');
-      gate.classList.remove('hidden');
-      setEditorAuthGateMode('google');
-      title.textContent = 'Googleアカウントでログイン';
-      help.textContent = '同じGoogleアカウントでログインすると、PC・スマホ・タブレットで同じ台本を続きから編集できます。';
-      if (authMessage) {
-        authMessage.textContent = message;
-        authMessage.classList.toggle('is-error', !!message);
+        googleButton.classList.remove('hidden');
+        googleButton.hidden = false;
+        googleButton.style.display = '';
       }
     }
 
     function showEditorAuthGate() {
       const storedHash = editorPasswordHash();
+      const savedHash = savedEditorPasswordHash();
       const gate = document.getElementById('editorAuthGate');
       const title = document.getElementById('editorAuthTitle');
       const help = document.getElementById('editorAuthHelp');
       const confirm = document.getElementById('editorAuthConfirm');
       const password = document.getElementById('editorAuthPassword');
       const remember = document.getElementById('editorAuthRemember');
+      const autoLogin = document.getElementById('editorAuthAutoLogin');
       const message = document.getElementById('editorAuthMessage');
       if (!gate || !title || !help || !confirm || !password || !message) return;
       setEditorAuthGateMode('password');
@@ -159,15 +153,20 @@ let state = {
       password.value = '';
       confirm.value = '';
       if (remember) remember.checked = true;
+      if (autoLogin) autoLogin.checked = editorAutoLoginEnabled();
       if (storedHash) {
         title.textContent = '\u30d1\u30b9\u30ef\u30fc\u30c9\u5165\u529b';
-        help.textContent = '\u8a2d\u5b9a\u6e08\u307f\u306e\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u5165\u529b\u3059\u308b\u3068Editor\u3092\u958b\u304d\u307e\u3059\u3002';
+        help.textContent = savedHash === storedHash
+          ? '\u4fdd\u5b58\u6e08\u307f\u306e\u30d1\u30b9\u30ef\u30fc\u30c9\u304c\u3042\u308a\u307e\u3059\u3002\u5165\u529b\u305b\u305a\u306b\u300c\u958b\u304f\u300d\u3092\u62bc\u3059\u304b\u3001\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u5165\u529b\u3057\u3066Editor\u3092\u958b\u304d\u307e\u3059\u3002'
+          : '\u8a2d\u5b9a\u6e08\u307f\u306e\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u5165\u529b\u3059\u308b\u3068Editor\u3092\u958b\u304d\u307e\u3059\u3002';
+        password.placeholder = savedHash === storedHash ? '\u4fdd\u5b58\u6e08\u307f\u3002\u958b\u304f\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044' : '\u30d1\u30b9\u30ef\u30fc\u30c9';
         confirm.classList.add('hidden');
         confirm.style.display = 'none';
         confirm.hidden = true;
       } else {
         title.textContent = '\u521d\u56de\u30d1\u30b9\u30ef\u30fc\u30c9\u8a2d\u5b9a';
         help.textContent = '\u3053\u306e\u7aef\u672b\u3067Editor\u3092\u958b\u304f\u305f\u3081\u306e\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u8a2d\u5b9a\u3057\u307e\u3059\u3002';
+        password.placeholder = '\u30d1\u30b9\u30ef\u30fc\u30c9';
         confirm.classList.remove('hidden');
         confirm.style.display = '';
         confirm.hidden = false;
@@ -176,18 +175,15 @@ let state = {
     }
 
     function initEditorAuthGate() {
+      initEditorAuthControls();
       const storedHash = editorPasswordHash();
-      if (!storedHash && window.ScriptMakerFirebaseShare) {
-        showEditorGoogleAuthGate();
-        initEditorGoogleAccountSync();
-        return;
-      }
-      if (storedHash && sessionStorage.getItem(EDITOR_AUTH_SESSION_KEY) === storedHash) {
+      const savedHash = savedEditorPasswordHash();
+      const shouldAutoLogin = editorAutoLoginEnabled();
+      if (shouldAutoLogin && storedHash && sessionStorage.getItem(EDITOR_AUTH_SESSION_KEY) === storedHash) {
         unlockEditorAuth(storedHash);
         return;
       }
-      const savedHash = savedEditorPasswordHash();
-      if (storedHash && savedHash === storedHash) {
+      if (shouldAutoLogin && storedHash && savedHash === storedHash) {
         unlockEditorAuth(storedHash);
         return;
       }
@@ -195,6 +191,9 @@ let state = {
         localStorage.removeItem(EDITOR_AUTH_SAVED_HASH_KEY);
       }
       showEditorAuthGate();
+      if (sessionStorage.getItem(SCRIPTMAKER_EDITOR_GOOGLE_CONNECTING_KEY) === '1' || shouldAutoLogin) {
+        initEditorGoogleAccountSync();
+      }
     }
 
     async function submitEditorPassword() {
@@ -202,7 +201,15 @@ let state = {
       const password = document.getElementById('editorAuthPassword')?.value || '';
       const confirm = document.getElementById('editorAuthConfirm')?.value || '';
       const remember = document.getElementById('editorAuthRemember')?.checked !== false;
+      const autoLogin = document.getElementById('editorAuthAutoLogin')?.checked === true;
       const message = document.getElementById('editorAuthMessage');
+      setEditorAutoLoginEnabled(autoLogin);
+      if (!password && storedHash && savedEditorPasswordHash() === storedHash) {
+        if (remember) localStorage.setItem(EDITOR_AUTH_SAVED_HASH_KEY, storedHash);
+        else localStorage.removeItem(EDITOR_AUTH_SAVED_HASH_KEY);
+        unlockEditorAuth(storedHash);
+        return;
+      }
       if (!password) {
         if (message) message.textContent = '\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002';
         return;
@@ -236,6 +243,33 @@ let state = {
       if (message) {
         message.textContent = '\u4fdd\u5b58\u3057\u305f\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u524a\u9664\u3057\u307e\u3057\u305f\u3002';
         message.classList.remove('is-error');
+      }
+    }
+
+    function continueEditorOffline() {
+      sessionStorage.setItem(EDITOR_AUTH_SESSION_KEY, 'offline');
+      document.body.classList.remove('auth-locked');
+      document.getElementById('editorAuthGate')?.classList.add('hidden');
+      setEditorSyncStatus('オフライン', 'offline', 'この端末のデータだけで続けます');
+      setTimeout(initCloudSyncFromUrl, 80);
+    }
+
+    function initEditorAuthControls() {
+      const password = document.getElementById('editorAuthPassword');
+      const confirm = document.getElementById('editorAuthConfirm');
+      const autoLogin = document.getElementById('editorAuthAutoLogin');
+      [password, confirm].forEach(input => {
+        if (!input || input._scriptmakerEnterBound) return;
+        input._scriptmakerEnterBound = true;
+        input.addEventListener('keydown', event => {
+          if (event.key !== 'Enter' || event.isComposing) return;
+          event.preventDefault();
+          submitEditorPassword();
+        });
+      });
+      if (autoLogin && !autoLogin._scriptmakerAutoBound) {
+        autoLogin._scriptmakerAutoBound = true;
+        autoLogin.addEventListener('change', () => setEditorAutoLoginEnabled(autoLogin.checked));
       }
     }
 
@@ -496,7 +530,7 @@ let state = {
             editorGoogleUser = null;
             updateEditorGoogleConnectUi();
             setEditorSyncStatus('未ログイン', 'offline');
-            if (!editorPasswordHash()) showEditorGoogleAuthGate();
+            if (!editorPasswordHash()) showEditorAuthGate();
           }
         });
         window.addEventListener('online', () => saveEditorAccountCloudNow());
@@ -512,7 +546,7 @@ let state = {
       if (message) message.textContent = '';
       try {
         if (!window.ScriptMakerFirebaseShare) throw new Error('Firebase機能を読み込めませんでした。');
-        if (options.fromMenu) {
+        if (options.fromMenu !== false) {
           editorManualGoogleConnect = true;
           sessionStorage.setItem(SCRIPTMAKER_EDITOR_GOOGLE_CONNECTING_KEY, '1');
         }
@@ -522,7 +556,7 @@ let state = {
         if (editorGoogleUser) {
           document.body.classList.remove('auth-locked');
           document.getElementById('editorAuthGate')?.classList.add('hidden');
-          if (options.fromMenu || editorManualGoogleConnect) {
+          if (options.fromMenu !== false || editorManualGoogleConnect) {
             editorManualGoogleConnect = false;
             await handleEditorGoogleMigrationAfterLogin();
             return;

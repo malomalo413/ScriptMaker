@@ -14,11 +14,11 @@
   <link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="../assets/icons/icon-512.png">
-  <link rel="stylesheet" href="../css/styles.css?v=47">
+  <link rel="stylesheet" href="../css/styles.css?v=48">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
   <script src="../js/firebase-config.js?v=30" defer></script>
   <script src="../js/firebase-share.js?v=34" defer></script>
-  <script src="../js/app.js?v=54" defer></script>
+  <script src="../js/app.js?v=55" defer></script>
 </head>
 <body class="auth-locked">
 
@@ -30,8 +30,13 @@
       <input id="editorAuthPassword" type="password" autocomplete="current-password" placeholder="&#12497;&#12473;&#12527;&#12540;&#12489;">
       <input id="editorAuthConfirm" class="hidden" type="password" autocomplete="new-password" placeholder="&#12497;&#12473;&#12527;&#12540;&#12489;&#30906;&#35469;">
       <label class="auth-remember-row"><input id="editorAuthRemember" type="checkbox" checked> <span>&#12371;&#12398;&#31471;&#26411;&#12395;&#20445;&#23384;&#12377;&#12427;</span></label>
+      <details class="auth-settings">
+        <summary>設定</summary>
+        <label class="auth-remember-row"><input id="editorAuthAutoLogin" type="checkbox"> <span>起動時に自動ログインする</span></label>
+      </details>
       <button id="editorAuthPasswordButton" type="button" onclick="submitEditorPassword()">&#38283;&#12367;</button>
       <button id="editorGoogleLoginButton" class="google-login-button" type="button" onclick="signInEditorGoogle()">Googleアカウントでログイン</button>
+      <button class="auth-secondary-button" type="button" onclick="continueEditorOffline()">オフラインで続ける</button>
       <button id="editorClearSavedPasswordButton" class="auth-secondary-button" type="button" onclick="clearSavedEditorPassword()">&#20445;&#23384;&#12375;&#12383;&#12497;&#12473;&#12527;&#12540;&#12489;&#12434;&#21066;&#38500;</button>
       <div id="editorAuthMessage" class="auth-message"></div>
       <small>&#8251;GitHub Pages&#19978;&#12398;&#31777;&#26131;&#20445;&#35703;&#12391;&#12354;&#12426;&#12289;&#23436;&#20840;&#12394;&#12469;&#12540;&#12496;&#12540;&#35469;&#35388;&#12391;&#12399;&#12354;&#12426;&#12414;&#12379;&#12435;&#12290;</small>

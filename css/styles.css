@@ -1762,6 +1762,21 @@
       padding: 0;
       flex: 0 0 auto;
     }
+    .auth-settings {
+      border: 1px solid #e2e8f0;
+      border-radius: 9px;
+      padding: 8px 10px;
+      background: #f8fafc;
+    }
+    .auth-settings summary {
+      cursor: pointer;
+      color: #334155;
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .auth-settings .auth-remember-row {
+      margin-top: 8px;
+    }
     .editor-auth-card button {
       border: 0;
       border-radius: 9px;
