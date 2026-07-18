@@ -29,6 +29,9 @@ window.SCRIPTMAKER_FIREBASE_CONFIG = window.SCRIPTMAKER_FIREBASE_CONFIG || {
 
 Firebase Consoleの Firestore Database > ルール に、次のルールを設定してください。
 
+EditorのGoogleアカウント同期を使う場合は、Firebase Console > Authentication > Sign-in method で「Google」を有効にしてください。
+承認済みドメインには `malomalo413.github.io` と、ローカル確認用に必要なら `localhost` を追加します。
+
 ```txt
 rules_version = '2';
 
@@ -73,6 +76,32 @@ service cloud.firestore {
       match /chunks/{chunkId} {
         allow read: if true;
         allow create, update: if request.resource.data.keys().hasOnly(['index', 'data'])
+          && request.resource.data.index is int
+          && request.resource.data.data is string;
+        allow delete: if false;
+      }
+    }
+
+    match /editorAccounts/{userId}/editorStates/{stateId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+          'id',
+          'title',
+          'data',
+          'chunkCount',
+          'schemaVersion',
+          'createdAt',
+          'updatedAt'
+        ]);
+      allow delete: if false;
+
+      match /chunks/{chunkId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if request.auth != null
+          && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly(['index', 'data'])
           && request.resource.data.index is int
           && request.resource.data.data is string;
         allow delete: if false;

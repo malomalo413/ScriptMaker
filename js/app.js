@@ -9,6 +9,7 @@ const SCRIPTMAKER_EDITOR_COUNT_SETTING_KEY = 'scriptmaker_editor_count_settings_
 const SCRIPTMAKER_CHARACTER_LIBRARY_KEY = 'scriptmaker_character_library_v1';
 const SCRIPTMAKER_EDITOR_CLOUD_URL = 'https://malomalo413.github.io/ScriptMaker/Editor/';
 const SCRIPTMAKER_EDITOR_CLOUD_LAST_ID_KEY = 'scriptmaker_editor_cloud_last_project_id_v1';
+const SCRIPTMAKER_EDITOR_ACCOUNT_SYNC_META_KEY = 'scriptmaker_editor_account_sync_meta_v1';
 const SCRIPTMAKER_SCRIPT_COLOR_PREFIX = 'scriptmaker_editor_script_colors_v1:';
 
 let state = {
@@ -57,6 +58,13 @@ let state = {
     let editorRequestedFullscreenForOrientation = false;
     let cloudSyncUrlHandled = false;
     let editorScriptColorSettings = {};
+    let editorGoogleUser = null;
+    let editorGoogleAuthInitialized = false;
+    let editorCloudSyncTimer = null;
+    let editorCloudSyncInFlight = false;
+    let editorApplyingCloudState = false;
+    let editorLastSyncAt = '';
+    let editorAppReady = false;
 
     let originalViewportHeight = window.innerHeight;
     const GEMINI_MODEL_CANDIDATES = [
@@ -88,7 +96,46 @@ let state = {
       if (hash) sessionStorage.setItem(EDITOR_AUTH_SESSION_KEY, hash);
       document.body.classList.remove('auth-locked');
       document.getElementById('editorAuthGate')?.classList.add('hidden');
+      initEditorGoogleAccountSync();
       setTimeout(initCloudSyncFromUrl, 80);
+    }
+
+    function setEditorAuthGateMode(mode) {
+      const password = document.getElementById('editorAuthPassword');
+      const confirm = document.getElementById('editorAuthConfirm');
+      const remember = document.getElementById('editorAuthRemember')?.closest('label');
+      const passwordButton = document.getElementById('editorAuthPasswordButton');
+      const googleButton = document.getElementById('editorGoogleLoginButton');
+      const clearButton = document.getElementById('editorClearSavedPasswordButton');
+      const passwordMode = mode !== 'google';
+      [password, confirm, remember, passwordButton, clearButton].forEach(item => {
+        if (!item) return;
+        item.classList.toggle('hidden', !passwordMode);
+        item.hidden = !passwordMode;
+        item.style.display = passwordMode ? '' : 'none';
+      });
+      if (googleButton) {
+        googleButton.classList.toggle('hidden', passwordMode);
+        googleButton.hidden = passwordMode;
+        googleButton.style.display = passwordMode ? 'none' : '';
+      }
+    }
+
+    function showEditorGoogleAuthGate(message = '') {
+      const gate = document.getElementById('editorAuthGate');
+      const title = document.getElementById('editorAuthTitle');
+      const help = document.getElementById('editorAuthHelp');
+      const authMessage = document.getElementById('editorAuthMessage');
+      if (!gate || !title || !help) return;
+      document.body.classList.add('auth-locked');
+      gate.classList.remove('hidden');
+      setEditorAuthGateMode('google');
+      title.textContent = 'Googleアカウントでログイン';
+      help.textContent = '同じGoogleアカウントでログインすると、PC・スマホ・タブレットで同じ台本を続きから編集できます。';
+      if (authMessage) {
+        authMessage.textContent = message;
+        authMessage.classList.toggle('is-error', !!message);
+      }
     }
 
     function showEditorAuthGate() {
@@ -101,6 +148,7 @@ let state = {
       const remember = document.getElementById('editorAuthRemember');
       const message = document.getElementById('editorAuthMessage');
       if (!gate || !title || !help || !confirm || !password || !message) return;
+      setEditorAuthGateMode('password');
       document.body.classList.add('auth-locked');
       gate.classList.remove('hidden');
       message.textContent = '';
@@ -125,6 +173,11 @@ let state = {
 
     function initEditorAuthGate() {
       const storedHash = editorPasswordHash();
+      if (!storedHash && window.ScriptMakerFirebaseShare) {
+        showEditorGoogleAuthGate();
+        initEditorGoogleAccountSync();
+        return;
+      }
       if (storedHash && sessionStorage.getItem(EDITOR_AUTH_SESSION_KEY) === storedHash) {
         unlockEditorAuth(storedHash);
         return;
@@ -184,7 +237,221 @@ let state = {
 
     function logoutEditorAuth() {
       sessionStorage.removeItem(EDITOR_AUTH_SESSION_KEY);
+      signOutEditorGoogle();
       showEditorAuthGate();
+    }
+
+    function editorSyncMeta() {
+      try {
+        return JSON.parse(localStorage.getItem(SCRIPTMAKER_EDITOR_ACCOUNT_SYNC_META_KEY) || '{}') || {};
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function saveEditorSyncMeta(next) {
+      localStorage.setItem(SCRIPTMAKER_EDITOR_ACCOUNT_SYNC_META_KEY, JSON.stringify({ ...editorSyncMeta(), ...next }));
+    }
+
+    function setEditorSyncStatus(text, type = '', detail = '') {
+      const status = document.getElementById('editorSyncStatus');
+      if (!status) return;
+      status.textContent = text;
+      status.className = 'editor-sync-status' + (type ? ' ' + type : '');
+      status.title = detail || text;
+    }
+
+    function formatSyncTime(value) {
+      const date = value ? new Date(value) : null;
+      if (!date || Number.isNaN(date.getTime())) return '';
+      return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function collectScriptColorSettingsForSync() {
+      const settings = {};
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (!key || !key.startsWith(SCRIPTMAKER_SCRIPT_COLOR_PREFIX)) continue;
+          settings[key] = localStorage.getItem(key) || '{}';
+        }
+      } catch (error) {
+        console.warn('Script color sync collection failed', error);
+      }
+      return settings;
+    }
+
+    function applyScriptColorSettingsFromSync(settings) {
+      if (!settings || typeof settings !== 'object') return;
+      Object.keys(settings).forEach(key => {
+        if (!key.startsWith(SCRIPTMAKER_SCRIPT_COLOR_PREFIX)) return;
+        localStorage.setItem(key, String(settings[key] || '{}'));
+      });
+      loadEditorScriptColorSettings();
+    }
+
+    function buildEditorAccountSyncPayload() {
+      const updatedAt = state.editorUpdatedAt || new Date().toISOString();
+      return {
+        id: 'main',
+        title: 'ScriptMaker Editor',
+        schemaVersion: 2,
+        updatedAt,
+        data: {
+          state,
+          auxiliary: {
+            characterLibrary: localStorage.getItem(SCRIPTMAKER_CHARACTER_LIBRARY_KEY) || '[]',
+            countSettings: localStorage.getItem(SCRIPTMAKER_EDITOR_COUNT_SETTING_KEY) || '{}',
+            scriptColorSettings: collectScriptColorSettingsForSync()
+          }
+        }
+      };
+    }
+
+    function applyEditorAccountSyncPayload(payload) {
+      const data = payload?.data || {};
+      if (!data.state || typeof data.state !== 'object') return false;
+      editorApplyingCloudState = true;
+      try {
+        state = data.state;
+        if (!state.editorUpdatedAt) state.editorUpdatedAt = payload.updatedAt || new Date().toISOString();
+        const auxiliary = data.auxiliary || {};
+        if (auxiliary.characterLibrary != null) localStorage.setItem(SCRIPTMAKER_CHARACTER_LIBRARY_KEY, String(auxiliary.characterLibrary));
+        if (auxiliary.countSettings != null) localStorage.setItem(SCRIPTMAKER_EDITOR_COUNT_SETTING_KEY, String(auxiliary.countSettings));
+        applyScriptColorSettingsFromSync(auxiliary.scriptColorSettings);
+        localStorage.setItem('script_assistant_data_v21', JSON.stringify(state));
+        normalizeProjectData();
+        syncCharacterLibraryFromProjects();
+        renderProjectList();
+        initCountControls();
+        if (state.currentProjectId && state.projects[state.currentProjectId]) {
+          renderCharSelector();
+          renderTimeline();
+          updateMetaStats();
+          applyProjectWallpaper(true);
+        }
+        return true;
+      } finally {
+        editorApplyingCloudState = false;
+      }
+    }
+
+    function scheduleEditorAccountCloudSave(delay = 2500) {
+      if (editorApplyingCloudState || !editorGoogleUser) return;
+      clearTimeout(editorCloudSyncTimer);
+      editorCloudSyncTimer = setTimeout(() => saveEditorAccountCloudNow(), delay);
+    }
+
+    async function saveEditorAccountCloudNow(options = {}) {
+      if (!editorGoogleUser || !window.ScriptMakerFirebaseShare) return false;
+      if (!navigator.onLine) {
+        setEditorSyncStatus('オフライン', 'offline', '通信復帰後に同期します');
+        return false;
+      }
+      if (editorCloudSyncInFlight) {
+        if (!options.skipReschedule) scheduleEditorAccountCloudSave(1200);
+        return false;
+      }
+      editorCloudSyncInFlight = true;
+      setEditorSyncStatus('同期中…', 'syncing', editorGoogleUser.email || editorGoogleUser.displayName || '');
+      try {
+        const helper = window.ScriptMakerFirebaseShare;
+        const config = helper.configuredConfig('');
+        const payload = buildEditorAccountSyncPayload();
+        await helper.saveEditorAccountState(editorGoogleUser.uid, payload, config);
+        editorLastSyncAt = new Date().toISOString();
+        saveEditorSyncMeta({ uid: editorGoogleUser.uid, lastSyncAt: editorLastSyncAt });
+        setEditorSyncStatus('同期済み ' + formatSyncTime(editorLastSyncAt), 'synced', (editorGoogleUser.displayName || editorGoogleUser.email || '') + '\n最終同期: ' + editorLastSyncAt);
+        return true;
+      } catch (error) {
+        console.error('Editor account cloud sync failed:', error);
+        setEditorSyncStatus('同期失敗', 'error', error.message || String(error));
+        return false;
+      } finally {
+        editorCloudSyncInFlight = false;
+      }
+    }
+
+    async function loadEditorAccountCloudState() {
+      if (!editorGoogleUser || !window.ScriptMakerFirebaseShare || !navigator.onLine) return;
+      if (!editorAppReady) {
+        setTimeout(loadEditorAccountCloudState, 250);
+        return;
+      }
+      setEditorSyncStatus('同期確認中…', 'syncing');
+      try {
+        const helper = window.ScriptMakerFirebaseShare;
+        const config = helper.configuredConfig('');
+        const payload = await helper.loadEditorAccountState(editorGoogleUser.uid, config);
+        const remoteUpdated = Date.parse(payload?.updatedAt || payload?.data?.state?.editorUpdatedAt || '');
+        const localUpdated = Date.parse(state.editorUpdatedAt || '');
+        if (payload && remoteUpdated && (!localUpdated || remoteUpdated > localUpdated)) {
+          applyEditorAccountSyncPayload(payload);
+          editorLastSyncAt = new Date().toISOString();
+          saveEditorSyncMeta({ uid: editorGoogleUser.uid, lastSyncAt: editorLastSyncAt });
+          setEditorSyncStatus('同期済み ' + formatSyncTime(editorLastSyncAt), 'synced', 'クラウドの最新データを読み込みました');
+          return;
+        }
+        await saveEditorAccountCloudNow({ skipReschedule: true });
+      } catch (error) {
+        console.error('Editor account cloud load failed:', error);
+        setEditorSyncStatus('同期失敗', 'error', error.message || String(error));
+      }
+    }
+
+    async function initEditorGoogleAccountSync() {
+      if (editorGoogleAuthInitialized || !window.ScriptMakerFirebaseShare) return;
+      editorGoogleAuthInitialized = true;
+      try {
+        await window.ScriptMakerFirebaseShare.onEditorAuthChanged(async user => {
+          editorGoogleUser = user || null;
+          if (user) {
+            document.body.classList.remove('auth-locked');
+            document.getElementById('editorAuthGate')?.classList.add('hidden');
+            setEditorSyncStatus('同期確認中…', 'syncing', user.displayName || user.email || '');
+            await loadEditorAccountCloudState();
+          } else {
+            editorGoogleUser = null;
+            setEditorSyncStatus('未ログイン', 'offline');
+            if (!editorPasswordHash()) showEditorGoogleAuthGate();
+          }
+        });
+        window.addEventListener('online', () => saveEditorAccountCloudNow());
+        window.addEventListener('offline', () => setEditorSyncStatus('オフライン', 'offline', '通信復帰後に同期します'));
+      } catch (error) {
+        console.error('Editor Google sync init failed:', error);
+        setEditorSyncStatus('同期未設定', 'error', error.message || String(error));
+      }
+    }
+
+    async function signInEditorGoogle() {
+      const message = document.getElementById('editorAuthMessage');
+      if (message) message.textContent = '';
+      try {
+        if (!window.ScriptMakerFirebaseShare) throw new Error('Firebase機能を読み込めませんでした。');
+        setEditorSyncStatus('ログイン中…', 'syncing');
+        const user = await window.ScriptMakerFirebaseShare.signInEditorWithGoogle('');
+        editorGoogleUser = user || editorGoogleUser;
+        if (editorGoogleUser) {
+          document.body.classList.remove('auth-locked');
+          document.getElementById('editorAuthGate')?.classList.add('hidden');
+          await loadEditorAccountCloudState();
+        }
+      } catch (error) {
+        console.error('Google login failed:', error);
+        if (message) message.textContent = error.message || 'Googleログインに失敗しました。';
+        setEditorSyncStatus('ログイン失敗', 'error', error.message || String(error));
+      }
+    }
+
+    async function signOutEditorGoogle() {
+      try {
+        if (window.ScriptMakerFirebaseShare) await window.ScriptMakerFirebaseShare.signOutEditor('');
+      } catch (error) {
+        console.warn('Google sign out failed:', error);
+      }
+      editorGoogleUser = null;
+      setEditorSyncStatus('未ログイン', 'offline');
     }
 
 
@@ -230,6 +497,8 @@ let state = {
       initEditorDisplayModeControls();
       syncEditorOrientationForDisplayMode(false);
       initCloudSyncFromUrl();
+      editorAppReady = true;
+      if (editorGoogleUser) loadEditorAccountCloudState();
     };
 
     setTimeout(initEditorAuthGate, 0);
@@ -365,6 +634,7 @@ let state = {
 
     function saveCharacterLibrary(list) {
       localStorage.setItem(SCRIPTMAKER_CHARACTER_LIBRARY_KEY, JSON.stringify(list || []));
+      scheduleEditorAccountCloudSave();
     }
 
     function mergeCharacterIntoLibraryList(list, character) {
@@ -561,7 +831,9 @@ let state = {
 
     function saveState() {
       try {
+        if (!editorApplyingCloudState) state.editorUpdatedAt = new Date().toISOString();
         localStorage.setItem('script_assistant_data_v21', JSON.stringify(state));
+        scheduleEditorAccountCloudSave();
         return true;
       } catch (e) {
         console.error("保存エラー:", e);
@@ -1548,6 +1820,7 @@ let state = {
 
     function saveEditorScriptColorSettings() {
       localStorage.setItem(scriptColorStorageKey(), JSON.stringify(editorScriptColorSettings || {}));
+      scheduleEditorAccountCloudSave();
     }
 
     function scriptColorCharacterNames(project) {
@@ -2671,6 +2944,7 @@ ${keptPredictionText}
     function saveEditorCountSetting(next) {
       const current = loadEditorCountSetting();
       localStorage.setItem(SCRIPTMAKER_EDITOR_COUNT_SETTING_KEY, JSON.stringify({ ...current, ...next }));
+      scheduleEditorAccountCloudSave();
     }
 
     function isCountableTalk(talk) {
@@ -2773,7 +3047,11 @@ ${keptPredictionText}
       if (!keepEditingTalkVisible()) scrollToBottom();
     }
 
-    function saveDataAlert() { alert("データを完全に内部保存しました。"); }
+    async function saveDataAlert() {
+      saveState();
+      const synced = await saveEditorAccountCloudNow({ skipReschedule: true });
+      alert(synced ? "ローカル保存とクラウド保存が完了しました。" : "ローカルへ保存しました。Googleログイン中または通信復帰後にクラウド同期します。");
+    }
     function exportDataAlert() {
       const input = document.getElementById('inputSpeech');
       if (input) input.blur();

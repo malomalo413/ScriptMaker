@@ -3,6 +3,8 @@
   const FIREBASE_CONFIG_STORAGE_KEY = "scriptmaker_firebase_config_v1";
   const FIREBASE_SHARE_COLLECTION = "scriptShares";
   const FIREBASE_EDITOR_PROJECT_COLLECTION = "editorProjects";
+  const FIREBASE_EDITOR_ACCOUNT_COLLECTION = "editorAccounts";
+  const FIREBASE_EDITOR_ACCOUNT_STATE_ID = "main";
   const FIREBASE_CHUNK_SIZE = 650000;
 
   let modulesPromise = null;
@@ -83,17 +85,18 @@
     if (!modulesPromise) {
       modulesPromise = Promise.all([
         import("https://www.gstatic.com/firebasejs/" + FIREBASE_SDK_VERSION + "/firebase-app.js"),
-        import("https://www.gstatic.com/firebasejs/" + FIREBASE_SDK_VERSION + "/firebase-firestore.js")
-      ]).then(([app, firestore]) => ({ app, firestore }));
+        import("https://www.gstatic.com/firebasejs/" + FIREBASE_SDK_VERSION + "/firebase-firestore.js"),
+        import("https://www.gstatic.com/firebasejs/" + FIREBASE_SDK_VERSION + "/firebase-auth.js")
+      ]).then(([app, firestore, auth]) => ({ app, firestore, auth }));
     }
     return modulesPromise;
   }
 
-  async function dbForConfig(config) {
+  async function appContextForConfig(config) {
     const cleaned = cleanConfig(config);
     const key = cleaned.projectId + ":" + cleaned.appId;
     if (appCache.has(key)) return appCache.get(key);
-    const { app, firestore } = await modules();
+    const { app, firestore, auth } = await modules();
     const appName = "scriptmaker-share-" + key.replace(/[^a-zA-Z0-9_-]/g, "_");
     let firebaseApp;
     try {
@@ -102,8 +105,18 @@
       firebaseApp = app.getApp(appName);
     }
     const db = firestore.getFirestore(firebaseApp);
-    appCache.set(key, db);
-    return db;
+    const authInstance = auth.getAuth(firebaseApp);
+    const context = { app: firebaseApp, db, auth: authInstance };
+    appCache.set(key, context);
+    return context;
+  }
+
+  async function dbForConfig(config) {
+    return (await appContextForConfig(config)).db;
+  }
+
+  async function authForConfig(config) {
+    return (await appContextForConfig(config)).auth;
   }
 
   function chunksForPayload(payload) {
@@ -188,6 +201,56 @@
     return loadChunkedPayload(FIREBASE_EDITOR_PROJECT_COLLECTION, projectId, config);
   }
 
+  function editorAccountStateCollection(uid) {
+    if (!uid) throw new Error("Googleログインが必要です。");
+    return FIREBASE_EDITOR_ACCOUNT_COLLECTION + "/" + uid + "/editorStates";
+  }
+
+  async function saveEditorAccountState(uid, payload, config) {
+    if (!payload) throw new Error("同期するEditorデータがありません。");
+    const next = { ...payload, id: FIREBASE_EDITOR_ACCOUNT_STATE_ID };
+    return saveChunkedPayload(editorAccountStateCollection(uid), FIREBASE_EDITOR_ACCOUNT_STATE_ID, next, config);
+  }
+
+  async function loadEditorAccountState(uid, config) {
+    return loadChunkedPayload(editorAccountStateCollection(uid), FIREBASE_EDITOR_ACCOUNT_STATE_ID, config);
+  }
+
+  async function signInEditorWithGoogle(config) {
+    const cleaned = configuredConfig(config || "");
+    const { auth } = await modules();
+    const authInstance = await authForConfig(cleaned);
+    const provider = new auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    try {
+      const result = await auth.signInWithPopup(authInstance, provider);
+      return result.user;
+    } catch (error) {
+      if (String(error?.code || "").includes("popup")) {
+        await auth.signInWithRedirect(authInstance, provider);
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  async function signOutEditor(config) {
+    const authInstance = await authForConfig(configuredConfig(config || ""));
+    const { auth } = await modules();
+    await auth.signOut(authInstance);
+  }
+
+  async function onEditorAuthChanged(callback, config) {
+    const authInstance = await authForConfig(configuredConfig(config || ""));
+    const { auth } = await modules();
+    return auth.onAuthStateChanged(authInstance, callback);
+  }
+
+  async function currentEditorUser(config) {
+    const authInstance = await authForConfig(configuredConfig(config || ""));
+    return authInstance.currentUser || null;
+  }
+
   window.ScriptMakerFirebaseShare = {
     FIREBASE_CONFIG_STORAGE_KEY,
     parseFirebaseConfigText,
@@ -199,6 +262,12 @@
     loadShare,
     saveEditorProject,
     loadEditorProject,
+    saveEditorAccountState,
+    loadEditorAccountState,
+    signInEditorWithGoogle,
+    signOutEditor,
+    onEditorAuthChanged,
+    currentEditorUser,
     isConfigured
   };
 })();
