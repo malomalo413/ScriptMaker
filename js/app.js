@@ -513,6 +513,12 @@ let state = {
       if (editorGoogleAuthInitialized || !window.ScriptMakerFirebaseShare) return;
       editorGoogleAuthInitialized = true;
       try {
+        try {
+          const redirectUser = await window.ScriptMakerFirebaseShare.consumeEditorRedirectResult?.('');
+          if (redirectUser) editorGoogleUser = redirectUser;
+        } catch (redirectError) {
+          console.warn('Editor Google redirect result failed:', redirectError);
+        }
         await window.ScriptMakerFirebaseShare.onEditorAuthChanged(async user => {
           editorGoogleUser = user || null;
           updateEditorGoogleConnectUi();
@@ -551,7 +557,7 @@ let state = {
           sessionStorage.setItem(SCRIPTMAKER_EDITOR_GOOGLE_CONNECTING_KEY, '1');
         }
         setEditorSyncStatus('ログイン中…', 'syncing');
-        const user = await window.ScriptMakerFirebaseShare.signInEditorWithGoogle('');
+        const user = await window.ScriptMakerFirebaseShare.signInEditorWithGoogle('', { allowRedirectFallback: true });
         editorGoogleUser = user || editorGoogleUser;
         if (editorGoogleUser) {
           document.body.classList.remove('auth-locked');

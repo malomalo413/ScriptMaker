@@ -119,6 +119,22 @@
     return (await appContextForConfig(config)).auth;
   }
 
+  function firebaseAuthHost(config) {
+    const cleaned = cleanConfig(config || configuredConfig(""));
+    return cleaned.authDomain || (cleaned.projectId ? cleaned.projectId + ".firebaseapp.com" : "");
+  }
+
+  function currentHost() {
+    return String(location.hostname || "").toLowerCase();
+  }
+
+  function shouldAllowRedirectFallback(config) {
+    const host = currentHost();
+    const authHost = firebaseAuthHost(config).toLowerCase();
+    if (!host || !authHost) return false;
+    return host === authHost || host.endsWith(".firebaseapp.com") || host.endsWith(".web.app");
+  }
+
   function chunksForPayload(payload) {
     const json = JSON.stringify(payload);
     const chunks = [];
@@ -216,22 +232,35 @@
     return loadChunkedPayload(editorAccountStateCollection(uid), FIREBASE_EDITOR_ACCOUNT_STATE_ID, config);
   }
 
-  async function signInEditorWithGoogle(config) {
+  async function signInEditorWithGoogle(config, options) {
     const cleaned = configuredConfig(config || "");
     const { auth } = await modules();
     const authInstance = await authForConfig(cleaned);
     const provider = new auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
+    authInstance.useDeviceLanguage?.();
+    const allowRedirectFallback = !!options?.allowRedirectFallback && shouldAllowRedirectFallback(cleaned);
     try {
       const result = await auth.signInWithPopup(authInstance, provider);
       return result.user;
     } catch (error) {
-      if (String(error?.code || "").includes("popup")) {
+      const code = String(error?.code || "");
+      if (allowRedirectFallback && (code.includes("popup") || code.includes("operation-not-supported"))) {
         await auth.signInWithRedirect(authInstance, provider);
         return null;
       }
+      if (code.includes("popup")) {
+        throw new Error("Googleログインのポップアップを開けませんでした。ブラウザのポップアップ許可を有効にするか、外部ブラウザで開いてください。");
+      }
       throw error;
     }
+  }
+
+  async function consumeEditorRedirectResult(config) {
+    const authInstance = await authForConfig(configuredConfig(config || ""));
+    const { auth } = await modules();
+    const result = await auth.getRedirectResult(authInstance);
+    return result?.user || null;
   }
 
   async function signOutEditor(config) {
@@ -265,6 +294,7 @@
     saveEditorAccountState,
     loadEditorAccountState,
     signInEditorWithGoogle,
+    consumeEditorRedirectResult,
     signOutEditor,
     onEditorAuthChanged,
     currentEditorUser,
