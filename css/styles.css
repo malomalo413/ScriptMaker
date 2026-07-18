@@ -239,7 +239,7 @@
     .btn-nav-save { background: #475569; }
     .btn-nav-export { background: #10b981; }
     .btn-nav-share { background: #0ea5e9; }
-    .btn-nav-google { background: #fff; color: #1f2937; border: 1px solid #cbd5e1; }
+    .btn-nav-backup { background: #0f766e; color: #fff; }
     .btn-nav-wallpaper { background: #6366f1; }
     .btn-nav-mode { background: #fef3c7; color: #d97706; }
     .btn-nav-logout { background: #334155; }
@@ -1094,6 +1094,9 @@
       justify-content: center;
       z-index: 1000;
     }
+    #editorBackupModal {
+      z-index: 3200;
+    }
     .modal-content {
       background: white;
       padding: 20px;
@@ -1792,11 +1795,29 @@
       font-size: 12px;
       padding: 10px;
     }
-    .editor-auth-card .google-login-button {
-      background: #fff;
-      color: #1f2937;
-      border: 1px solid #cbd5e1;
-      box-shadow: 0 1px 3px rgba(15, 23, 42, .12);
+    .backup-warning {
+      padding: 9px 10px;
+      border-radius: 8px;
+      background: #fff7ed;
+      color: #9a3412;
+      font-weight: 800;
+    }
+    .backup-device-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 120px;
+      overflow: auto;
+    }
+    .backup-device-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #f8fafc;
+      color: #475569;
+      font-size: 12px;
     }
     .editor-auth-card small {
       color: #64748b;

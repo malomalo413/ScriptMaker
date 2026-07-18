@@ -77,6 +77,8 @@ The standard sharing flow uses Firebase Firestore. The Editor saves a read-only 
 
 See `FIREBASE-SETUP.md` for Firebase project setup, Firestore rules, and `js/firebase-config.js` configuration.
 
+Editor data can be moved between devices with the backup code flow. Open the Editor, choose `バックアップ`, issue a backup code, then enter that code on the other device from the password screen. The code is a secret: anyone who knows it can load the Editor backup data.
+
 Google Drive is kept as an optional HTML export path. Use the share modal's HTML export buttons when you need a standalone read-only HTML file. See `DRIVE-SETUP.md` for that fallback flow.
 
 ## Password convenience storage

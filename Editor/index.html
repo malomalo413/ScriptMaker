@@ -14,11 +14,11 @@
   <link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="../assets/icons/icon-512.png">
-  <link rel="stylesheet" href="../css/styles.css?v=48">
+  <link rel="stylesheet" href="../css/styles.css?v=49">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
   <script src="../js/firebase-config.js?v=30" defer></script>
-  <script src="../js/firebase-share.js?v=35" defer></script>
-  <script src="../js/app.js?v=56" defer></script>
+  <script src="../js/firebase-share.js?v=36" defer></script>
+  <script src="../js/app.js?v=57" defer></script>
 </head>
 <body class="auth-locked">
 
@@ -35,7 +35,7 @@
         <label class="auth-remember-row"><input id="editorAuthAutoLogin" type="checkbox"> <span>起動時に自動ログインする</span></label>
       </details>
       <button id="editorAuthPasswordButton" type="button" onclick="submitEditorPassword()">&#38283;&#12367;</button>
-      <button id="editorGoogleLoginButton" class="google-login-button" type="button" onclick="signInEditorGoogle()">Googleアカウントでログイン</button>
+      <button id="editorBackupCodeLoginButton" class="auth-secondary-button" type="button" onclick="openBackupCodeImportFromAuth()">&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;&#12434;&#20837;&#21147;</button>
       <button class="auth-secondary-button" type="button" onclick="continueEditorOffline()">オフラインで続ける</button>
       <button id="editorClearSavedPasswordButton" class="auth-secondary-button" type="button" onclick="clearSavedEditorPassword()">&#20445;&#23384;&#12375;&#12383;&#12497;&#12473;&#12527;&#12540;&#12489;&#12434;&#21066;&#38500;</button>
       <div id="editorAuthMessage" class="auth-message"></div>
@@ -73,7 +73,7 @@
         <button class="nav-btn btn-nav-save" onclick="saveDataAlert()">保存</button>
         <button class="nav-btn btn-nav-export" onclick="exportDataAlert()">出力</button>
         <button class="nav-btn btn-nav-share" onclick="openShareModal()">&#20849;&#26377;</button>
-        <button class="nav-btn btn-nav-google" id="editorGoogleConnectBtn" onclick="openEditorGoogleAccountMenu()">Googleと連携</button>
+        <button class="nav-btn btn-nav-backup" id="editorBackupConnectBtn" onclick="openEditorBackupMenu()">&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;</button>
         <button class="nav-btn btn-nav-cloud" onclick="openCloudSyncModal()">&#21516;&#26399;</button>
         <button class="nav-btn btn-nav-wallpaper" onclick="openWallpaperModal()">壁紙</button>
         <button class="nav-btn btn-nav-mode" id="modeToggleBtn" onclick="toggleEditMode()">編集</button>
@@ -339,17 +339,28 @@
     </div>
   </div>
 
-  <div id="editorGoogleAccountModal" class="custom-modal hidden">
-    <div class="modal-content cloud-sync-modal">
-      <h4>Googleアカウント同期</h4>
-      <p class="share-help" id="editorGoogleAccountInfo">Googleアカウントと連携すると、別端末でも同じ台本を続きから編集できます。</p>
-      <div class="share-meta share-status" id="editorGoogleAccountStatus"></div>
+  <div id="editorBackupModal" class="custom-modal hidden">
+    <div class="modal-content cloud-sync-modal backup-sync-modal">
+      <h4>&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12539;&#31471;&#26411;&#24341;&#12365;&#32153;&#12366;</h4>
+      <p class="share-help" id="editorBackupInfo">&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;&#12434;&#30330;&#34892;&#12377;&#12427;&#12392;&#12289;&#21029;&#31471;&#26411;&#12408;&#21488;&#26412;&#12487;&#12540;&#12479;&#12434;&#24341;&#12365;&#32153;&#12370;&#12414;&#12377;&#12290;</p>
+      <p class="share-help backup-warning">&#12371;&#12398;&#12467;&#12540;&#12489;&#12434;&#30693;&#12387;&#12390;&#12356;&#12427;&#20154;&#12399;&#12289;&#21488;&#26412;&#12487;&#12540;&#12479;&#12434;&#35501;&#12415;&#36796;&#12417;&#12414;&#12377;&#12290;&#20182;&#20154;&#12395;&#20844;&#38283;&#12375;&#12394;&#12356;&#12391;&#12367;&#12384;&#12373;&#12356;&#12290;</p>
+      <textarea id="editorBackupCodeText" class="share-url-textarea share-url-output hidden" readonly placeholder="&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;"></textarea>
+      <div class="modal-row">
+        <label for="editorBackupCodeInput">&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;</label>
+        <input id="editorBackupCodeInput" type="text" placeholder="SM-7K4P-X9Q2-M6RT-W8CN-3FJD" oninput="this.value = normalizeBackupCode(this.value)">
+      </div>
+      <div class="share-meta" id="editorBackupConnectionStatus"></div>
+      <div class="share-meta share-status" id="editorBackupStatus"></div>
+      <div id="editorBackupDeviceList" class="backup-device-list"></div>
       <div class="modal-actions cloud-sync-actions">
-        <button class="btn-modal-confirm" type="button" onclick="connectEditorGoogleFromMenu()">Googleと連携</button>
-        <button class="btn-modal-confirm" type="button" onclick="saveEditorAccountCloudNow({ skipReschedule: true })">今すぐ同期</button>
-        <button class="btn-modal-cancel" type="button" onclick="loadEditorAccountCloudState(true)">クラウドから読み込み</button>
-        <button class="btn-modal-cancel" type="button" onclick="signOutEditorGoogle()">ログアウト</button>
-        <button class="btn-modal-cancel" type="button" onclick="closeModal('editorGoogleAccountModal')">閉じる</button>
+        <button class="btn-modal-confirm" type="button" onclick="issueEditorBackupCode()">&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;&#12434;&#30330;&#34892;</button>
+        <button class="btn-modal-confirm" type="button" onclick="loadBackupCodeFromInput()">&#12467;&#12540;&#12489;&#12434;&#35501;&#12415;&#36796;&#12416;</button>
+        <button class="btn-modal-cancel" type="button" onclick="copyEditorBackupCode()">&#12467;&#12540;&#12489;&#12434;&#12467;&#12500;&#12540;</button>
+        <button class="btn-modal-cancel" type="button" onclick="saveEditorBackupNow({ skipReschedule: true })">&#20170;&#12377;&#12368;&#21516;&#26399;</button>
+        <button class="btn-modal-cancel" type="button" onclick="loadEditorBackupCloudState(true)">&#26368;&#26032;&#12487;&#12540;&#12479;&#12434;&#35501;&#12415;&#36796;&#12416;</button>
+        <button class="btn-modal-cancel" type="button" onclick="regenerateEditorBackupCode()">&#12467;&#12540;&#12489;&#12434;&#20877;&#30330;&#34892;</button>
+        <button class="btn-modal-cancel" type="button" onclick="unlinkEditorBackupDevice()">&#12371;&#12398;&#31471;&#26411;&#12398;&#36899;&#25658;&#12434;&#35299;&#38500;</button>
+        <button class="btn-modal-cancel" type="button" onclick="closeModal('editorBackupModal')">&#38281;&#12376;&#12427;</button>
       </div>
     </div>
   </div>

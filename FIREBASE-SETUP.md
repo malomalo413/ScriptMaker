@@ -1,15 +1,14 @@
-# ScriptMaker Firebase Firestore 共有設定
+# ScriptMaker Firebase Setup
 
-ScriptMakerの標準共有方式は Firebase Firestore です。GitHub Pagesはそのまま使い、Firebase Hostingは使いません。
+ScriptMakerはGitHub PagesでEditorを公開し、Firebaseは次の用途に使います。
 
-## 1. 前提
+- Viewer共有データの保存: `scriptShares`
+- Editorの手動クラウドプロジェクト保存: `editorProjects`
+- Editorのバックアップコード同期: `editorSyncSpaces` / `editorRecoveryCodes`
 
-- Firebaseプロジェクトを作成済み
-- Firestore Databaseを作成済み
-- Firestoreは Standard / asia-northeast1 (Tokyo) / 本番環境モード
-- ScriptMakerは GitHub Pages で公開
+Googleログインは使いません。Firebase AuthenticationのGoogleプロバイダ設定は不要です。
 
-## 2. Firebase config
+## Firebase Config
 
 `js/firebase-config.js` にFirebase ConsoleのWebアプリ設定を入れます。
 
@@ -25,36 +24,9 @@ window.SCRIPTMAKER_FIREBASE_CONFIG = window.SCRIPTMAKER_FIREBASE_CONFIG || {
 };
 ```
 
-## 3. Firestore Security Rules
+## Firestore Rules
 
-Firebase Consoleの Firestore Database > ルール に、次のルールを設定してください。
-
-EditorのGoogleアカウント同期を使う場合は、Firebase Console > Authentication > Sign-in method で「Google」を有効にしてください。
-承認済みドメインには `malomalo413.github.io` と、ローカル確認用に必要なら `localhost` を追加します。
-
-### Googleログインで必要な確認項目
-
-EditorはGitHub Pages上で動くため、Googleログインは基本的に `signInWithPopup` を使います。
-`signInWithRedirect` はFirebase Hosting系ドメインでのみ補助的に使います。
-
-Firebase Consoleで次を確認してください。
-
-1. Authentication > Sign-in method > Google が有効
-2. Authentication > Settings > Authorized domains に次を追加
-   - `malomalo413.github.io`
-   - `small-4c16f.firebaseapp.com`
-   - `small-4c16f.web.app`
-   - ローカル確認をする場合のみ `localhost`
-3. Google Cloud Console > APIs & Services > Credentials で、FirebaseのWeb API keyにHTTP referrer制限を入れている場合は次を許可
-   - `https://malomalo413.github.io/*`
-   - `https://small-4c16f.firebaseapp.com/*`
-   - `https://small-4c16f.web.app/*`
-4. OAuthクライアントIDを手動編集している場合は、承認済みJavaScript生成元に次を追加
-   - `https://malomalo413.github.io`
-   - `https://small-4c16f.firebaseapp.com`
-   - `https://small-4c16f.web.app`
-
-`The requested action is invalid.` が表示される場合は、特に `small-4c16f.firebaseapp.com` がAPIキー制限や承認済みドメインから漏れていないか確認してください。Firebase Authの認証ハンドラはこのドメインを経由することがあります。
+Firebase Console > Firestore Database > Rules に、`firestore.rules` の内容を貼り付けて公開してください。
 
 ```txt
 rules_version = '2';
@@ -106,11 +78,35 @@ service cloud.firestore {
       }
     }
 
-    match /editorAccounts/{userId}/editorStates/{stateId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow create, update: if request.auth != null
-        && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly([
+    match /editorRecoveryCodes/{codeHash} {
+      allow read: if true;
+      allow create, update: if request.resource.data.keys().hasOnly([
+        'recoveryCodeHash',
+        'syncSpaceId',
+        'active',
+        'createdAt',
+        'updatedAt',
+        'disabledAt'
+      ])
+      && request.resource.data.recoveryCodeHash == codeHash;
+      allow delete: if false;
+    }
+
+    match /editorSyncSpaces/{syncSpaceId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.keys().hasOnly([
+        'id',
+        'schemaVersion',
+        'recoveryCodeHash',
+        'createdAt',
+        'updatedAt'
+      ])
+      && request.resource.data.id == syncSpaceId;
+      allow delete: if false;
+
+      match /states/{stateId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.keys().hasOnly([
           'id',
           'title',
           'data',
@@ -119,15 +115,28 @@ service cloud.firestore {
           'createdAt',
           'updatedAt'
         ]);
-      allow delete: if false;
+        allow delete: if false;
 
-      match /chunks/{chunkId} {
-        allow read: if request.auth != null && request.auth.uid == userId;
-        allow create, update: if request.auth != null
-          && request.auth.uid == userId
-          && request.resource.data.keys().hasOnly(['index', 'data'])
+        match /chunks/{chunkId} {
+          allow read: if true;
+          allow create, update: if request.resource.data.keys().hasOnly(['index', 'data'])
           && request.resource.data.index is int
           && request.resource.data.data is string;
+          allow delete: if false;
+        }
+      }
+
+      match /devices/{deviceId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.keys().hasOnly([
+          'id',
+          'name',
+          'deviceTokenHash',
+          'isActive',
+          'registeredAt',
+          'lastSyncAt'
+        ])
+        && request.resource.data.id == deviceId;
         allow delete: if false;
       }
     }
@@ -135,41 +144,44 @@ service cloud.firestore {
 }
 ```
 
-このルールは、共有データの作成・更新・閲覧だけを許可します。削除は許可しません。同じ共有IDへ上書きするため、公開URLを変えずに最新版の台本を配信できます。
+## Storage Rules
 
-## 4. 固定公開URLの使い方
-
-### 初回共有
-
-1. ScriptMaker Editorでプロジェクトを開く
-2. 上部の「共有」を押す
-3. 必要ならViewer閲覧パスワードを入力する
-4. 「公開URLを作成」を押す
-5. 「公開URLをコピー」を押して声優さんへ送る
-
-### 公開済み台本の更新
-
-1. 台本を編集する
-2. 上部の「共有」を押す
-3. 「共有データを更新」を押す
-4. URLは変わらず、同じURLで最新版が見られる
-
-### 新しいURLを作り直す
-
-共有画面の「詳細設定・開発者向け」から「新しい公開URLを作り直す」を押します。
-旧URLはFirestore上に残りますが、今後の更新は新しいURL側へ反映されます。
-
-URL形式:
+現時点では画像をFirestore本文に含む既存仕様を維持しています。大きな画像をFirebase Storageへ分離する拡張に備えて、`storage.rules` は初期状態では安全側で拒否しています。
 
 ```txt
-https://small-4c16f.web.app/?id=share_xxxxx
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /editorSyncSpaces/{syncSpaceId}/{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
 ```
 
-## 5. 注意
+## バックアップコードの使い方
 
-- Firebase Hostingは不要です。
-- Cloudflare Workersは不要です。
-- Firestoreには共有用の閲覧データだけが保存されます。
-- Editor側の通常保存データはlocalStorageに残ります。
-- Viewerは閲覧専用です。
-- Google Drive向けHTML共有は補助的な「HTML書き出し」として残っています。
+1. Editorを開く
+2. 上部の「バックアップ」を押す
+3. 「バックアップコードを発行」を押す
+4. 表示されたコードをコピーして安全な場所へ保存する
+5. 別端末のログイン画面で「バックアップコードを入力」を押す
+6. コードを貼り付けて「コードを読み込む」を押す
+
+バックアップコードは復元だけでなく、同じ同期領域へ接続するための秘密コードです。コードを知っている人は台本データを読み込めるため、第三者へ公開しないでください。
+
+## 同期とオフライン
+
+- 端末内のlocalStorage保存は維持します。
+- バックアップコード設定済みの端末では、編集後2〜5秒程度でFirestoreへ自動同期します。
+- オフライン中は端末内へ保存し、オンライン復帰時に同期を再試行します。
+- 競合の完全な差分比較は今後の拡張予定です。現在は上書き前にローカルデータを残す設計を優先しています。
+
+## コード再発行
+
+「バックアップ」画面の「コードを再発行」から新しいコードを発行できます。古いコードは無効化され、新しい端末登録には使えなくなります。すでに接続済みの端末は、保存済みの同期領域IDで継続利用できます。
+
+## Cloud Functionsについて
+
+現在の実装はGitHub Pagesだけで動くクライアント方式です。より強い総当たり対策を入れる場合は、将来的にCloud Functionsでコード検証APIを作り、Firestoreへの直接検索をFunctions経由へ移してください。

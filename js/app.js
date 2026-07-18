@@ -10,8 +10,9 @@ const SCRIPTMAKER_EDITOR_COUNT_SETTING_KEY = 'scriptmaker_editor_count_settings_
 const SCRIPTMAKER_CHARACTER_LIBRARY_KEY = 'scriptmaker_character_library_v1';
 const SCRIPTMAKER_EDITOR_CLOUD_URL = 'https://malomalo413.github.io/ScriptMaker/Editor/';
 const SCRIPTMAKER_EDITOR_CLOUD_LAST_ID_KEY = 'scriptmaker_editor_cloud_last_project_id_v1';
-const SCRIPTMAKER_EDITOR_ACCOUNT_SYNC_META_KEY = 'scriptmaker_editor_account_sync_meta_v1';
-const SCRIPTMAKER_EDITOR_GOOGLE_CONNECTING_KEY = 'scriptmaker_editor_google_connecting_v1';
+const SCRIPTMAKER_EDITOR_BACKUP_META_KEY = 'scriptmaker_editor_backup_sync_meta_v1';
+const SCRIPTMAKER_EDITOR_BACKUP_DEVICE_KEY = 'scriptmaker_editor_backup_device_v1';
+const SCRIPTMAKER_EDITOR_BACKUP_FAIL_KEY = 'scriptmaker_editor_backup_fail_v1';
 const SCRIPTMAKER_SCRIPT_COLOR_PREFIX = 'scriptmaker_editor_script_colors_v1:';
 
 let state = {
@@ -60,16 +61,11 @@ let state = {
     let editorRequestedFullscreenForOrientation = false;
     let cloudSyncUrlHandled = false;
     let editorScriptColorSettings = {};
-    let editorGoogleUser = null;
-    let editorGoogleAuthInitialized = false;
     let editorCloudSyncTimer = null;
     let editorCloudSyncInFlight = false;
     let editorApplyingCloudState = false;
     let editorLastSyncAt = '';
     let editorAppReady = false;
-    let editorManualGoogleConnect = false;
-    let editorGoogleMigrationInProgress = false;
-    let editorGoogleMigrationCompletedForUid = '';
 
     let originalViewportHeight = window.innerHeight;
     const GEMINI_MODEL_CANDIDATES = [
@@ -109,7 +105,7 @@ let state = {
       if (hash) sessionStorage.setItem(EDITOR_AUTH_SESSION_KEY, hash);
       document.body.classList.remove('auth-locked');
       document.getElementById('editorAuthGate')?.classList.add('hidden');
-      initEditorGoogleAccountSync();
+      initEditorBackupSync();
       setTimeout(initCloudSyncFromUrl, 80);
     }
 
@@ -118,19 +114,11 @@ let state = {
       const confirm = document.getElementById('editorAuthConfirm');
       const remember = document.getElementById('editorAuthRemember')?.closest('label');
       const passwordButton = document.getElementById('editorAuthPasswordButton');
-      const googleButton = document.getElementById('editorGoogleLoginButton');
-      const clearButton = document.getElementById('editorClearSavedPasswordButton');
-      const passwordMode = mode !== 'google';
-      [password, confirm, remember, passwordButton, clearButton].forEach(item => {
-        if (!item) return;
-        item.classList.toggle('hidden', !passwordMode);
-        item.hidden = !passwordMode;
-        item.style.display = passwordMode ? '' : 'none';
-      });
-      if (googleButton) {
-        googleButton.classList.remove('hidden');
-        googleButton.hidden = false;
-        googleButton.style.display = '';
+      const backupButton = document.getElementById('editorBackupCodeLoginButton');
+      if (backupButton) {
+        backupButton.classList.remove('hidden');
+        backupButton.hidden = false;
+        backupButton.style.display = '';
       }
     }
 
@@ -191,9 +179,6 @@ let state = {
         localStorage.removeItem(EDITOR_AUTH_SAVED_HASH_KEY);
       }
       showEditorAuthGate();
-      if (sessionStorage.getItem(SCRIPTMAKER_EDITOR_GOOGLE_CONNECTING_KEY) === '1' || shouldAutoLogin) {
-        initEditorGoogleAccountSync();
-      }
     }
 
     async function submitEditorPassword() {
@@ -250,7 +235,7 @@ let state = {
       sessionStorage.setItem(EDITOR_AUTH_SESSION_KEY, 'offline');
       document.body.classList.remove('auth-locked');
       document.getElementById('editorAuthGate')?.classList.add('hidden');
-      setEditorSyncStatus('オフライン', 'offline', 'この端末のデータだけで続けます');
+      setEditorSyncStatus('\u30aa\u30d5\u30e9\u30a4\u30f3', 'offline', '\u3053\u306e\u7aef\u672b\u306e\u30c7\u30fc\u30bf\u3060\u3051\u3067\u7d9a\u3051\u307e\u3059\u3002');
       setTimeout(initCloudSyncFromUrl, 80);
     }
 
@@ -275,20 +260,23 @@ let state = {
 
     function logoutEditorAuth() {
       sessionStorage.removeItem(EDITOR_AUTH_SESSION_KEY);
-      signOutEditorGoogle();
       showEditorAuthGate();
     }
 
-    function editorSyncMeta() {
+    function editorBackupMeta() {
       try {
-        return JSON.parse(localStorage.getItem(SCRIPTMAKER_EDITOR_ACCOUNT_SYNC_META_KEY) || '{}') || {};
+        return JSON.parse(localStorage.getItem(SCRIPTMAKER_EDITOR_BACKUP_META_KEY) || '{}') || {};
       } catch (_) {
         return {};
       }
     }
 
-    function saveEditorSyncMeta(next) {
-      localStorage.setItem(SCRIPTMAKER_EDITOR_ACCOUNT_SYNC_META_KEY, JSON.stringify({ ...editorSyncMeta(), ...next }));
+    function saveEditorBackupMeta(next) {
+      localStorage.setItem(SCRIPTMAKER_EDITOR_BACKUP_META_KEY, JSON.stringify({ ...editorBackupMeta(), ...next }));
+    }
+
+    function clearEditorBackupMeta() {
+      localStorage.removeItem(SCRIPTMAKER_EDITOR_BACKUP_META_KEY);
     }
 
     function setEditorSyncStatus(text, type = '', detail = '') {
@@ -297,82 +285,32 @@ let state = {
       status.textContent = text;
       status.className = 'editor-sync-status' + (type ? ' ' + type : '');
       status.title = detail || text;
-      updateEditorGoogleConnectUi();
+      updateEditorBackupButtonUi();
     }
 
     function localEditorHasExistingData() {
       return !!(state && state.projects && Object.keys(state.projects).length > 0);
     }
 
-    function updateEditorGoogleConnectUi() {
-      const button = document.getElementById('editorGoogleConnectBtn');
+    function updateEditorBackupButtonUi() {
+      const button = document.getElementById('editorBackupConnectBtn');
       if (!button) return;
-      if (editorGoogleUser) {
-        button.textContent = editorGoogleUser.displayName || editorGoogleUser.email || 'Google連携中';
+      const meta = editorBackupMeta();
+      if (meta.syncSpaceId) {
+        button.textContent = '\u30d0\u30c3\u30af\u30a2\u30c3\u30d7';
         button.classList.add('connected');
-        button.title = 'Googleアカウント設定を開く';
+        button.title = '\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30fb\u7aef\u672b\u5f15\u304d\u7d99\u304e\u8a2d\u5b9a\u3092\u958b\u304f';
       } else {
-        button.textContent = 'Googleと連携';
+        button.textContent = '\u30d0\u30c3\u30af\u30a2\u30c3\u30d7';
         button.classList.remove('connected');
-        button.title = 'Googleアカウント同期を開始';
-      }
-    }
-
-    function updateEditorGoogleAccountModal() {
-      const info = document.getElementById('editorGoogleAccountInfo');
-      const status = document.getElementById('editorGoogleAccountStatus');
-      if (info) {
-        info.textContent = editorGoogleUser
-          ? (editorGoogleUser.displayName || editorGoogleUser.email || 'Googleアカウント') + ' と連携中です。'
-          : 'Googleアカウントと連携すると、別端末でも同じ台本を続きから編集できます。';
-      }
-      if (status) {
-        const last = editorLastSyncAt || editorSyncMeta().lastSyncAt || '';
-        status.textContent = editorGoogleUser
-          ? '同期状態: ' + (last ? '同期済み ' + formatSyncTime(last) : '同期待ち')
-          : '未連携です。';
-      }
-    }
-
-    function openEditorGoogleAccountMenu() {
-      updateEditorGoogleAccountModal();
-      openModal('editorGoogleAccountModal');
-    }
-
-    async function connectEditorGoogleFromMenu() {
-      editorManualGoogleConnect = true;
-      sessionStorage.setItem(SCRIPTMAKER_EDITOR_GOOGLE_CONNECTING_KEY, '1');
-      await signInEditorGoogle({ fromMenu: true });
-    }
-
-    async function handleEditorGoogleMigrationAfterLogin() {
-      if (!editorGoogleUser || !editorAppReady) return;
-      if (editorGoogleMigrationInProgress || editorGoogleMigrationCompletedForUid === editorGoogleUser.uid) return;
-      editorGoogleMigrationInProgress = true;
-      sessionStorage.removeItem(SCRIPTMAKER_EDITOR_GOOGLE_CONNECTING_KEY);
-      try {
-        const hasLocalData = localEditorHasExistingData();
-        if (hasLocalData) {
-          const useLocal = confirm('この端末に保存されている台本データをGoogleアカウントへ保存しますか？\n\nOK: この端末のデータをクラウドへ保存\nキャンセル: クラウド側のデータを読み込み');
-          if (useLocal) {
-            await saveEditorAccountCloudNow({ skipReschedule: true });
-            updateEditorGoogleAccountModal();
-            editorGoogleMigrationCompletedForUid = editorGoogleUser.uid;
-            return;
-          }
-        }
-        await loadEditorAccountCloudState(true);
-        updateEditorGoogleAccountModal();
-        editorGoogleMigrationCompletedForUid = editorGoogleUser.uid;
-      } finally {
-        editorGoogleMigrationInProgress = false;
+        button.title = '\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u3092\u767a\u884c\u30fb\u5165\u529b';
       }
     }
 
     function formatSyncTime(value) {
       const date = value ? new Date(value) : null;
       if (!date || Number.isNaN(date.getTime())) return '';
-      return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
     }
 
     function collectScriptColorSettingsForSync() {
@@ -398,7 +336,7 @@ let state = {
       loadEditorScriptColorSettings();
     }
 
-    function buildEditorAccountSyncPayload() {
+    function buildEditorBackupBasePayload() {
       const updatedAt = state.editorUpdatedAt || new Date().toISOString();
       return {
         id: 'main',
@@ -416,7 +354,7 @@ let state = {
       };
     }
 
-    function applyEditorAccountSyncPayload(payload) {
+    function applyEditorBackupPayload(payload) {
       const data = payload?.data || {};
       if (!data.state || typeof data.state !== 'object') return false;
       editorApplyingCloudState = true;
@@ -444,150 +382,348 @@ let state = {
       }
     }
 
-    function scheduleEditorAccountCloudSave(delay = 2500) {
-      if (editorApplyingCloudState || !editorGoogleUser) return;
-      clearTimeout(editorCloudSyncTimer);
-      editorCloudSyncTimer = setTimeout(() => saveEditorAccountCloudNow(), delay);
+    function backupAlphabet() { return 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; }
+
+    function randomToken(length, alphabet = backupAlphabet()) {
+      const bytes = new Uint8Array(length);
+      crypto.getRandomValues(bytes);
+      return Array.from(bytes, b => alphabet[b % alphabet.length]).join('');
     }
 
-    async function saveEditorAccountCloudNow(options = {}) {
-      if (!editorGoogleUser || !window.ScriptMakerFirebaseShare) return false;
+    function generateBackupCode() {
+      return 'SM-' + [0,1,2,3,4].map(() => randomToken(4)).join('-');
+    }
+
+    function normalizeBackupCode(value) {
+      const raw = String(value || '').toUpperCase().replace(/[\s\u3000-]+/g, '');
+      return raw.startsWith('SM') ? 'SM-' + raw.slice(2).replace(/(.{4})/g, '$1-').replace(/-$/,'') : raw.replace(/(.{4})/g, '$1-').replace(/-$/,'');
+    }
+
+    function compactBackupCode(value) {
+      return String(value || '').toUpperCase().replace(/[\s\u3000-]+/g, '');
+    }
+
+    async function hashBackupCode(value) {
+      const compact = compactBackupCode(value);
+      if (!compact || compact.length < 18) throw new Error('\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002');
+      return hashPasswordText('scriptmaker-backup-code:' + compact);
+    }
+
+    function safeSyncIdFromHash(hash) {
+      return 'sync_' + String(hash || '').replace(/^sha256:/, '').slice(0, 40);
+    }
+
+    function getEditorBackupDevice() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(SCRIPTMAKER_EDITOR_BACKUP_DEVICE_KEY) || '{}') || {};
+        if (saved.id && saved.token) return saved;
+      } catch (_) {}
+      const device = {
+        id: 'device_' + randomToken(18).toLowerCase(),
+        token: randomToken(32),
+        name: detectDeviceName(),
+        registeredAt: new Date().toISOString()
+      };
+      localStorage.setItem(SCRIPTMAKER_EDITOR_BACKUP_DEVICE_KEY, JSON.stringify(device));
+      return device;
+    }
+
+    function detectDeviceName() {
+      const ua = navigator.userAgent || '';
+      if (/Pixel/i.test(ua)) return 'Pixel / Android';
+      if (/Android/i.test(ua)) return 'Android';
+      if (/iPhone/i.test(ua)) return 'iPhone';
+      if (/iPad/i.test(ua)) return 'iPad';
+      if (/Windows/i.test(ua)) return 'Windows PC';
+      if (/Macintosh/i.test(ua)) return 'Mac';
+      return '\u3053\u306e\u7aef\u672b';
+    }
+
+    function buildEditorBackupPayload() {
+      const payload = buildEditorBackupBasePayload();
+      payload.id = 'main';
+      payload.title = 'ScriptMaker Backup';
+      payload.schemaVersion = 3;
+      payload.syncMeta = editorBackupMeta();
+      return payload;
+    }
+
+    function summarizeBackupPayload(payload) {
+      const data = payload?.data || {};
+      const nextState = data.state || {};
+      const projects = nextState.projects || {};
+      const folders = nextState.folders || {};
+      const bytes = new Blob([JSON.stringify(payload || {})]).size;
+      return { projects: Object.keys(projects).length, folders: Object.keys(folders).length, updatedAt: payload?.updatedAt || nextState.editorUpdatedAt || '', bytes };
+    }
+
+    function scheduleEditorBackupSync(delay = 3000) {
+      if (editorApplyingCloudState || !editorBackupMeta().syncSpaceId) return;
+      saveEditorBackupMeta({ pending: true });
+      setEditorSyncStatus('\u672a\u540c\u671f\u306e\u5909\u66f4\u3042\u308a', 'offline');
+      clearTimeout(editorCloudSyncTimer);
+      editorCloudSyncTimer = setTimeout(() => saveEditorBackupNow(), delay);
+    }
+
+    async function editorBackupFirebaseConfig() {
+      const helper = window.ScriptMakerFirebaseShare;
+      if (!helper) throw new Error('Firebase module is not loaded.');
+      const config = helper.configuredConfig('');
+      helper.saveConfig(config);
+      return config;
+    }
+
+    async function registerEditorBackupDevice(config, syncSpaceId, codeHash) {
+      const helper = window.ScriptMakerFirebaseShare;
+      const device = getEditorBackupDevice();
+      const deviceTokenHash = await hashPasswordText('scriptmaker-device-token:' + device.token);
+      await helper.saveEditorDevice(syncSpaceId, device.id, { name: device.name, deviceTokenHash, registeredAt: device.registeredAt, lastSyncAt: new Date().toISOString() }, config);
+      saveEditorBackupMeta({ syncSpaceId, recoveryCodeHash: codeHash, deviceId: device.id, deviceName: device.name });
+    }
+
+    async function saveEditorBackupNow(options = {}) {
+      const meta = editorBackupMeta();
+      if (!meta.syncSpaceId || !window.ScriptMakerFirebaseShare) return false;
       if (!navigator.onLine) {
-        setEditorSyncStatus('オフライン', 'offline', '通信復帰後に同期します');
+        saveEditorBackupMeta({ pending: true });
+        setEditorSyncStatus('\u30aa\u30d5\u30e9\u30a4\u30f3\u30fb\u7aef\u672b\u306b\u4fdd\u5b58\u6e08\u307f', 'offline');
         return false;
       }
-      if (editorCloudSyncInFlight) {
-        if (!options.skipReschedule) scheduleEditorAccountCloudSave(1200);
-        return false;
-      }
+      if (editorCloudSyncInFlight) { if (!options.skipReschedule) scheduleEditorBackupSync(1500); return false; }
       editorCloudSyncInFlight = true;
-      setEditorSyncStatus('同期中…', 'syncing', editorGoogleUser.email || editorGoogleUser.displayName || '');
+      setEditorSyncStatus('\u540c\u671f\u4e2d\u2026', 'syncing');
       try {
         const helper = window.ScriptMakerFirebaseShare;
-        const config = helper.configuredConfig('');
-        const payload = buildEditorAccountSyncPayload();
-        await helper.saveEditorAccountState(editorGoogleUser.uid, payload, config);
+        const config = await editorBackupFirebaseConfig();
+        const payload = buildEditorBackupPayload();
+        await helper.saveEditorSyncSpaceMeta(meta.syncSpaceId, { schemaVersion: 1, recoveryCodeHash: meta.recoveryCodeHash, updatedAt: payload.updatedAt }, config);
+        await helper.saveEditorBackupState(meta.syncSpaceId, payload, config);
+        await registerEditorBackupDevice(config, meta.syncSpaceId, meta.recoveryCodeHash || '');
         editorLastSyncAt = new Date().toISOString();
-        saveEditorSyncMeta({ uid: editorGoogleUser.uid, lastSyncAt: editorLastSyncAt });
-        setEditorSyncStatus('同期済み ' + formatSyncTime(editorLastSyncAt), 'synced', (editorGoogleUser.displayName || editorGoogleUser.email || '') + '\n最終同期: ' + editorLastSyncAt);
-        updateEditorGoogleAccountModal();
+        saveEditorBackupMeta({ lastSyncAt: editorLastSyncAt, pending: false, lastCloudUpdatedAt: payload.updatedAt });
+        setEditorSyncStatus('\u540c\u671f\u6e08\u307f ' + formatSyncTime(editorLastSyncAt), 'synced');
+        updateEditorBackupModal();
         return true;
       } catch (error) {
-        console.error('Editor account cloud sync failed:', error);
-        setEditorSyncStatus('同期失敗', 'error', error.message || String(error));
+        console.error('Editor backup sync failed:', error);
+        saveEditorBackupMeta({ pending: true, lastError: error.message || String(error) });
+        setEditorSyncStatus('\u540c\u671f\u5931\u6557', 'error', error.message || String(error));
         return false;
       } finally {
         editorCloudSyncInFlight = false;
       }
     }
 
-    async function loadEditorAccountCloudState(force = false) {
-      if (!editorGoogleUser || !window.ScriptMakerFirebaseShare || !navigator.onLine) return;
-      if (!editorAppReady) {
-        setTimeout(() => loadEditorAccountCloudState(force), 250);
-        return;
-      }
-      setEditorSyncStatus('同期確認中…', 'syncing');
+    async function loadEditorBackupCloudState(force = false) {
+      const meta = editorBackupMeta();
+      if (!meta.syncSpaceId || !window.ScriptMakerFirebaseShare || !navigator.onLine) return false;
+      if (!editorAppReady) { setTimeout(() => loadEditorBackupCloudState(force), 250); return false; }
+      setEditorSyncStatus('\u540c\u671f\u78ba\u8a8d\u4e2d\u2026', 'syncing');
       try {
         const helper = window.ScriptMakerFirebaseShare;
-        const config = helper.configuredConfig('');
-        const payload = await helper.loadEditorAccountState(editorGoogleUser.uid, config);
+        const config = await editorBackupFirebaseConfig();
+        const payload = await helper.loadEditorBackupState(meta.syncSpaceId, config);
         const remoteUpdated = Date.parse(payload?.updatedAt || payload?.data?.state?.editorUpdatedAt || '');
         const localUpdated = Date.parse(state.editorUpdatedAt || '');
         if (payload && (force || (remoteUpdated && (!localUpdated || remoteUpdated > localUpdated)))) {
-          applyEditorAccountSyncPayload(payload);
+          if (!force && localUpdated && remoteUpdated && localUpdated > remoteUpdated) { setEditorSyncStatus('\u5225\u7aef\u672b\u306e\u66f4\u65b0\u3042\u308a', 'error'); return false; }
+          applyEditorBackupPayload(payload);
           editorLastSyncAt = new Date().toISOString();
-          saveEditorSyncMeta({ uid: editorGoogleUser.uid, lastSyncAt: editorLastSyncAt });
-          setEditorSyncStatus('同期済み ' + formatSyncTime(editorLastSyncAt), 'synced', 'クラウドの最新データを読み込みました');
-          updateEditorGoogleAccountModal();
-          return;
+          saveEditorBackupMeta({ lastSyncAt: editorLastSyncAt, pending: false, lastCloudUpdatedAt: payload.updatedAt || '' });
+          setEditorSyncStatus('\u540c\u671f\u6e08\u307f ' + formatSyncTime(editorLastSyncAt), 'synced');
+          updateEditorBackupModal();
+          return true;
         }
-        await saveEditorAccountCloudNow({ skipReschedule: true });
+        await saveEditorBackupNow({ skipReschedule: true });
+        return true;
       } catch (error) {
-        console.error('Editor account cloud load failed:', error);
-        setEditorSyncStatus('同期失敗', 'error', error.message || String(error));
+        console.error('Editor backup load failed:', error);
+        setEditorSyncStatus('\u540c\u671f\u5931\u6557', 'error', error.message || String(error));
+        return false;
       }
     }
 
-    async function initEditorGoogleAccountSync() {
-      if (editorGoogleAuthInitialized || !window.ScriptMakerFirebaseShare) return;
-      editorGoogleAuthInitialized = true;
+    function initEditorBackupSync() {
+      updateEditorBackupButtonUi();
+      const meta = editorBackupMeta();
+      if (meta.syncSpaceId) {
+        setEditorSyncStatus(meta.pending ? '\u672a\u540c\u671f\u306e\u5909\u66f4\u3042\u308a' : '\u540c\u671f\u6e96\u5099OK', meta.pending ? 'offline' : 'synced');
+        if (navigator.onLine) setTimeout(() => loadEditorBackupCloudState(), 800);
+      } else {
+        setEditorSyncStatus('\u672a\u8a2d\u5b9a', 'offline');
+      }
+      window.addEventListener('online', () => saveEditorBackupNow());
+      window.addEventListener('offline', () => setEditorSyncStatus('\u30aa\u30d5\u30e9\u30a4\u30f3\u30fb\u7aef\u672b\u306b\u4fdd\u5b58\u6e08\u307f', 'offline'));
+    }
+
+    async function issueEditorBackupCode() {
+      if (!window.ScriptMakerFirebaseShare) { setEditorBackupStatus('Firebase module is not loaded.', 'error'); return; }
+      if (!localEditorHasExistingData()) { setEditorBackupStatus('\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3059\u308b\u53f0\u672c\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u305b\u3093\u3002', 'error'); return; }
+      const choice = prompt('\u73fe\u5728\u306e\u53f0\u672c\u30c7\u30fc\u30bf\u3092\u30af\u30e9\u30a6\u30c9\u3078\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3057\u307e\u3059\u304b\uff1f\n\n1: \u3059\u3079\u3066\u306e\u30c7\u30fc\u30bf\u3092\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\n2: \u73fe\u5728\u306e\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u3060\u3051\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\n\u30ad\u30e3\u30f3\u30bb\u30eb: \u4e2d\u6b62', '1');
+      if (choice == null) return;
+      let backupState = state;
+      if (String(choice).trim() === '2') {
+        const project = getCurrentProject();
+        if (!project) { setEditorBackupStatus('\u73fe\u5728\u958b\u3044\u3066\u3044\u308b\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002', 'error'); return; }
+        backupState = { ...state, projects: { [state.currentProjectId]: project }, currentFolderId: project.folderId || UNCLASSIFIED_FOLDER_ID };
+      }
+      const originalState = state;
+      const code = generateBackupCode();
       try {
-        try {
-          const redirectUser = await window.ScriptMakerFirebaseShare.consumeEditorRedirectResult?.('');
-          if (redirectUser) editorGoogleUser = redirectUser;
-        } catch (redirectError) {
-          console.warn('Editor Google redirect result failed:', redirectError);
-        }
-        await window.ScriptMakerFirebaseShare.onEditorAuthChanged(async user => {
-          editorGoogleUser = user || null;
-          updateEditorGoogleConnectUi();
-          if (user) {
-            document.body.classList.remove('auth-locked');
-            document.getElementById('editorAuthGate')?.classList.add('hidden');
-            setEditorSyncStatus('同期確認中…', 'syncing', user.displayName || user.email || '');
-            if (editorManualGoogleConnect || sessionStorage.getItem(SCRIPTMAKER_EDITOR_GOOGLE_CONNECTING_KEY) === '1') {
-              editorManualGoogleConnect = false;
-              await handleEditorGoogleMigrationAfterLogin();
-              return;
-            }
-            await loadEditorAccountCloudState();
-          } else {
-            editorGoogleUser = null;
-            updateEditorGoogleConnectUi();
-            setEditorSyncStatus('未ログイン', 'offline');
-            if (!editorPasswordHash()) showEditorAuthGate();
-          }
-        });
-        window.addEventListener('online', () => saveEditorAccountCloudNow());
-        window.addEventListener('offline', () => setEditorSyncStatus('オフライン', 'offline', '通信復帰後に同期します'));
+        setEditorBackupStatus('\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3092\u4f5c\u6210\u4e2d\u2026', '');
+        const codeHash = await hashBackupCode(code);
+        const syncSpaceId = safeSyncIdFromHash(codeHash + ':' + randomToken(8));
+        const config = await editorBackupFirebaseConfig();
+        state = backupState;
+        const payload = buildEditorBackupPayload();
+        state = originalState;
+        const helper = window.ScriptMakerFirebaseShare;
+        await helper.saveEditorRecoveryCode(codeHash, syncSpaceId, { createdAt: new Date().toISOString() }, config);
+        await helper.saveEditorSyncSpaceMeta(syncSpaceId, { schemaVersion: 1, recoveryCodeHash: codeHash, updatedAt: payload.updatedAt }, config);
+        await helper.saveEditorBackupState(syncSpaceId, payload, config);
+        await registerEditorBackupDevice(config, syncSpaceId, codeHash);
+        localStorage.setItem('scriptmaker_editor_backup_code_plain_v1', code);
+        saveEditorBackupMeta({ syncSpaceId, recoveryCodeHash: codeHash, codeSavedAt: new Date().toISOString(), pending: false, lastSyncAt: new Date().toISOString() });
+        setEditorBackupCodeOutput(code);
+        setEditorBackupStatus('\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u3092\u767a\u884c\u3057\u307e\u3057\u305f\u3002\u7b2c\u4e09\u8005\u306b\u5171\u6709\u3057\u306a\u3044\u3067\u304f\u3060\u3055\u3044\u3002', 'success');
+        updateEditorBackupModal();
       } catch (error) {
-        console.error('Editor Google sync init failed:', error);
-        setEditorSyncStatus('同期未設定', 'error', error.message || String(error));
+        state = originalState;
+        console.error('Backup issue failed:', error);
+        setEditorBackupStatus('\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3092\u4f5c\u6210\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u7aef\u672b\u5185\u306e\u30c7\u30fc\u30bf\u306f\u4fdd\u6301\u3055\u308c\u3066\u3044\u307e\u3059\u3002', 'error');
       }
     }
 
-    async function signInEditorGoogle(options = {}) {
-      const message = document.getElementById('editorAuthMessage');
-      if (message) message.textContent = '';
+    function setEditorBackupCodeOutput(code) {
+      const output = document.getElementById('editorBackupCodeText');
+      if (output) { output.value = code || ''; output.classList.toggle('hidden', !code); }
+    }
+
+    function setEditorBackupStatus(message, type) {
+      const status = document.getElementById('editorBackupStatus');
+      if (!status) return;
+      status.className = 'share-meta share-status' + (type ? ' is-' + type : '');
+      status.innerText = message || '';
+    }
+
+    async function copyEditorBackupCode() {
+      const code = document.getElementById('editorBackupCodeText')?.value || localStorage.getItem('scriptmaker_editor_backup_code_plain_v1') || '';
+      if (!code) { setEditorBackupStatus('\u8868\u793a\u3067\u304d\u308b\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u304c\u3042\u308a\u307e\u305b\u3093\u3002', 'error'); return; }
+      const ok = await tryClipboardCopyValue(code, document.getElementById('editorBackupCodeText'));
+      setEditorBackupStatus(ok ? '\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f\u3002\u7b2c\u4e09\u8005\u306b\u5171\u6709\u3057\u306a\u3044\u3067\u304f\u3060\u3055\u3044\u3002' : '\u30b3\u30d4\u30fc\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u30b3\u30fc\u30c9\u3092\u9577\u62bc\u3057\u3057\u3066\u30b3\u30d4\u30fc\u3057\u3066\u304f\u3060\u3055\u3044\u3002', ok ? 'success' : 'error');
+    }
+
+    async function tryClipboardCopyValue(value, element) {
+      if (!value) return false;
+      if (navigator.clipboard && window.isSecureContext) { try { await navigator.clipboard.writeText(value); return true; } catch (_) {} }
+      try { if (element) { element.classList.remove('hidden'); element.focus({ preventScroll: true }); element.select(); element.setSelectionRange?.(0, value.length); } return document.execCommand && document.execCommand('copy') === true; } catch (_) { return false; }
+    }
+
+    function openEditorBackupMenu() { updateEditorBackupModal(); openModal('editorBackupModal'); }
+
+    function openBackupCodeImportFromAuth() { updateEditorBackupModal(true); openModal('editorBackupModal'); setTimeout(() => document.getElementById('editorBackupCodeInput')?.focus(), 80); }
+
+    async function updateEditorBackupModal(focusImport = false) {
+      const meta = editorBackupMeta();
+      const info = document.getElementById('editorBackupInfo');
+      const status = document.getElementById('editorBackupConnectionStatus');
+      const input = document.getElementById('editorBackupCodeInput');
+      if (info) info.textContent = meta.syncSpaceId ? '\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u8a2d\u5b9a\u6e08\u307f\u3002\u5225\u7aef\u672b\u3067\u3082\u540c\u3058\u30c7\u30fc\u30bf\u3092\u540c\u671f\u3067\u304d\u307e\u3059\u3002' : '\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u3092\u767a\u884c\u3059\u308b\u3068\u3001\u5225\u7aef\u672b\u3078\u53f0\u672c\u30c7\u30fc\u30bf\u3092\u5f15\u304d\u7d99\u3052\u307e\u3059\u3002';
+      if (status) status.textContent = meta.syncSpaceId ? '\u6700\u7d42\u540c\u671f: ' + (meta.lastSyncAt ? formatSyncTime(meta.lastSyncAt) : '\u672a\u540c\u671f') : '\u672a\u8a2d\u5b9a';
+      setEditorBackupCodeOutput(localStorage.getItem('scriptmaker_editor_backup_code_plain_v1') || '');
+      if (input && focusImport) input.value = '';
+      if (meta.syncSpaceId && window.ScriptMakerFirebaseShare?.listEditorDevices) {
+        try { const devices = await window.ScriptMakerFirebaseShare.listEditorDevices(meta.syncSpaceId, await editorBackupFirebaseConfig()); renderEditorBackupDevices(devices); } catch (error) { console.warn('Device list failed:', error); }
+      } else { renderEditorBackupDevices([]); }
+    }
+
+    function renderEditorBackupDevices(devices) {
+      const list = document.getElementById('editorBackupDeviceList');
+      if (!list) return;
+      const current = getEditorBackupDevice().id;
+      list.innerHTML = (devices || []).length ? devices.map(device => '<div class="backup-device-row"><strong>' + escapeHtml(device.name || '\u7aef\u672b') + '</strong><span>' + (device.id === current ? '\u3053\u306e\u7aef\u672b' : '\u63a5\u7d9a\u6e08\u307f') + '</span></div>').join('') : '<div class="backup-device-row">\u63a5\u7d9a\u6e08\u307f\u7aef\u672b\u306f\u307e\u3060\u3042\u308a\u307e\u305b\u3093\u3002</div>';
+    }
+
+    async function loadBackupCodeFromInput() {
+      const input = document.getElementById('editorBackupCodeInput');
+      const code = normalizeBackupCode(input?.value || '');
+      if (input) input.value = code;
+      if (!navigator.onLine) { setEditorBackupStatus('\u73fe\u5728\u30aa\u30d5\u30e9\u30a4\u30f3\u306e\u305f\u3081\u3001\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u3092\u78ba\u8a8d\u3067\u304d\u307e\u305b\u3093\u3002', 'error'); return; }
+      if (isBackupCodeRateLimited()) { setEditorBackupStatus('\u9023\u7d9a\u8a66\u884c\u304c\u591a\u3059\u304e\u307e\u3059\u3002\u5c11\u3057\u5f85\u3063\u3066\u304b\u3089\u304a\u8a66\u3057\u304f\u3060\u3055\u3044\u3002', 'error'); return; }
       try {
-        if (!window.ScriptMakerFirebaseShare) throw new Error('Firebase機能を読み込めませんでした。');
-        if (options.fromMenu !== false) {
-          editorManualGoogleConnect = true;
-          sessionStorage.setItem(SCRIPTMAKER_EDITOR_GOOGLE_CONNECTING_KEY, '1');
-        }
-        setEditorSyncStatus('ログイン中…', 'syncing');
-        const user = await window.ScriptMakerFirebaseShare.signInEditorWithGoogle('', { allowRedirectFallback: true });
-        editorGoogleUser = user || editorGoogleUser;
-        if (editorGoogleUser) {
-          document.body.classList.remove('auth-locked');
-          document.getElementById('editorAuthGate')?.classList.add('hidden');
-          if (options.fromMenu !== false || editorManualGoogleConnect) {
-            editorManualGoogleConnect = false;
-            await handleEditorGoogleMigrationAfterLogin();
-            return;
-          }
-          await loadEditorAccountCloudState();
-        }
-      } catch (error) {
-        console.error('Google login failed:', error);
-        if (message) message.textContent = error.message || 'Googleログインに失敗しました。';
-        setEditorSyncStatus('ログイン失敗', 'error', error.message || String(error));
-      }
+        setEditorBackupStatus('\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u3092\u78ba\u8a8d\u4e2d\u2026', '');
+        const codeHash = await hashBackupCode(code);
+        const helper = window.ScriptMakerFirebaseShare;
+        const config = await editorBackupFirebaseConfig();
+        const resolved = await helper.resolveEditorRecoveryCode(codeHash, config);
+        if (!resolved) { recordBackupCodeFailure(); setEditorBackupStatus('\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002', 'error'); return; }
+        if (resolved.inactive) { setEditorBackupStatus('\u3053\u306e\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u306f\u73fe\u5728\u4f7f\u7528\u3067\u304d\u307e\u305b\u3093\u3002', 'error'); return; }
+        const payload = await helper.loadEditorBackupState(resolved.syncSpaceId, config);
+        if (!payload) { setEditorBackupStatus('\u30c7\u30fc\u30bf\u3092\u8aad\u307f\u8fbc\u3081\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u3053\u306e\u7aef\u672b\u306e\u30c7\u30fc\u30bf\u306f\u5909\u66f4\u3055\u308c\u3066\u3044\u307e\u305b\u3093\u3002', 'error'); return; }
+        const summary = summarizeBackupPayload(payload);
+        const hasLocal = localEditorHasExistingData();
+        const message = '\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u304c\u898b\u3064\u304b\u308a\u307e\u3057\u305f\n\n\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u6570: ' + summary.projects + '\u4ef6\n\u30d5\u30a9\u30eb\u30c0\u6570: ' + summary.folders + '\u4ef6\n\u6700\u7d42\u66f4\u65b0: ' + (summary.updatedAt ? new Date(summary.updatedAt).toLocaleString('ja-JP') : '\u4e0d\u660e') + '\n\u30c7\u30fc\u30bf\u5bb9\u91cf: ' + Math.ceil(summary.bytes / 1024) + 'KB\n\n' + (hasLocal ? '\u3053\u306e\u7aef\u672b\u306b\u3082\u53f0\u672c\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u3059\u3002OK\u3067\u4e21\u65b9\u3092\u6b8b\u3057\u3066\u8aad\u307f\u8fbc\u307f\u307e\u3059\u3002' : '\u3053\u306e\u7aef\u672b\u3078\u8aad\u307f\u8fbc\u307f\u307e\u3059\u304b\uff1f');
+        if (!confirm(message)) return;
+        importBackupPayloadKeepingLocal(payload);
+        await registerEditorBackupDevice(config, resolved.syncSpaceId, codeHash);
+        localStorage.setItem('scriptmaker_editor_backup_code_plain_v1', code);
+        saveEditorBackupMeta({ syncSpaceId: resolved.syncSpaceId, recoveryCodeHash: codeHash, pending: false, lastSyncAt: new Date().toISOString() });
+        saveState();
+        closeModal('editorBackupModal');
+        document.getElementById('editorAuthGate')?.classList.add('hidden');
+        document.body.classList.remove('auth-locked');
+        renderProjectList();
+        setEditorSyncStatus('\u540c\u671f\u6e08\u307f ' + formatSyncTime(new Date().toISOString()), 'synced');
+      } catch (error) { console.error('Backup import failed:', error); setEditorBackupStatus(error.message || '\u30c7\u30fc\u30bf\u3092\u8aad\u307f\u8fbc\u3081\u307e\u305b\u3093\u3067\u3057\u305f\u3002', 'error'); }
     }
 
-    async function signOutEditorGoogle() {
+    function importBackupPayloadKeepingLocal(payload) {
+      const data = payload?.data || {};
+      const incoming = data.state || {};
+      if (!incoming || typeof incoming !== 'object') throw new Error('\u8aad\u307f\u8fbc\u3081\u308b\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30c7\u30fc\u30bf\u3067\u306f\u3042\u308a\u307e\u305b\u3093\u3002');
+      const merged = JSON.parse(JSON.stringify(incoming));
+      if (localEditorHasExistingData()) {
+        merged.projects = { ...(incoming.projects || {}) };
+        Object.entries(state.projects || {}).forEach(([id, project]) => { const nextId = merged.projects[id] ? id + '_local_' + Date.now() : id; merged.projects[nextId] = project; });
+        merged.folders = { ...(incoming.folders || {}), ...(state.folders || {}) };
+        merged.currentProjectId = incoming.currentProjectId || Object.keys(merged.projects)[0] || null;
+      }
+      editorApplyingCloudState = true;
+      try { state = merged; localStorage.setItem('script_assistant_data_v21', JSON.stringify(state)); applyEditorBackupPayload({ ...payload, data: { ...data, state } }); } finally { editorApplyingCloudState = false; }
+    }
+
+    function isBackupCodeRateLimited() { try { const data = JSON.parse(localStorage.getItem(SCRIPTMAKER_EDITOR_BACKUP_FAIL_KEY) || '{}') || {}; return data.until && Date.now() < data.until; } catch (_) { return false; } }
+
+    function recordBackupCodeFailure() { let data = {}; try { data = JSON.parse(localStorage.getItem(SCRIPTMAKER_EDITOR_BACKUP_FAIL_KEY) || '{}') || {}; } catch (_) {} const count = (data.count || 0) + 1; const until = count >= 5 ? Date.now() + Math.min(300000, count * 30000) : 0; localStorage.setItem(SCRIPTMAKER_EDITOR_BACKUP_FAIL_KEY, JSON.stringify({ count, until })); }
+
+    async function regenerateEditorBackupCode() {
+      const meta = editorBackupMeta();
+      if (!meta.syncSpaceId) { await issueEditorBackupCode(); return; }
+      if (!confirm('\u30b3\u30fc\u30c9\u3092\u518d\u767a\u884c\u3059\u308b\u3068\u3001\u53e4\u3044\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u3092\u4f7f\u3063\u305f\u65b0\u3057\u3044\u7aef\u672b\u306e\u767b\u9332\u304c\u3067\u304d\u306a\u304f\u306a\u308a\u307e\u3059\u3002')) return;
+      const oldHash = meta.recoveryCodeHash || '';
+      const code = generateBackupCode();
       try {
-        if (window.ScriptMakerFirebaseShare) await window.ScriptMakerFirebaseShare.signOutEditor('');
-      } catch (error) {
-        console.warn('Google sign out failed:', error);
-      }
-      editorGoogleUser = null;
-      updateEditorGoogleConnectUi();
-      setEditorSyncStatus('未ログイン', 'offline');
-      updateEditorGoogleAccountModal();
+        setEditorBackupStatus('\u65b0\u3057\u3044\u30b3\u30fc\u30c9\u3092\u767a\u884c\u4e2d\u2026', '');
+        const codeHash = await hashBackupCode(code);
+        const config = await editorBackupFirebaseConfig();
+        const helper = window.ScriptMakerFirebaseShare;
+        if (oldHash) await helper.disableEditorRecoveryCode(oldHash, config);
+        await helper.saveEditorRecoveryCode(codeHash, meta.syncSpaceId, { createdAt: new Date().toISOString() }, config);
+        await helper.saveEditorSyncSpaceMeta(meta.syncSpaceId, { schemaVersion: 1, recoveryCodeHash: codeHash }, config);
+        localStorage.setItem('scriptmaker_editor_backup_code_plain_v1', code);
+        saveEditorBackupMeta({ recoveryCodeHash: codeHash });
+        setEditorBackupCodeOutput(code);
+        setEditorBackupStatus('\u65b0\u3057\u3044\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u3092\u767a\u884c\u3057\u307e\u3057\u305f\u3002', 'success');
+      } catch (error) { console.error('Backup regenerate failed:', error); setEditorBackupStatus('\u30b3\u30fc\u30c9\u3092\u518d\u767a\u884c\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002', 'error'); }
     }
 
+    function unlinkEditorBackupDevice() {
+      if (!confirm('\u3053\u306e\u7aef\u672b\u306e\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u9023\u643a\u3092\u89e3\u9664\u3057\u307e\u3059\u304b\uff1f\u7aef\u672b\u5185\u306e\u53f0\u672c\u30c7\u30fc\u30bf\u306f\u524a\u9664\u3055\u308c\u307e\u305b\u3093\u3002')) return;
+      clearEditorBackupMeta();
+      localStorage.removeItem('scriptmaker_editor_backup_code_plain_v1');
+      setEditorSyncStatus('\u672a\u8a2d\u5b9a', 'offline');
+      updateEditorBackupModal();
+    }
 
     window.onload = function() {
       const saved = localStorage.getItem('script_assistant_data_v21');
@@ -632,7 +768,7 @@ let state = {
       syncEditorOrientationForDisplayMode(false);
       initCloudSyncFromUrl();
       editorAppReady = true;
-      if (editorGoogleUser) loadEditorAccountCloudState();
+      if (editorBackupMeta().syncSpaceId) loadEditorBackupCloudState();
     };
 
     setTimeout(initEditorAuthGate, 0);
@@ -768,7 +904,7 @@ let state = {
 
     function saveCharacterLibrary(list) {
       localStorage.setItem(SCRIPTMAKER_CHARACTER_LIBRARY_KEY, JSON.stringify(list || []));
-      scheduleEditorAccountCloudSave();
+      scheduleEditorBackupSync();
     }
 
     function mergeCharacterIntoLibraryList(list, character) {
@@ -967,7 +1103,7 @@ let state = {
       try {
         if (!editorApplyingCloudState) state.editorUpdatedAt = new Date().toISOString();
         localStorage.setItem('script_assistant_data_v21', JSON.stringify(state));
-        scheduleEditorAccountCloudSave();
+        scheduleEditorBackupSync();
         return true;
       } catch (e) {
         console.error("保存エラー:", e);
@@ -1954,7 +2090,7 @@ let state = {
 
     function saveEditorScriptColorSettings() {
       localStorage.setItem(scriptColorStorageKey(), JSON.stringify(editorScriptColorSettings || {}));
-      scheduleEditorAccountCloudSave();
+      scheduleEditorBackupSync();
     }
 
     function scriptColorCharacterNames(project) {
@@ -3078,7 +3214,7 @@ ${keptPredictionText}
     function saveEditorCountSetting(next) {
       const current = loadEditorCountSetting();
       localStorage.setItem(SCRIPTMAKER_EDITOR_COUNT_SETTING_KEY, JSON.stringify({ ...current, ...next }));
-      scheduleEditorAccountCloudSave();
+      scheduleEditorBackupSync();
     }
 
     function isCountableTalk(talk) {
@@ -3183,8 +3319,8 @@ ${keptPredictionText}
 
     async function saveDataAlert() {
       saveState();
-      const synced = await saveEditorAccountCloudNow({ skipReschedule: true });
-      alert(synced ? "ローカル保存とクラウド保存が完了しました。" : "ローカルへ保存しました。Googleログイン中または通信復帰後にクラウド同期します。");
+      const synced = await saveEditorBackupNow({ skipReschedule: true });
+      alert(synced ? "\u30ed\u30fc\u30ab\u30eb\u4fdd\u5b58\u3068\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u540c\u671f\u304c\u5b8c\u4e86\u3057\u307e\u3057\u305f\u3002" : "\u30ed\u30fc\u30ab\u30eb\u3078\u4fdd\u5b58\u3057\u307e\u3057\u305f\u3002\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u672a\u8a2d\u5b9a\u3001\u307e\u305f\u306f\u901a\u4fe1\u5fa9\u5e30\u5f8c\u306b\u540c\u671f\u3057\u307e\u3059\u3002");
     }
     function exportDataAlert() {
       const input = document.getElementById('inputSpeech');

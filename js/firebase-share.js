@@ -3,8 +3,9 @@
   const FIREBASE_CONFIG_STORAGE_KEY = "scriptmaker_firebase_config_v1";
   const FIREBASE_SHARE_COLLECTION = "scriptShares";
   const FIREBASE_EDITOR_PROJECT_COLLECTION = "editorProjects";
-  const FIREBASE_EDITOR_ACCOUNT_COLLECTION = "editorAccounts";
-  const FIREBASE_EDITOR_ACCOUNT_STATE_ID = "main";
+  const FIREBASE_EDITOR_SYNC_SPACE_COLLECTION = "editorSyncSpaces";
+  const FIREBASE_EDITOR_RECOVERY_COLLECTION = "editorRecoveryCodes";
+  const FIREBASE_EDITOR_SYNC_STATE_ID = "main";
   const FIREBASE_CHUNK_SIZE = 650000;
 
   let modulesPromise = null;
@@ -85,9 +86,8 @@
     if (!modulesPromise) {
       modulesPromise = Promise.all([
         import("https://www.gstatic.com/firebasejs/" + FIREBASE_SDK_VERSION + "/firebase-app.js"),
-        import("https://www.gstatic.com/firebasejs/" + FIREBASE_SDK_VERSION + "/firebase-firestore.js"),
-        import("https://www.gstatic.com/firebasejs/" + FIREBASE_SDK_VERSION + "/firebase-auth.js")
-      ]).then(([app, firestore, auth]) => ({ app, firestore, auth }));
+        import("https://www.gstatic.com/firebasejs/" + FIREBASE_SDK_VERSION + "/firebase-firestore.js")
+      ]).then(([app, firestore]) => ({ app, firestore }));
     }
     return modulesPromise;
   }
@@ -96,7 +96,7 @@
     const cleaned = cleanConfig(config);
     const key = cleaned.projectId + ":" + cleaned.appId;
     if (appCache.has(key)) return appCache.get(key);
-    const { app, firestore, auth } = await modules();
+    const { app, firestore } = await modules();
     const appName = "scriptmaker-share-" + key.replace(/[^a-zA-Z0-9_-]/g, "_");
     let firebaseApp;
     try {
@@ -105,34 +105,13 @@
       firebaseApp = app.getApp(appName);
     }
     const db = firestore.getFirestore(firebaseApp);
-    const authInstance = auth.getAuth(firebaseApp);
-    const context = { app: firebaseApp, db, auth: authInstance };
+    const context = { app: firebaseApp, db };
     appCache.set(key, context);
     return context;
   }
 
   async function dbForConfig(config) {
     return (await appContextForConfig(config)).db;
-  }
-
-  async function authForConfig(config) {
-    return (await appContextForConfig(config)).auth;
-  }
-
-  function firebaseAuthHost(config) {
-    const cleaned = cleanConfig(config || configuredConfig(""));
-    return cleaned.authDomain || (cleaned.projectId ? cleaned.projectId + ".firebaseapp.com" : "");
-  }
-
-  function currentHost() {
-    return String(location.hostname || "").toLowerCase();
-  }
-
-  function shouldAllowRedirectFallback(config) {
-    const host = currentHost();
-    const authHost = firebaseAuthHost(config).toLowerCase();
-    if (!host || !authHost) return false;
-    return host === authHost || host.endsWith(".firebaseapp.com") || host.endsWith(".web.app");
   }
 
   function chunksForPayload(payload) {
@@ -217,67 +196,94 @@
     return loadChunkedPayload(FIREBASE_EDITOR_PROJECT_COLLECTION, projectId, config);
   }
 
-  function editorAccountStateCollection(uid) {
-    if (!uid) throw new Error("Googleログインが必要です。");
-    return FIREBASE_EDITOR_ACCOUNT_COLLECTION + "/" + uid + "/editorStates";
+  function editorSyncStateCollection(syncSpaceId) {
+    if (!syncSpaceId) throw new Error("Missing sync space id.");
+    return FIREBASE_EDITOR_SYNC_SPACE_COLLECTION + "/" + syncSpaceId + "/states";
   }
 
-  async function saveEditorAccountState(uid, payload, config) {
-    if (!payload) throw new Error("同期するEditorデータがありません。");
-    const next = { ...payload, id: FIREBASE_EDITOR_ACCOUNT_STATE_ID };
-    return saveChunkedPayload(editorAccountStateCollection(uid), FIREBASE_EDITOR_ACCOUNT_STATE_ID, next, config);
+  async function saveEditorBackupState(syncSpaceId, payload, config) {
+    if (!payload) throw new Error("Missing Editor backup payload.");
+    const next = { ...payload, id: FIREBASE_EDITOR_SYNC_STATE_ID };
+    return saveChunkedPayload(editorSyncStateCollection(syncSpaceId), FIREBASE_EDITOR_SYNC_STATE_ID, next, config);
   }
 
-  async function loadEditorAccountState(uid, config) {
-    return loadChunkedPayload(editorAccountStateCollection(uid), FIREBASE_EDITOR_ACCOUNT_STATE_ID, config);
+  async function loadEditorBackupState(syncSpaceId, config) {
+    return loadChunkedPayload(editorSyncStateCollection(syncSpaceId), FIREBASE_EDITOR_SYNC_STATE_ID, config);
   }
 
-  async function signInEditorWithGoogle(config, options) {
-    const cleaned = configuredConfig(config || "");
-    const { auth } = await modules();
-    const authInstance = await authForConfig(cleaned);
-    const provider = new auth.GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: "select_account" });
-    authInstance.useDeviceLanguage?.();
-    const allowRedirectFallback = !!options?.allowRedirectFallback && shouldAllowRedirectFallback(cleaned);
-    try {
-      const result = await auth.signInWithPopup(authInstance, provider);
-      return result.user;
-    } catch (error) {
-      const code = String(error?.code || "");
-      if (allowRedirectFallback && (code.includes("popup") || code.includes("operation-not-supported"))) {
-        await auth.signInWithRedirect(authInstance, provider);
-        return null;
-      }
-      if (code.includes("popup")) {
-        throw new Error("Googleログインのポップアップを開けませんでした。ブラウザのポップアップ許可を有効にするか、外部ブラウザで開いてください。");
-      }
-      throw error;
-    }
+  async function saveEditorRecoveryCode(codeHash, syncSpaceId, meta, config) {
+    if (!codeHash || !syncSpaceId) throw new Error("Missing recovery code data.");
+    const db = await dbForConfig(config);
+    const { doc, setDoc, serverTimestamp } = (await modules()).firestore;
+    await setDoc(doc(db, FIREBASE_EDITOR_RECOVERY_COLLECTION, codeHash), {
+      recoveryCodeHash: codeHash,
+      syncSpaceId,
+      active: true,
+      createdAt: meta?.createdAt || serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    return syncSpaceId;
   }
 
-  async function consumeEditorRedirectResult(config) {
-    const authInstance = await authForConfig(configuredConfig(config || ""));
-    const { auth } = await modules();
-    const result = await auth.getRedirectResult(authInstance);
-    return result?.user || null;
+  async function disableEditorRecoveryCode(codeHash, config) {
+    if (!codeHash) return false;
+    const db = await dbForConfig(config);
+    const { doc, setDoc, serverTimestamp } = (await modules()).firestore;
+    await setDoc(doc(db, FIREBASE_EDITOR_RECOVERY_COLLECTION, codeHash), {
+      recoveryCodeHash: codeHash,
+      active: false,
+      disabledAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    return true;
   }
 
-  async function signOutEditor(config) {
-    const authInstance = await authForConfig(configuredConfig(config || ""));
-    const { auth } = await modules();
-    await auth.signOut(authInstance);
+  async function resolveEditorRecoveryCode(codeHash, config) {
+    if (!codeHash) return null;
+    const db = await dbForConfig(config || configuredConfig(""));
+    const { doc, getDoc } = (await modules()).firestore;
+    const snap = await getDoc(doc(db, FIREBASE_EDITOR_RECOVERY_COLLECTION, codeHash));
+    if (!snap.exists()) return null;
+    const data = snap.data() || {};
+    if (data.active === false) return { inactive: true };
+    return data.syncSpaceId ? data : null;
   }
 
-  async function onEditorAuthChanged(callback, config) {
-    const authInstance = await authForConfig(configuredConfig(config || ""));
-    const { auth } = await modules();
-    return auth.onAuthStateChanged(authInstance, callback);
+  async function saveEditorSyncSpaceMeta(syncSpaceId, meta, config) {
+    if (!syncSpaceId) throw new Error("Missing sync space id.");
+    const db = await dbForConfig(config);
+    const { doc, setDoc, serverTimestamp } = (await modules()).firestore;
+    await setDoc(doc(db, FIREBASE_EDITOR_SYNC_SPACE_COLLECTION, syncSpaceId), {
+      id: syncSpaceId,
+      schemaVersion: meta?.schemaVersion || 1,
+      recoveryCodeHash: meta?.recoveryCodeHash || "",
+      updatedAt: meta?.updatedAt || serverTimestamp(),
+      createdAt: meta?.createdAt || serverTimestamp()
+    }, { merge: true });
+    return syncSpaceId;
   }
 
-  async function currentEditorUser(config) {
-    const authInstance = await authForConfig(configuredConfig(config || ""));
-    return authInstance.currentUser || null;
+  async function saveEditorDevice(syncSpaceId, deviceId, device, config) {
+    if (!syncSpaceId || !deviceId) return false;
+    const db = await dbForConfig(config);
+    const { doc, setDoc, serverTimestamp } = (await modules()).firestore;
+    await setDoc(doc(db, FIREBASE_EDITOR_SYNC_SPACE_COLLECTION, syncSpaceId, "devices", deviceId), {
+      id: deviceId,
+      name: device?.name || "Device",
+      deviceTokenHash: device?.deviceTokenHash || "",
+      isActive: device?.isActive !== false,
+      registeredAt: device?.registeredAt || serverTimestamp(),
+      lastSyncAt: device?.lastSyncAt || serverTimestamp()
+    }, { merge: true });
+    return true;
+  }
+
+  async function listEditorDevices(syncSpaceId, config) {
+    if (!syncSpaceId) return [];
+    const db = await dbForConfig(config || configuredConfig(""));
+    const { collection, getDocs } = (await modules()).firestore;
+    const snap = await getDocs(collection(db, FIREBASE_EDITOR_SYNC_SPACE_COLLECTION, syncSpaceId, "devices"));
+    return snap.docs.map(item => item.data());
   }
 
   window.ScriptMakerFirebaseShare = {
@@ -291,13 +297,14 @@
     loadShare,
     saveEditorProject,
     loadEditorProject,
-    saveEditorAccountState,
-    loadEditorAccountState,
-    signInEditorWithGoogle,
-    consumeEditorRedirectResult,
-    signOutEditor,
-    onEditorAuthChanged,
-    currentEditorUser,
+    saveEditorBackupState,
+    loadEditorBackupState,
+    saveEditorRecoveryCode,
+    disableEditorRecoveryCode,
+    resolveEditorRecoveryCode,
+    saveEditorSyncSpaceMeta,
+    saveEditorDevice,
+    listEditorDevices,
     isConfigured
   };
 })();

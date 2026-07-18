@@ -47,11 +47,35 @@ service cloud.firestore {
       }
     }
 
-    match /editorAccounts/{userId}/editorStates/{stateId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow create, update: if request.auth != null
-        && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly([
+    match /editorRecoveryCodes/{codeHash} {
+      allow read: if true;
+      allow create, update: if request.resource.data.keys().hasOnly([
+        'recoveryCodeHash',
+        'syncSpaceId',
+        'active',
+        'createdAt',
+        'updatedAt',
+        'disabledAt'
+      ])
+      && request.resource.data.recoveryCodeHash == codeHash;
+      allow delete: if false;
+    }
+
+    match /editorSyncSpaces/{syncSpaceId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.keys().hasOnly([
+        'id',
+        'schemaVersion',
+        'recoveryCodeHash',
+        'createdAt',
+        'updatedAt'
+      ])
+      && request.resource.data.id == syncSpaceId;
+      allow delete: if false;
+
+      match /states/{stateId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.keys().hasOnly([
           'id',
           'title',
           'data',
@@ -60,15 +84,28 @@ service cloud.firestore {
           'createdAt',
           'updatedAt'
         ]);
-      allow delete: if false;
+        allow delete: if false;
 
-      match /chunks/{chunkId} {
-        allow read: if request.auth != null && request.auth.uid == userId;
-        allow create, update: if request.auth != null
-          && request.auth.uid == userId
-          && request.resource.data.keys().hasOnly(['index', 'data'])
+        match /chunks/{chunkId} {
+          allow read: if true;
+          allow create, update: if request.resource.data.keys().hasOnly(['index', 'data'])
           && request.resource.data.index is int
           && request.resource.data.data is string;
+          allow delete: if false;
+        }
+      }
+
+      match /devices/{deviceId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.keys().hasOnly([
+          'id',
+          'name',
+          'deviceTokenHash',
+          'isActive',
+          'registeredAt',
+          'lastSyncAt'
+        ])
+        && request.resource.data.id == deviceId;
         allow delete: if false;
       }
     }
