@@ -10,6 +10,7 @@ const SCRIPTMAKER_CHARACTER_LIBRARY_KEY = 'scriptmaker_character_library_v1';
 const SCRIPTMAKER_EDITOR_CLOUD_URL = 'https://malomalo413.github.io/ScriptMaker/Editor/';
 const SCRIPTMAKER_EDITOR_CLOUD_LAST_ID_KEY = 'scriptmaker_editor_cloud_last_project_id_v1';
 const SCRIPTMAKER_EDITOR_ACCOUNT_SYNC_META_KEY = 'scriptmaker_editor_account_sync_meta_v1';
+const SCRIPTMAKER_EDITOR_GOOGLE_CONNECTING_KEY = 'scriptmaker_editor_google_connecting_v1';
 const SCRIPTMAKER_SCRIPT_COLOR_PREFIX = 'scriptmaker_editor_script_colors_v1:';
 
 let state = {
@@ -65,6 +66,9 @@ let state = {
     let editorApplyingCloudState = false;
     let editorLastSyncAt = '';
     let editorAppReady = false;
+    let editorManualGoogleConnect = false;
+    let editorGoogleMigrationInProgress = false;
+    let editorGoogleMigrationCompletedForUid = '';
 
     let originalViewportHeight = window.innerHeight;
     const GEMINI_MODEL_CANDIDATES = [
@@ -259,6 +263,76 @@ let state = {
       status.textContent = text;
       status.className = 'editor-sync-status' + (type ? ' ' + type : '');
       status.title = detail || text;
+      updateEditorGoogleConnectUi();
+    }
+
+    function localEditorHasExistingData() {
+      return !!(state && state.projects && Object.keys(state.projects).length > 0);
+    }
+
+    function updateEditorGoogleConnectUi() {
+      const button = document.getElementById('editorGoogleConnectBtn');
+      if (!button) return;
+      if (editorGoogleUser) {
+        button.textContent = editorGoogleUser.displayName || editorGoogleUser.email || 'Google連携中';
+        button.classList.add('connected');
+        button.title = 'Googleアカウント設定を開く';
+      } else {
+        button.textContent = 'Googleと連携';
+        button.classList.remove('connected');
+        button.title = 'Googleアカウント同期を開始';
+      }
+    }
+
+    function updateEditorGoogleAccountModal() {
+      const info = document.getElementById('editorGoogleAccountInfo');
+      const status = document.getElementById('editorGoogleAccountStatus');
+      if (info) {
+        info.textContent = editorGoogleUser
+          ? (editorGoogleUser.displayName || editorGoogleUser.email || 'Googleアカウント') + ' と連携中です。'
+          : 'Googleアカウントと連携すると、別端末でも同じ台本を続きから編集できます。';
+      }
+      if (status) {
+        const last = editorLastSyncAt || editorSyncMeta().lastSyncAt || '';
+        status.textContent = editorGoogleUser
+          ? '同期状態: ' + (last ? '同期済み ' + formatSyncTime(last) : '同期待ち')
+          : '未連携です。';
+      }
+    }
+
+    function openEditorGoogleAccountMenu() {
+      updateEditorGoogleAccountModal();
+      openModal('editorGoogleAccountModal');
+    }
+
+    async function connectEditorGoogleFromMenu() {
+      editorManualGoogleConnect = true;
+      sessionStorage.setItem(SCRIPTMAKER_EDITOR_GOOGLE_CONNECTING_KEY, '1');
+      await signInEditorGoogle({ fromMenu: true });
+    }
+
+    async function handleEditorGoogleMigrationAfterLogin() {
+      if (!editorGoogleUser || !editorAppReady) return;
+      if (editorGoogleMigrationInProgress || editorGoogleMigrationCompletedForUid === editorGoogleUser.uid) return;
+      editorGoogleMigrationInProgress = true;
+      sessionStorage.removeItem(SCRIPTMAKER_EDITOR_GOOGLE_CONNECTING_KEY);
+      try {
+        const hasLocalData = localEditorHasExistingData();
+        if (hasLocalData) {
+          const useLocal = confirm('この端末に保存されている台本データをGoogleアカウントへ保存しますか？\n\nOK: この端末のデータをクラウドへ保存\nキャンセル: クラウド側のデータを読み込み');
+          if (useLocal) {
+            await saveEditorAccountCloudNow({ skipReschedule: true });
+            updateEditorGoogleAccountModal();
+            editorGoogleMigrationCompletedForUid = editorGoogleUser.uid;
+            return;
+          }
+        }
+        await loadEditorAccountCloudState(true);
+        updateEditorGoogleAccountModal();
+        editorGoogleMigrationCompletedForUid = editorGoogleUser.uid;
+      } finally {
+        editorGoogleMigrationInProgress = false;
+      }
     }
 
     function formatSyncTime(value) {
@@ -362,6 +436,7 @@ let state = {
         editorLastSyncAt = new Date().toISOString();
         saveEditorSyncMeta({ uid: editorGoogleUser.uid, lastSyncAt: editorLastSyncAt });
         setEditorSyncStatus('同期済み ' + formatSyncTime(editorLastSyncAt), 'synced', (editorGoogleUser.displayName || editorGoogleUser.email || '') + '\n最終同期: ' + editorLastSyncAt);
+        updateEditorGoogleAccountModal();
         return true;
       } catch (error) {
         console.error('Editor account cloud sync failed:', error);
@@ -372,10 +447,10 @@ let state = {
       }
     }
 
-    async function loadEditorAccountCloudState() {
+    async function loadEditorAccountCloudState(force = false) {
       if (!editorGoogleUser || !window.ScriptMakerFirebaseShare || !navigator.onLine) return;
       if (!editorAppReady) {
-        setTimeout(loadEditorAccountCloudState, 250);
+        setTimeout(() => loadEditorAccountCloudState(force), 250);
         return;
       }
       setEditorSyncStatus('同期確認中…', 'syncing');
@@ -385,11 +460,12 @@ let state = {
         const payload = await helper.loadEditorAccountState(editorGoogleUser.uid, config);
         const remoteUpdated = Date.parse(payload?.updatedAt || payload?.data?.state?.editorUpdatedAt || '');
         const localUpdated = Date.parse(state.editorUpdatedAt || '');
-        if (payload && remoteUpdated && (!localUpdated || remoteUpdated > localUpdated)) {
+        if (payload && (force || (remoteUpdated && (!localUpdated || remoteUpdated > localUpdated)))) {
           applyEditorAccountSyncPayload(payload);
           editorLastSyncAt = new Date().toISOString();
           saveEditorSyncMeta({ uid: editorGoogleUser.uid, lastSyncAt: editorLastSyncAt });
           setEditorSyncStatus('同期済み ' + formatSyncTime(editorLastSyncAt), 'synced', 'クラウドの最新データを読み込みました');
+          updateEditorGoogleAccountModal();
           return;
         }
         await saveEditorAccountCloudNow({ skipReschedule: true });
@@ -405,13 +481,20 @@ let state = {
       try {
         await window.ScriptMakerFirebaseShare.onEditorAuthChanged(async user => {
           editorGoogleUser = user || null;
+          updateEditorGoogleConnectUi();
           if (user) {
             document.body.classList.remove('auth-locked');
             document.getElementById('editorAuthGate')?.classList.add('hidden');
             setEditorSyncStatus('同期確認中…', 'syncing', user.displayName || user.email || '');
+            if (editorManualGoogleConnect || sessionStorage.getItem(SCRIPTMAKER_EDITOR_GOOGLE_CONNECTING_KEY) === '1') {
+              editorManualGoogleConnect = false;
+              await handleEditorGoogleMigrationAfterLogin();
+              return;
+            }
             await loadEditorAccountCloudState();
           } else {
             editorGoogleUser = null;
+            updateEditorGoogleConnectUi();
             setEditorSyncStatus('未ログイン', 'offline');
             if (!editorPasswordHash()) showEditorGoogleAuthGate();
           }
@@ -424,17 +507,26 @@ let state = {
       }
     }
 
-    async function signInEditorGoogle() {
+    async function signInEditorGoogle(options = {}) {
       const message = document.getElementById('editorAuthMessage');
       if (message) message.textContent = '';
       try {
         if (!window.ScriptMakerFirebaseShare) throw new Error('Firebase機能を読み込めませんでした。');
+        if (options.fromMenu) {
+          editorManualGoogleConnect = true;
+          sessionStorage.setItem(SCRIPTMAKER_EDITOR_GOOGLE_CONNECTING_KEY, '1');
+        }
         setEditorSyncStatus('ログイン中…', 'syncing');
         const user = await window.ScriptMakerFirebaseShare.signInEditorWithGoogle('');
         editorGoogleUser = user || editorGoogleUser;
         if (editorGoogleUser) {
           document.body.classList.remove('auth-locked');
           document.getElementById('editorAuthGate')?.classList.add('hidden');
+          if (options.fromMenu || editorManualGoogleConnect) {
+            editorManualGoogleConnect = false;
+            await handleEditorGoogleMigrationAfterLogin();
+            return;
+          }
           await loadEditorAccountCloudState();
         }
       } catch (error) {
@@ -451,7 +543,9 @@ let state = {
         console.warn('Google sign out failed:', error);
       }
       editorGoogleUser = null;
+      updateEditorGoogleConnectUi();
       setEditorSyncStatus('未ログイン', 'offline');
+      updateEditorGoogleAccountModal();
     }
 
 
