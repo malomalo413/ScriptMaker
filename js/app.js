@@ -559,24 +559,13 @@ let state = {
     async function issueEditorBackupCode() {
       if (!window.ScriptMakerFirebaseShare) { setEditorBackupStatus('Firebase module is not loaded.', 'error'); return; }
       if (!localEditorHasExistingData()) { setEditorBackupStatus('\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3059\u308b\u53f0\u672c\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u305b\u3093\u3002', 'error'); return; }
-      const choice = prompt('\u73fe\u5728\u306e\u53f0\u672c\u30c7\u30fc\u30bf\u3092\u30af\u30e9\u30a6\u30c9\u3078\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3057\u307e\u3059\u304b\uff1f\n\n1: \u3059\u3079\u3066\u306e\u30c7\u30fc\u30bf\u3092\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\n2: \u73fe\u5728\u306e\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u3060\u3051\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\n\u30ad\u30e3\u30f3\u30bb\u30eb: \u4e2d\u6b62', '1');
-      if (choice == null) return;
-      let backupState = state;
-      if (String(choice).trim() === '2') {
-        const project = getCurrentProject();
-        if (!project) { setEditorBackupStatus('\u73fe\u5728\u958b\u3044\u3066\u3044\u308b\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002', 'error'); return; }
-        backupState = { ...state, projects: { [state.currentProjectId]: project }, currentFolderId: project.folderId || UNCLASSIFIED_FOLDER_ID };
-      }
-      const originalState = state;
       const code = generateBackupCode();
       try {
         setEditorBackupStatus('\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3092\u4f5c\u6210\u4e2d\u2026', '');
         const codeHash = await hashBackupCode(code);
         const syncSpaceId = safeSyncIdFromHash(codeHash + ':' + randomToken(8));
         const config = await editorBackupFirebaseConfig();
-        state = backupState;
         const payload = buildEditorBackupPayload();
-        state = originalState;
         const helper = window.ScriptMakerFirebaseShare;
         await helper.saveEditorRecoveryCode(codeHash, syncSpaceId, { createdAt: new Date().toISOString() }, config);
         await helper.saveEditorSyncSpaceMeta(syncSpaceId, { schemaVersion: 1, recoveryCodeHash: codeHash, updatedAt: payload.updatedAt }, config);
@@ -588,7 +577,6 @@ let state = {
         setEditorBackupStatus('\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u3092\u767a\u884c\u3057\u307e\u3057\u305f\u3002\u7b2c\u4e09\u8005\u306b\u5171\u6709\u3057\u306a\u3044\u3067\u304f\u3060\u3055\u3044\u3002', 'success');
         updateEditorBackupModal();
       } catch (error) {
-        state = originalState;
         console.error('Backup issue failed:', error);
         setEditorBackupStatus('\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3092\u4f5c\u6210\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u7aef\u672b\u5185\u306e\u30c7\u30fc\u30bf\u306f\u4fdd\u6301\u3055\u308c\u3066\u3044\u307e\u3059\u3002', 'error');
       }
@@ -617,6 +605,43 @@ let state = {
       if (!value) return false;
       if (navigator.clipboard && window.isSecureContext) { try { await navigator.clipboard.writeText(value); return true; } catch (_) {} }
       try { if (element) { element.classList.remove('hidden'); element.focus({ preventScroll: true }); element.select(); element.setSelectionRange?.(0, value.length); } return document.execCommand && document.execCommand('copy') === true; } catch (_) { return false; }
+    }
+
+    function openBackupQrImagePicker() {
+      const input = document.getElementById('editorBackupQrInput');
+      if (!input) return;
+      input.value = '';
+      input.click();
+    }
+
+    async function readBackupQrImage(input) {
+      const file = input?.files?.[0];
+      if (!file) return;
+      if (!('BarcodeDetector' in window)) {
+        setEditorBackupStatus('\u3053\u306e\u30d6\u30e9\u30a6\u30b6\u306fQR\u30b3\u30fc\u30c9\u8aad\u307f\u53d6\u308a\u306b\u5bfe\u5fdc\u3057\u3066\u3044\u307e\u305b\u3093\u3002\u30b3\u30fc\u30c9\u3092\u30b3\u30d4\u30fc\u3057\u3066\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002', 'error');
+        return;
+      }
+      try {
+        setEditorBackupStatus('QR\u30b3\u30fc\u30c9\u3092\u8aad\u307f\u53d6\u308a\u4e2d\u2026', '');
+        const bitmap = await createImageBitmap(file);
+        const detector = new BarcodeDetector({ formats: ['qr_code'] });
+        const results = await detector.detect(bitmap);
+        bitmap.close?.();
+        const value = results?.[0]?.rawValue || '';
+        if (!value) {
+          setEditorBackupStatus('QR\u30b3\u30fc\u30c9\u3092\u8aad\u307f\u53d6\u308c\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u30b3\u30fc\u30c9\u3092\u76f4\u63a5\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002', 'error');
+          return;
+        }
+        const codeInput = document.getElementById('editorBackupCodeInput');
+        if (codeInput) {
+          codeInput.value = normalizeBackupCode(value);
+          codeInput.focus({ preventScroll: true });
+        }
+        setEditorBackupStatus('QR\u30b3\u30fc\u30c9\u3092\u8aad\u307f\u53d6\u308a\u307e\u3057\u305f\u3002\u5185\u5bb9\u3092\u78ba\u8a8d\u3057\u3066\u300c\u30b3\u30fc\u30c9\u3092\u8aad\u307f\u8fbc\u3080\u300d\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002', 'success');
+      } catch (error) {
+        console.error('Backup QR read failed:', error);
+        setEditorBackupStatus('QR\u30b3\u30fc\u30c9\u3092\u8aad\u307f\u53d6\u308c\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u30b3\u30fc\u30c9\u3092\u76f4\u63a5\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002', 'error');
+      }
     }
 
     function openEditorBackupMenu() { updateEditorBackupModal(); openModal('editorBackupModal'); }
