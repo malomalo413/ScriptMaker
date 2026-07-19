@@ -204,11 +204,22 @@
   async function saveEditorBackupState(syncSpaceId, payload, config) {
     if (!payload) throw new Error("Missing Editor backup payload.");
     const next = { ...payload, id: FIREBASE_EDITOR_SYNC_STATE_ID };
-    return saveChunkedPayload(editorSyncStateCollection(syncSpaceId), FIREBASE_EDITOR_SYNC_STATE_ID, next, config);
+    try {
+      return await saveChunkedPayload(editorSyncStateCollection(syncSpaceId), FIREBASE_EDITOR_SYNC_STATE_ID, next, config);
+    } catch (error) {
+      console.warn("editorSyncSpaces backup save failed; falling back to editorProjects.", error);
+      return saveChunkedPayload(FIREBASE_EDITOR_PROJECT_COLLECTION, syncSpaceId, { ...next, id: syncSpaceId }, config);
+    }
   }
 
   async function loadEditorBackupState(syncSpaceId, config) {
-    return loadChunkedPayload(editorSyncStateCollection(syncSpaceId), FIREBASE_EDITOR_SYNC_STATE_ID, config);
+    try {
+      const payload = await loadChunkedPayload(editorSyncStateCollection(syncSpaceId), FIREBASE_EDITOR_SYNC_STATE_ID, config);
+      if (payload) return payload;
+    } catch (error) {
+      console.warn("editorSyncSpaces backup load failed; falling back to editorProjects.", error);
+    }
+    return loadChunkedPayload(FIREBASE_EDITOR_PROJECT_COLLECTION, syncSpaceId, config);
   }
 
   async function saveEditorRecoveryCode(codeHash, syncSpaceId, meta, config) {

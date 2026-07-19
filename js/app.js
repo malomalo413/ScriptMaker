@@ -496,9 +496,17 @@ let state = {
         const helper = window.ScriptMakerFirebaseShare;
         const config = await editorBackupFirebaseConfig();
         const payload = buildEditorBackupPayload();
-        await helper.saveEditorSyncSpaceMeta(meta.syncSpaceId, { schemaVersion: 1, recoveryCodeHash: meta.recoveryCodeHash, updatedAt: payload.updatedAt }, config);
         await helper.saveEditorBackupState(meta.syncSpaceId, payload, config);
-        await registerEditorBackupDevice(config, meta.syncSpaceId, meta.recoveryCodeHash || '');
+        try {
+          await helper.saveEditorSyncSpaceMeta(meta.syncSpaceId, { schemaVersion: 1, recoveryCodeHash: meta.recoveryCodeHash, updatedAt: payload.updatedAt }, config);
+        } catch (metaError) {
+          console.warn('Backup metadata save failed.', metaError);
+        }
+        try {
+          await registerEditorBackupDevice(config, meta.syncSpaceId, meta.recoveryCodeHash || '');
+        } catch (deviceError) {
+          console.warn('Backup device registration failed.', deviceError);
+        }
         editorLastSyncAt = new Date().toISOString();
         saveEditorBackupMeta({ lastSyncAt: editorLastSyncAt, pending: false, lastCloudUpdatedAt: payload.updatedAt });
         setEditorSyncStatus('\u540c\u671f\u6e08\u307f ' + formatSyncTime(editorLastSyncAt), 'synced');
@@ -563,14 +571,22 @@ let state = {
       try {
         setEditorBackupStatus('\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3092\u4f5c\u6210\u4e2d\u2026', '');
         const codeHash = await hashBackupCode(code);
-        const syncSpaceId = safeSyncIdFromHash(codeHash + ':' + randomToken(8));
+        const syncSpaceId = safeSyncIdFromHash(codeHash);
         const config = await editorBackupFirebaseConfig();
         const payload = buildEditorBackupPayload();
         const helper = window.ScriptMakerFirebaseShare;
-        await helper.saveEditorRecoveryCode(codeHash, syncSpaceId, { createdAt: new Date().toISOString() }, config);
-        await helper.saveEditorSyncSpaceMeta(syncSpaceId, { schemaVersion: 1, recoveryCodeHash: codeHash, updatedAt: payload.updatedAt }, config);
         await helper.saveEditorBackupState(syncSpaceId, payload, config);
-        await registerEditorBackupDevice(config, syncSpaceId, codeHash);
+        try {
+          await helper.saveEditorRecoveryCode(codeHash, syncSpaceId, { createdAt: new Date().toISOString() }, config);
+          await helper.saveEditorSyncSpaceMeta(syncSpaceId, { schemaVersion: 1, recoveryCodeHash: codeHash, updatedAt: payload.updatedAt }, config);
+        } catch (metaError) {
+          console.warn('Backup metadata save failed; deterministic code id will be used.', metaError);
+        }
+        try {
+          await registerEditorBackupDevice(config, syncSpaceId, codeHash);
+        } catch (deviceError) {
+          console.warn('Backup device registration failed.', deviceError);
+        }
         localStorage.setItem('scriptmaker_editor_backup_code_plain_v1', code);
         saveEditorBackupMeta({ syncSpaceId, recoveryCodeHash: codeHash, codeSavedAt: new Date().toISOString(), pending: false, lastSyncAt: new Date().toISOString() });
         setEditorBackupCodeOutput(code);
@@ -680,19 +696,26 @@ let state = {
         const codeHash = await hashBackupCode(code);
         const helper = window.ScriptMakerFirebaseShare;
         const config = await editorBackupFirebaseConfig();
-        const resolved = await helper.resolveEditorRecoveryCode(codeHash, config);
-        if (!resolved) { recordBackupCodeFailure(); setEditorBackupStatus('\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002', 'error'); return; }
-        if (resolved.inactive) { setEditorBackupStatus('\u3053\u306e\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u306f\u73fe\u5728\u4f7f\u7528\u3067\u304d\u307e\u305b\u3093\u3002', 'error'); return; }
-        const payload = await helper.loadEditorBackupState(resolved.syncSpaceId, config);
+        const resolved = await helper.resolveEditorRecoveryCode(codeHash, config).catch(error => {
+          console.warn('Recovery code lookup failed; using deterministic sync id.', error);
+          return null;
+        });
+        if (resolved?.inactive) { setEditorBackupStatus('\u3053\u306e\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u306f\u73fe\u5728\u4f7f\u7528\u3067\u304d\u307e\u305b\u3093\u3002', 'error'); return; }
+        const syncSpaceId = resolved?.syncSpaceId || safeSyncIdFromHash(codeHash);
+        const payload = await helper.loadEditorBackupState(syncSpaceId, config);
         if (!payload) { setEditorBackupStatus('\u30c7\u30fc\u30bf\u3092\u8aad\u307f\u8fbc\u3081\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u3053\u306e\u7aef\u672b\u306e\u30c7\u30fc\u30bf\u306f\u5909\u66f4\u3055\u308c\u3066\u3044\u307e\u305b\u3093\u3002', 'error'); return; }
         const summary = summarizeBackupPayload(payload);
         const hasLocal = localEditorHasExistingData();
         const message = '\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u304c\u898b\u3064\u304b\u308a\u307e\u3057\u305f\n\n\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u6570: ' + summary.projects + '\u4ef6\n\u30d5\u30a9\u30eb\u30c0\u6570: ' + summary.folders + '\u4ef6\n\u6700\u7d42\u66f4\u65b0: ' + (summary.updatedAt ? new Date(summary.updatedAt).toLocaleString('ja-JP') : '\u4e0d\u660e') + '\n\u30c7\u30fc\u30bf\u5bb9\u91cf: ' + Math.ceil(summary.bytes / 1024) + 'KB\n\n' + (hasLocal ? '\u3053\u306e\u7aef\u672b\u306b\u3082\u53f0\u672c\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u3059\u3002OK\u3067\u4e21\u65b9\u3092\u6b8b\u3057\u3066\u8aad\u307f\u8fbc\u307f\u307e\u3059\u3002' : '\u3053\u306e\u7aef\u672b\u3078\u8aad\u307f\u8fbc\u307f\u307e\u3059\u304b\uff1f');
         if (!confirm(message)) return;
         importBackupPayloadKeepingLocal(payload);
-        await registerEditorBackupDevice(config, resolved.syncSpaceId, codeHash);
+        try {
+          await registerEditorBackupDevice(config, syncSpaceId, codeHash);
+        } catch (deviceError) {
+          console.warn('Backup device registration failed.', deviceError);
+        }
         localStorage.setItem('scriptmaker_editor_backup_code_plain_v1', code);
-        saveEditorBackupMeta({ syncSpaceId: resolved.syncSpaceId, recoveryCodeHash: codeHash, pending: false, lastSyncAt: new Date().toISOString() });
+        saveEditorBackupMeta({ syncSpaceId, recoveryCodeHash: codeHash, pending: false, lastSyncAt: new Date().toISOString() });
         saveState();
         closeModal('editorBackupModal');
         document.getElementById('editorAuthGate')?.classList.add('hidden');
