@@ -1802,6 +1802,33 @@
       color: #9a3412;
       font-weight: 800;
     }
+    .backup-code-output-label {
+      display: block;
+      margin: 2px 0 -6px;
+      color: #334155;
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .backup-code-output-label.hidden {
+      display: none;
+    }
+    .backup-sync-modal .share-url-output {
+      min-height: 72px;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: .02em;
+    }
+    .backup-import-row {
+      padding-top: 6px;
+      border-top: 1px solid #e5e7eb;
+    }
+    .backup-import-row label {
+      color: #64748b;
+      font-size: 12px;
+    }
+    .backup-copy-button {
+      background: #2563eb;
+    }
     .backup-device-list {
       display: flex;
       flex-direction: column;

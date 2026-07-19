@@ -14,11 +14,11 @@
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="./assets/icons/icon-512.png">
-  <link rel="stylesheet" href="./css/styles.css?v=50">
+  <link rel="stylesheet" href="./css/styles.css?v=51">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
   <script src="./js/firebase-config.js?v=30" defer></script>
   <script src="./js/firebase-share.js?v=37" defer></script>
-  <script src="./js/app.js?v=59" defer></script>
+  <script src="./js/app.js?v=60" defer></script>
 </head>
 <body class="auth-locked">
 
@@ -344,9 +344,10 @@
       <h4>&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12539;&#31471;&#26411;&#24341;&#12365;&#32153;&#12366;</h4>
       <p class="share-help" id="editorBackupInfo">&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;&#12434;&#30330;&#34892;&#12377;&#12427;&#12392;&#12289;&#21029;&#31471;&#26411;&#12408;&#21488;&#26412;&#12487;&#12540;&#12479;&#12434;&#24341;&#12365;&#32153;&#12370;&#12414;&#12377;&#12290;</p>
       <p class="share-help backup-warning">&#12371;&#12398;&#12467;&#12540;&#12489;&#12434;&#30693;&#12387;&#12390;&#12356;&#12427;&#20154;&#12399;&#12289;&#21488;&#26412;&#12487;&#12540;&#12479;&#12434;&#35501;&#12415;&#36796;&#12417;&#12414;&#12377;&#12290;&#20182;&#20154;&#12395;&#20844;&#38283;&#12375;&#12394;&#12356;&#12391;&#12367;&#12384;&#12373;&#12356;&#12290;</p>
-      <textarea id="editorBackupCodeText" class="share-url-textarea share-url-output hidden" readonly placeholder="&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;"></textarea>
-      <div class="modal-row">
-        <label for="editorBackupCodeInput">&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;</label>
+      <label id="editorBackupCodeTextLabel" class="backup-code-output-label hidden" for="editorBackupCodeText">&#30330;&#34892;&#28168;&#12415;&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;</label>
+      <textarea id="editorBackupCodeText" class="share-url-textarea share-url-output hidden" readonly placeholder="&#30330;&#34892;&#28168;&#12415;&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;"></textarea>
+      <div class="modal-row backup-import-row">
+        <label for="editorBackupCodeInput">&#21029;&#31471;&#26411;&#12398;&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;&#12434;&#20837;&#21147;</label>
         <input id="editorBackupCodeInput" type="text" placeholder="SM-7K4P-X9Q2-M6RT-W8CN-3FJD" oninput="this.value = normalizeBackupCode(this.value)">
         <input id="editorBackupQrInput" class="hidden" type="file" accept="image/*" onchange="readBackupQrImage(this)">
       </div>
@@ -357,7 +358,7 @@
         <button class="btn-modal-confirm" type="button" onclick="issueEditorBackupCode()">&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;&#12434;&#33258;&#21205;&#30330;&#34892;</button>
         <button class="btn-modal-confirm" type="button" onclick="loadBackupCodeFromInput()">&#12467;&#12540;&#12489;&#12434;&#35501;&#12415;&#36796;&#12416;</button>
         <button class="btn-modal-cancel" type="button" onclick="openBackupQrImagePicker()">QR&#30011;&#20687;&#12434;&#35501;&#12415;&#36796;&#12416;</button>
-        <button class="btn-modal-cancel" type="button" onclick="copyEditorBackupCode()">&#12467;&#12540;&#12489;&#12434;&#12467;&#12500;&#12540;</button>
+        <button class="btn-modal-confirm backup-copy-button" type="button" onclick="copyEditorBackupCode()">&#12467;&#12540;&#12489;&#12434;&#12467;&#12500;&#12540;</button>
         <button class="btn-modal-cancel" type="button" onclick="saveEditorBackupNow({ skipReschedule: true })">&#20170;&#12377;&#12368;&#21516;&#26399;</button>
         <button class="btn-modal-cancel" type="button" onclick="loadEditorBackupCloudState(true)">&#26368;&#26032;&#12487;&#12540;&#12479;&#12434;&#35501;&#12415;&#36796;&#12416;</button>
         <button class="btn-modal-cancel" type="button" onclick="regenerateEditorBackupCode()">&#12467;&#12540;&#12489;&#12434;&#20877;&#30330;&#34892;</button>

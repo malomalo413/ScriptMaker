@@ -600,7 +600,9 @@ let state = {
 
     function setEditorBackupCodeOutput(code) {
       const output = document.getElementById('editorBackupCodeText');
+      const label = document.getElementById('editorBackupCodeTextLabel');
       if (output) { output.value = code || ''; output.classList.toggle('hidden', !code); }
+      if (label) label.classList.toggle('hidden', !code);
     }
 
     function setEditorBackupStatus(message, type) {
