@@ -1,4 +1,4 @@
-const CACHE_NAME = 'script-assistant-pwa-v62';
+const CACHE_NAME = 'script-assistant-pwa-v63';
 const APP_SHELL = [
   './',
   './index.html',
