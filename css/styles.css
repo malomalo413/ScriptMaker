@@ -856,6 +856,14 @@
       background-color: #b91c1c;
       transform: translateX(-50%) scale(1.25);
     }
+    .trash-zone.character-delete-mode {
+      border: 2px solid rgba(255, 255, 255, .85);
+      background-color: #ef4444;
+    }
+    .trash-zone.character-delete-mode.hover {
+      background-color: #991b1b;
+      box-shadow: 0 0 0 8px rgba(239, 68, 68, .18), 0 10px 28px rgba(127, 29, 29, .45);
+    }
     .trash-zone span {
       font-size: 10px;
       font-weight: bold;
@@ -900,6 +908,8 @@
       cursor: pointer;
       padding: 0;
       flex-shrink: 0;
+      touch-action: pan-x;
+      -webkit-touch-callout: none;
     }
     
     .char-icon-btn .avatar, .char-icon-btn .avatar-dummy, .char-icon-btn .effect-icon {
@@ -934,6 +944,28 @@
       text-overflow: ellipsis;
     }
     .char-icon-btn.active .char-name-mini { color: var(--primary-color); font-weight: bold; }
+    .char-icon-btn.character-delete-drag-source {
+      opacity: .38;
+      transform: scale(.94);
+    }
+    .character-drag-preview {
+      position: fixed;
+      z-index: 2600;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      pointer-events: none;
+      transform: translate(-50%, -50%) scale(1.14);
+      opacity: .84;
+      filter: drop-shadow(0 12px 22px rgba(15, 23, 42, .24));
+    }
+    .character-drag-preview .avatar,
+    .character-drag-preview .avatar-dummy,
+    .character-drag-preview .effect-icon {
+      width: 48px;
+      height: 48px;
+    }
 
     .char-add-btn {
       width: 44px;

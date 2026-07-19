@@ -66,6 +66,7 @@ let state = {
     let editorApplyingCloudState = false;
     let editorLastSyncAt = '';
     let editorAppReady = false;
+    let characterDragState = null;
 
     let originalViewportHeight = window.innerHeight;
     const GEMINI_MODEL_CANDIDATES = [
@@ -1045,6 +1046,11 @@ let state = {
 
 
     function cloneProject(project) { return JSON.parse(JSON.stringify(project)); }
+    function createProjectHistorySnapshot(project) {
+      const snapshot = cloneProject(project);
+      snapshot.__selectedCharacter = currentCharacter;
+      return snapshot;
+    }
     function getCurrentUndoStack() { const id = state.currentProjectId; if (!id) return []; if (!undoStacks[id]) undoStacks[id] = []; return undoStacks[id]; }
     function getCurrentRedoStack() { const id = state.currentProjectId; if (!id) return []; if (!redoStacks[id]) redoStacks[id] = []; return redoStacks[id]; }
     function pushUndoSnapshot() {
@@ -1052,7 +1058,7 @@ let state = {
       const project = state.projects[state.currentProjectId];
       if (!project) return;
       const stack = getCurrentUndoStack();
-      stack.push(cloneProject(project));
+      stack.push(createProjectHistorySnapshot(project));
       if (stack.length > MAX_HISTORY) stack.shift();
       redoStacks[state.currentProjectId] = [];
       updateHistoryButtons();
@@ -1063,6 +1069,13 @@ let state = {
       state.projects[state.currentProjectId] = cloneProject(snapshot);
       normalizeProjectData();
       const project = state.projects[state.currentProjectId];
+      const characterNames = new Set((project.characters || []).map(char => char.name));
+      if (snapshot.__selectedCharacter && characterNames.has(snapshot.__selectedCharacter)) {
+        currentCharacter = snapshot.__selectedCharacter;
+      } else if (!characterNames.has(currentCharacter) && currentCharacter !== '情景描写') {
+        currentCharacter = project.characters?.[0]?.name || '情景描写';
+      }
+      delete project.__selectedCharacter;
       document.getElementById('projectTitle').innerText = project.title;
       document.getElementById('projectTitle').onclick = renameCurrentProject;
       updateHistoryButtons();
@@ -1083,14 +1096,14 @@ let state = {
       const project = state.projects[state.currentProjectId];
       const undo = getCurrentUndoStack();
       if (!project || undo.length === 0) return;
-      getCurrentRedoStack().push(cloneProject(project));
+      getCurrentRedoStack().push(createProjectHistorySnapshot(project));
       restoreProjectSnapshot(undo.pop());
     }
     function redoProjectAction() {
       const project = state.projects[state.currentProjectId];
       const redo = getCurrentRedoStack();
       if (!project || redo.length === 0) return;
-      getCurrentUndoStack().push(cloneProject(project));
+      getCurrentUndoStack().push(createProjectHistorySnapshot(project));
       restoreProjectSnapshot(redo.pop());
     }
     function updateHistoryButtons() {
@@ -1786,9 +1799,8 @@ let state = {
       project.characters.forEach(char => {
         const btn = document.createElement('button');
         btn.className = `char-icon-btn ${currentCharacter === char.name ? 'active' : ''}`;
-        btn.onpointerdown = function(e) { e.preventDefault(); selectChar(this, char.name); };
-        btn.onclick = function() { selectChar(this, char.name); };
-        btn.oncontextmenu = function(e) { e.preventDefault(); openCharEditModal(char.name); };
+        btn.type = 'button';
+        btn.dataset.characterName = char.name;
 
         let avatarHtml = '';
         if (char.avatar) {
@@ -1802,6 +1814,7 @@ let state = {
         }
 
         btn.innerHTML = `${avatarHtml}<span class="char-name-mini">${char.name}</span>`;
+        initCharacterDeleteDrag(btn, char.name);
         container.appendChild(btn);
       });
 
@@ -1825,6 +1838,215 @@ let state = {
       aiBtn.innerHTML = '🤖';
       initAiButtonActions(aiBtn);
       container.appendChild(aiBtn);
+    }
+
+    function initCharacterDeleteDrag(btn, charName) {
+      const longPressMs = 500;
+      const moveCancelThreshold = 8;
+      let timer = null;
+      let startPoint = null;
+      let movedBeforeLongPress = false;
+
+      const clearTimer = () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+      };
+
+      btn.addEventListener('pointerdown', function(e) {
+        if (e.button != null && e.button !== 0) return;
+        clearTimer();
+        movedBeforeLongPress = false;
+        startPoint = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
+        timer = setTimeout(() => {
+          timer = null;
+          if (movedBeforeLongPress) return;
+          startCharacterDeleteDrag(btn, charName, e);
+        }, longPressMs);
+      });
+
+      btn.addEventListener('pointermove', function(e) {
+        if (!startPoint || startPoint.pointerId !== e.pointerId) return;
+        const dx = e.clientX - startPoint.x;
+        const dy = e.clientY - startPoint.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (!characterDragState && distance > moveCancelThreshold) {
+          movedBeforeLongPress = true;
+          clearTimer();
+          return;
+        }
+        if (characterDragState?.button === btn) {
+          e.preventDefault();
+          moveCharacterDragPreview(e);
+        }
+      });
+
+      btn.addEventListener('pointerup', function(e) {
+        clearTimer();
+        if (characterDragState?.button === btn) {
+          e.preventDefault();
+          finishCharacterDeleteDrag(e);
+          return;
+        }
+        if (!movedBeforeLongPress) {
+          e.preventDefault();
+          selectChar(btn, charName);
+        }
+        startPoint = null;
+      });
+
+      btn.addEventListener('pointercancel', function() {
+        clearTimer();
+        cancelCharacterDeleteDrag();
+        startPoint = null;
+      });
+
+      btn.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        if (window.matchMedia && window.matchMedia('(pointer: fine)').matches && !characterDragState) {
+          openCharEditModal(charName);
+        }
+      });
+    }
+
+    function startCharacterDeleteDrag(button, charName, pointerEvent) {
+      const trashZone = document.getElementById('trashZone');
+      if (!trashZone || characterDragState) return;
+      suppressTalkClickUntil = Date.now() + 500;
+      navigator.vibrate?.(30);
+
+      const rect = button.getBoundingClientRect();
+      const preview = button.cloneNode(true);
+      preview.classList.add('character-drag-preview');
+      preview.style.left = rect.left + rect.width / 2 + 'px';
+      preview.style.top = rect.top + rect.height / 2 + 'px';
+      document.body.appendChild(preview);
+
+      button.classList.add('character-delete-drag-source');
+      trashZone.classList.add('visible');
+      trashZone.classList.add('character-delete-mode');
+      button.setPointerCapture?.(pointerEvent.pointerId);
+
+      characterDragState = {
+        button,
+        charName,
+        preview,
+        pointerId: pointerEvent.pointerId,
+        droppedOnTrash: false,
+        cleanupTimer: setTimeout(() => {
+          cancelCharacterDeleteDrag();
+        }, 15000)
+      };
+      document.addEventListener('pointermove', handleDocumentCharacterDragMove, { passive: false });
+      document.addEventListener('pointerup', handleDocumentCharacterDragEnd, { passive: false });
+      document.addEventListener('pointercancel', handleDocumentCharacterDragCancel, { passive: false });
+      document.addEventListener('mousemove', handleDocumentCharacterDragMove, { passive: false });
+      document.addEventListener('mouseup', handleDocumentCharacterDragEnd, { passive: false });
+      moveCharacterDragPreview(pointerEvent);
+    }
+
+    function handleDocumentCharacterDragMove(e) {
+      if (!isActiveCharacterDragEvent(e)) return;
+      e.preventDefault();
+      moveCharacterDragPreview(e);
+    }
+
+    function handleDocumentCharacterDragEnd(e) {
+      if (!isActiveCharacterDragEvent(e)) return;
+      e.preventDefault();
+      finishCharacterDeleteDrag(e);
+    }
+
+    function handleDocumentCharacterDragCancel(e) {
+      if (!isActiveCharacterDragEvent(e)) return;
+      e.preventDefault();
+      cancelCharacterDeleteDrag();
+    }
+
+    function isActiveCharacterDragEvent(e) {
+      if (!characterDragState) return false;
+      return typeof e.pointerId === 'undefined' || e.pointerId === characterDragState.pointerId;
+    }
+
+    function moveCharacterDragPreview(pointerEvent) {
+      if (!characterDragState) return;
+      const point = getPointerPoint(pointerEvent);
+      if (!point) return;
+      const { preview } = characterDragState;
+      preview.style.left = point.clientX + 'px';
+      preview.style.top = point.clientY + 'px';
+
+      const trashZone = document.getElementById('trashZone');
+      if (trashZone) {
+        const overTrash = isPointerOverTrash(pointerEvent, trashZone);
+        trashZone.classList.toggle('hover', overTrash);
+        characterDragState.droppedOnTrash = overTrash;
+      }
+    }
+
+    function finishCharacterDeleteDrag(pointerEvent) {
+      if (!characterDragState) return;
+      const { button, charName, pointerId } = characterDragState;
+      const trashZone = document.getElementById('trashZone');
+      const shouldDelete = trashZone && isPointerOverTrash(pointerEvent, trashZone);
+      button.releasePointerCapture?.(pointerId);
+      cleanupCharacterDeleteDrag();
+      if (!shouldDelete) return;
+
+      const message = `「${charName}」をキャラクター一覧から削除します。このキャラクターの既存セリフは削除されません。`;
+      if (confirm(message)) {
+        deleteProjectCharacter(charName);
+      }
+    }
+
+    function cancelCharacterDeleteDrag() {
+      if (!characterDragState) return;
+      cleanupCharacterDeleteDrag();
+    }
+
+    function cleanupCharacterDeleteDrag() {
+      const trashZone = document.getElementById('trashZone');
+      if (characterDragState?.cleanupTimer) clearTimeout(characterDragState.cleanupTimer);
+      if (characterDragState?.preview) characterDragState.preview.remove();
+      if (characterDragState?.button) characterDragState.button.classList.remove('character-delete-drag-source');
+      if (trashZone) {
+        trashZone.classList.remove('visible');
+        trashZone.classList.remove('hover');
+        trashZone.classList.remove('character-delete-mode');
+      }
+      document.removeEventListener('pointermove', handleDocumentCharacterDragMove);
+      document.removeEventListener('pointerup', handleDocumentCharacterDragEnd);
+      document.removeEventListener('pointercancel', handleDocumentCharacterDragCancel);
+      document.removeEventListener('mousemove', handleDocumentCharacterDragMove);
+      document.removeEventListener('mouseup', handleDocumentCharacterDragEnd);
+      characterDragState = null;
+    }
+
+    function deleteProjectCharacter(charName) {
+      const project = state.projects[state.currentProjectId];
+      if (!project || !Array.isArray(project.characters)) return;
+      const index = project.characters.findIndex(char => char.name === charName);
+      if (index < 0) return;
+
+      const removed = project.characters[index];
+      const snapshot = characterSnapshot(removed);
+      pushUndoSnapshot();
+
+      project.talks.forEach(talk => {
+        if (talk.charName === charName) talk.characterSnapshot = snapshot;
+      });
+      project.characters.splice(index, 1);
+
+      if (currentCharacter === charName) {
+        const fallback = project.characters[Math.max(0, Math.min(index - 1, project.characters.length - 1))];
+        currentCharacter = fallback?.name || project.characters[0]?.name || '情景描写';
+      }
+
+      renderCharSelector();
+      renderTimeline();
+      updateMetaStats();
+      saveState();
     }
 
     function initAiButtonActions(aiBtn) {
@@ -2102,6 +2324,41 @@ let state = {
     function isProtagonistTalk(project, charName) {
       const char = project.characters.find(c => c.name === charName);
       return !!char?.isProtagonist;
+    }
+
+    function characterSnapshot(character) {
+      if (!character) return null;
+      return {
+        name: character.name || '',
+        avatar: character.avatar || '',
+        isRound: character.isRound !== false,
+        zoom: Number(character.zoom) || 100,
+        offsetX: character.offsetX ?? 50,
+        offsetY: character.offsetY ?? 50,
+        isProtagonist: !!character.isProtagonist
+      };
+    }
+
+    function talkCharacterInfo(project, talk) {
+      if (!talk || !project) return null;
+      return project.characters.find(c => c.name === talk.charName) || talk.characterSnapshot || null;
+    }
+
+    function isTalkRight(project, talk) {
+      const info = talkCharacterInfo(project, talk);
+      return !!info?.isProtagonist;
+    }
+
+    function avatarHtmlForCharacterInfo(info, fallbackName) {
+      if (info && info.avatar) {
+        const radius = info.isRound !== false ? '50%' : '8px';
+        const zoom = info.zoom || 100;
+        const posX = info.offsetX ?? 50;
+        const posY = info.offsetY ?? 50;
+        return `<div class="avatar" style="border-radius:${radius}; background-image:url(${info.avatar}); background-size:${zoom}%; background-position:${posX}% ${posY}%;"></div>`;
+      }
+      const short = fallbackName ? fallbackName.substring(0, 2) : "??";
+      return `<div class="avatar-dummy">${escapeHtml(short)}</div>`;
     }
 
     function formatTalkNumber(index) { return String(index + 1).padStart(3, '0'); }
@@ -2461,7 +2718,7 @@ let state = {
       project.talks.forEach((talk, index) => {
         if (!talk.id) talk.id = createTalkId();
         const isScene = talk.charName === '情景描写';
-        const isRight = isProtagonistTalk(project, talk.charName) && !isScene;
+        const isRight = isTalkRight(project, talk) && !isScene;
         const bubble = document.createElement('div');
         bubble.className = `chat-bubble ${isScene ? 'scene' : (isRight ? 'right' : 'left')}${editingTalkId === talk.id ? ' inline-edit-target' : ''}`;
         if (state.settings?.showTalkNumbers !== false) bubble.classList.add('with-number');
@@ -2481,19 +2738,7 @@ let state = {
         };
 
         let avatarHtml = '';
-        if (!isScene) {
-          const charInfo = project.characters.find(c => c.name === talk.charName);
-          if (charInfo && charInfo.avatar) {
-            const radius = charInfo.isRound !== false ? '50%' : '8px';
-            const zoom = charInfo.zoom || 100;
-            const posX = charInfo.offsetX ?? 50;
-            const posY = charInfo.offsetY ?? 50;
-            avatarHtml = `<div class="avatar" style="border-radius:${radius}; background-image:url(${charInfo.avatar}); background-size:${zoom}%; background-position:${posX}% ${posY}%;"></div>`;
-          } else {
-            const short = talk.charName ? talk.charName.substring(0,2) : "??";
-            avatarHtml = `<div class="avatar-dummy">${short}</div>`;
-          }
-        }
+        if (!isScene) avatarHtml = avatarHtmlForCharacterInfo(talkCharacterInfo(project, talk), talk.charName);
 
         bubble.innerHTML = `
           <input type="checkbox" class="talk-select" ${selectedTalkIndexes.has(index) ? 'checked' : ''} onclick="toggleTalkSelection(event, ${index})">
@@ -2519,7 +2764,7 @@ let state = {
       if (state.aiToggle && predictedTalks.length > 0) {
         predictedTalks.forEach((talk, idx) => {
           const isScene = talk.charName === '情景描写';
-          const isRight = isProtagonistTalk(project, talk.charName) && !isScene;
+          const isRight = isTalkRight(project, talk) && !isScene;
           const bubble = document.createElement('div');
           bubble.className = `chat-bubble ${isScene ? 'scene' : (isRight ? 'right' : 'left')} ai-predicted`;
 
@@ -2528,19 +2773,7 @@ let state = {
           };
 
           let avatarHtml = '';
-          if (!isScene) {
-            const charInfo = project.characters.find(c => c.name === talk.charName);
-            if (charInfo && charInfo.avatar) {
-              const radius = charInfo.isRound !== false ? '50%' : '8px';
-              const zoom = charInfo.zoom || 100;
-              const posX = charInfo.offsetX ?? 50;
-              const posY = charInfo.offsetY ?? 50;
-              avatarHtml = `<div class="avatar" style="border-radius:${radius}; background-image:url(${charInfo.avatar}); background-size:${zoom}%; background-position:${posX}% ${posY}%;"></div>`;
-            } else {
-              const short = talk.charName ? talk.charName.substring(0,2) : "??";
-              avatarHtml = `<div class="avatar-dummy">${short}</div>`;
-            }
-          }
+          if (!isScene) avatarHtml = avatarHtmlForCharacterInfo(talkCharacterInfo(project, talk), talk.charName);
 
           bubble.innerHTML = `
             ${avatarHtml}

@@ -581,19 +581,20 @@ function viewerCharacters(project) {
   (project.talks || []).forEach(talk => {
     if (!talk?.charName || seen.has(talk.charName) || isSpecialTalk(talk)) return;
     seen.add(talk.charName);
-    result.push({ name: talk.charName });
+    result.push(talk.characterSnapshot ? { ...talk.characterSnapshot, name: talk.charName } : { name: talk.charName });
   });
   return result;
 }
 
 function characterByName(project, name) {
-  return project.characters?.find(item => item.name === name);
+  return project.characters?.find(item => item.name === name) ||
+    project.talks?.find(talk => talk.charName === name && talk.characterSnapshot)?.characterSnapshot;
 }
 
 function avatarHtml(project, talkOrCharacter) {
   const name = talkOrCharacter.charName || talkOrCharacter.name;
   if (name === VIEWER_SCENE_NAME || name === VIEWER_SYSTEM_NAME) return '';
-  const character = characterByName(project, name) || talkOrCharacter;
+  const character = characterByName(project, name) || talkOrCharacter.characterSnapshot || talkOrCharacter;
   if (character?.avatar) {
     const radius = character.isRound !== false ? '50%' : '8px';
     return '<div class="viewer-avatar" style="border-radius:' + radius + ';background-image:url(' + character.avatar + ');background-size:' + (character.zoom || 100) + '%;background-position:' + (character.offsetX ?? 50) + '% ' + (character.offsetY ?? 50) + '%"></div>';
