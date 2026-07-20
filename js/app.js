@@ -1133,6 +1133,15 @@ let state = {
       return storeWallpaperBlob(blob, file?.name || 'wallpaper');
     }
 
+    function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result || '');
+        reader.onerror = () => reject(reader.error || new Error('Failed to convert image for sharing'));
+        reader.readAsDataURL(blob);
+      });
+    }
+
     function wallpaperHasImage(wallpaper) {
       return !!(wallpaper && (wallpaper.imageId || wallpaper.image || wallpaper.imageUrl));
     }
@@ -1145,6 +1154,41 @@ let state = {
       const record = await getStoredImage(wallpaper.imageId);
       if (!record?.blob) return '';
       return storedBlobToObjectUrl(wallpaper.imageId, record.blob);
+    }
+
+    async function resolveWallpaperDataUrlForShare(wallpaper) {
+      if (!wallpaper) return '';
+      if (String(wallpaper.image || '').startsWith('data:')) return wallpaper.image;
+      if (wallpaper.image && !String(wallpaper.image).startsWith('blob:')) return wallpaper.image;
+      if (wallpaper.imageId) {
+        const record = await getStoredImage(wallpaper.imageId);
+        if (record?.blob) return blobToDataUrl(record.blob);
+      }
+      if (String(wallpaper.imageUrl || '').startsWith('blob:')) {
+        try {
+          const response = await fetch(wallpaper.imageUrl);
+          const blob = await response.blob();
+          return blobToDataUrl(blob);
+        } catch (error) {
+          console.warn('Failed to read object URL wallpaper for share:', error);
+        }
+      }
+      return '';
+    }
+
+    async function hydrateWallpaperForShare(wallpaper) {
+      if (!wallpaper || typeof wallpaper !== 'object') return;
+      const image = await resolveWallpaperDataUrlForShare(wallpaper);
+      wallpaper.image = image || '';
+      delete wallpaper.imageId;
+      delete wallpaper.imageUrl;
+    }
+
+    async function hydrateProjectWallpapersForShare(project) {
+      if (!project) return;
+      await hydrateWallpaperForShare(project.wallpaper);
+      const scenes = project.sceneWallpaperSettings?.scenes || [];
+      for (const scene of scenes) await hydrateWallpaperForShare(scene);
     }
 
     async function migrateWallpaperObjectToIndexedDB(wallpaper) {
@@ -3894,7 +3938,7 @@ ${keptPredictionText}
       return 'share_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
     }
 
-    function buildViewerSharePayload(project, viewerPasswordHash, shareId) {
+    async function buildViewerSharePayload(project, viewerPasswordHash, shareId) {
       const snapshot = cloneProject(project);
       loadEditorScriptColorSettings();
       snapshot.scriptColorSettings = {};
@@ -3904,6 +3948,7 @@ ${keptPredictionText}
       });
       ensureTalkIds(snapshot);
       normalizeSceneWallpaperSettings(snapshot);
+      await hydrateProjectWallpapersForShare(snapshot);
       return {
         shareId: shareId || project.shareId || generateShareId(),
         title: snapshot.title || '\u53f0\u672c',
@@ -4384,7 +4429,7 @@ unlock();
       const viewerPassword = passwordInput?.value || '';
       const viewerPasswordHash = viewerPassword ? await hashPasswordText(viewerPassword) : '';
       const isPublished = !!project.shareId;
-      pendingSharePayload = buildViewerSharePayload(project, viewerPasswordHash, project.shareId);
+      pendingSharePayload = await buildViewerSharePayload(project, viewerPasswordHash, project.shareId);
       pendingSharePublished = isPublished;
       const output = document.getElementById('shareUrlText');
       const meta = document.getElementById('shareMetaText');
@@ -4478,7 +4523,7 @@ unlock();
           project.shareId = pendingSharePayload.shareId || generateShareId();
           project.shareCreatedAt = new Date().toISOString();
         }
-        pendingSharePayload = buildViewerSharePayload(project, viewerPassword ? await hashPasswordText(viewerPassword) : '', project.shareId);
+        pendingSharePayload = await buildViewerSharePayload(project, viewerPassword ? await hashPasswordText(viewerPassword) : '', project.shareId);
         const config = helper.configuredConfig(configText);
         helper.saveConfig(config);
         await helper.saveShare(pendingSharePayload, config);
@@ -4551,7 +4596,7 @@ unlock();
       project.shareCreatedAt = new Date().toISOString();
       saveState();
       const viewerPassword = document.getElementById('shareViewerPassword')?.value || '';
-      pendingSharePayload = buildViewerSharePayload(project, viewerPassword ? await hashPasswordText(viewerPassword) : '', project.shareId);
+      pendingSharePayload = await buildViewerSharePayload(project, viewerPassword ? await hashPasswordText(viewerPassword) : '', project.shareId);
       pendingSharePublished = false;
       await publishFirebaseShareUrl();
     }
