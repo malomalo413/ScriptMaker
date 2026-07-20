@@ -14,6 +14,10 @@ const SCRIPTMAKER_EDITOR_BACKUP_META_KEY = 'scriptmaker_editor_backup_sync_meta_
 const SCRIPTMAKER_EDITOR_BACKUP_DEVICE_KEY = 'scriptmaker_editor_backup_device_v1';
 const SCRIPTMAKER_EDITOR_BACKUP_FAIL_KEY = 'scriptmaker_editor_backup_fail_v1';
 const SCRIPTMAKER_SCRIPT_COLOR_PREFIX = 'scriptmaker_editor_script_colors_v1:';
+const SCRIPTMAKER_IMAGE_DB_NAME = 'scriptmaker_editor_images_v1';
+const SCRIPTMAKER_IMAGE_STORE_NAME = 'images';
+const SCRIPTMAKER_WALLPAPER_MAX_SIDE = 1920;
+const SCRIPTMAKER_WALLPAPER_WEBP_QUALITY = 0.85;
 
 let state = {
       currentProjectId: null,
@@ -35,6 +39,7 @@ let state = {
     let selectedTalkIndexes = new Set();
     let predictedTalks = []; 
     let selectedWallpaperBase64 = "";
+    let selectedWallpaperImageId = "";
     let wallpaperSize = 100;
     let wallpaperOffsetX = 50;
     let wallpaperOffsetY = 50;
@@ -366,7 +371,7 @@ let state = {
         if (auxiliary.characterLibrary != null) localStorage.setItem(SCRIPTMAKER_CHARACTER_LIBRARY_KEY, String(auxiliary.characterLibrary));
         if (auxiliary.countSettings != null) localStorage.setItem(SCRIPTMAKER_EDITOR_COUNT_SETTING_KEY, String(auxiliary.countSettings));
         applyScriptColorSettingsFromSync(auxiliary.scriptColorSettings);
-        localStorage.setItem('script_assistant_data_v21', JSON.stringify(state));
+        localStorage.setItem('script_assistant_data_v21', JSON.stringify(cloneStateForLocalStorage()));
         normalizeProjectData();
         syncCharacterLibraryFromProjects();
         renderProjectList();
@@ -740,7 +745,7 @@ let state = {
         merged.currentProjectId = incoming.currentProjectId || Object.keys(merged.projects)[0] || null;
       }
       editorApplyingCloudState = true;
-      try { state = merged; localStorage.setItem('script_assistant_data_v21', JSON.stringify(state)); applyEditorBackupPayload({ ...payload, data: { ...data, state } }); } finally { editorApplyingCloudState = false; }
+      try { state = merged; localStorage.setItem('script_assistant_data_v21', JSON.stringify(cloneStateForLocalStorage())); applyEditorBackupPayload({ ...payload, data: { ...data, state } }); } finally { editorApplyingCloudState = false; }
     }
 
     function isBackupCodeRateLimited() { try { const data = JSON.parse(localStorage.getItem(SCRIPTMAKER_EDITOR_BACKUP_FAIL_KEY) || '{}') || {}; return data.until && Date.now() < data.until; } catch (_) { return false; } }
@@ -800,6 +805,12 @@ let state = {
       }
 
       normalizeProjectData();
+      migrateBase64WallpapersToIndexedDB().then(changed => {
+        if (!changed) return;
+        saveState();
+        applyProjectWallpaper(true);
+        renderTimeline();
+      }).catch(error => console.warn('Wallpaper migration failed:', error));
       syncCharacterLibraryFromProjects();
 
       document.getElementById('apiKey').value = state.apiKey;
@@ -997,6 +1008,185 @@ let state = {
       };
     }
 
+    function openImageDb() {
+      return new Promise((resolve, reject) => {
+        if (!window.indexedDB) {
+          reject(new Error('IndexedDB is not available'));
+          return;
+        }
+        const request = indexedDB.open(SCRIPTMAKER_IMAGE_DB_NAME, 1);
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains(SCRIPTMAKER_IMAGE_STORE_NAME)) {
+            db.createObjectStore(SCRIPTMAKER_IMAGE_STORE_NAME, { keyPath: 'id' });
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error('Failed to open image database'));
+      });
+    }
+
+    function imageDbRequest(mode, handler) {
+      return openImageDb().then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(SCRIPTMAKER_IMAGE_STORE_NAME, mode);
+        const store = tx.objectStore(SCRIPTMAKER_IMAGE_STORE_NAME);
+        let request;
+        try {
+          request = handler(store);
+        } catch (error) {
+          reject(error);
+          return;
+        }
+        tx.oncomplete = () => resolve(request?.result);
+        tx.onerror = () => reject(tx.error || request?.error || new Error('Image database request failed'));
+        tx.onabort = () => reject(tx.error || new Error('Image database request aborted'));
+      }));
+    }
+
+    function putStoredImage(record) {
+      return imageDbRequest('readwrite', store => store.put(record));
+    }
+
+    function getStoredImage(id) {
+      if (!id) return Promise.resolve(null);
+      return imageDbRequest('readonly', store => store.get(id)).catch(error => {
+        console.warn('Stored image not found:', id, error);
+        return null;
+      });
+    }
+
+    function createImageId() {
+      const bytes = new Uint8Array(12);
+      if (window.crypto?.getRandomValues) crypto.getRandomValues(bytes);
+      else bytes.forEach((_, index) => bytes[index] = Math.floor(Math.random() * 256));
+      return 'img_' + Date.now().toString(36) + '_' + Array.from(bytes).map(byte => byte.toString(36).padStart(2, '0')).join('');
+    }
+
+    function dataUrlToBlob(dataUrl) {
+      const parts = String(dataUrl || '').split(',');
+      if (parts.length < 2) return new Blob([]);
+      const header = parts[0] || '';
+      const mime = (header.match(/data:([^;]+)/) || [])[1] || 'application/octet-stream';
+      const binary = atob(parts.slice(1).join(','));
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new Blob([bytes], { type: mime });
+    }
+
+    function readFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('Failed to read image file'));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function loadImageElement(src) {
+      return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error('Failed to load image'));
+        image.src = src;
+      });
+    }
+
+    async function resizeImageFileToWebP(file) {
+      const dataUrl = await readFileAsDataUrl(file);
+      const image = await loadImageElement(dataUrl);
+      const width = image.naturalWidth || image.width || 1;
+      const height = image.naturalHeight || image.height || 1;
+      const scale = Math.min(1, SCRIPTMAKER_WALLPAPER_MAX_SIDE / Math.max(width, height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(width * scale));
+      canvas.height = Math.max(1, Math.round(height * scale));
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      return new Promise(resolve => {
+        canvas.toBlob(blob => resolve(blob || dataUrlToBlob(dataUrl)), 'image/webp', SCRIPTMAKER_WALLPAPER_WEBP_QUALITY);
+      });
+    }
+
+    const wallpaperObjectUrlCache = new Map();
+    function storedBlobToObjectUrl(id, blob) {
+      if (wallpaperObjectUrlCache.has(id)) return wallpaperObjectUrlCache.get(id);
+      const url = URL.createObjectURL(blob);
+      wallpaperObjectUrlCache.set(id, url);
+      return url;
+    }
+
+    async function storeWallpaperBlob(blob, sourceName = '') {
+      const id = createImageId();
+      const record = {
+        id,
+        blob,
+        type: blob.type || 'image/webp',
+        sourceName,
+        createdAt: new Date().toISOString()
+      };
+      await putStoredImage(record);
+      return { id, url: storedBlobToObjectUrl(id, blob) };
+    }
+
+    async function storeWallpaperFile(file) {
+      const blob = await resizeImageFileToWebP(file);
+      return storeWallpaperBlob(blob, file?.name || 'wallpaper');
+    }
+
+    function wallpaperHasImage(wallpaper) {
+      return !!(wallpaper && (wallpaper.imageId || wallpaper.image || wallpaper.imageUrl));
+    }
+
+    async function resolveWallpaperUrl(wallpaper) {
+      if (!wallpaper) return '';
+      if (wallpaper.imageUrl) return wallpaper.imageUrl;
+      if (wallpaper.image) return wallpaper.image;
+      if (!wallpaper.imageId) return '';
+      const record = await getStoredImage(wallpaper.imageId);
+      if (!record?.blob) return '';
+      return storedBlobToObjectUrl(wallpaper.imageId, record.blob);
+    }
+
+    async function migrateWallpaperObjectToIndexedDB(wallpaper) {
+      if (!wallpaper || wallpaper.imageId || !String(wallpaper.image || '').startsWith('data:')) return false;
+      const blob = dataUrlToBlob(wallpaper.image);
+      if (!blob.size) return false;
+      const stored = await storeWallpaperBlob(blob, 'migrated-wallpaper');
+      wallpaper.imageId = stored.id;
+      wallpaper.image = '';
+      wallpaper.imageUrl = stored.url;
+      return true;
+    }
+
+    async function migrateBase64WallpapersToIndexedDB() {
+      let changed = false;
+      const projects = Object.values(state.projects || {});
+      for (const project of projects) {
+        changed = (await migrateWallpaperObjectToIndexedDB(project.wallpaper)) || changed;
+        const settings = getSceneWallpaperSettings(project);
+        for (const scene of settings.scenes || []) {
+          changed = (await migrateWallpaperObjectToIndexedDB(scene)) || changed;
+        }
+      }
+      return changed;
+    }
+
+    function cloneStateForLocalStorage() {
+      const copy = JSON.parse(JSON.stringify(state));
+      Object.values(copy.projects || {}).forEach(project => {
+        if (project.wallpaper) sanitizeWallpaperForLocalStorage(project.wallpaper);
+        (project.sceneWallpaperSettings?.scenes || []).forEach(scene => sanitizeWallpaperForLocalStorage(scene));
+      });
+      return copy;
+    }
+
+    function sanitizeWallpaperForLocalStorage(wallpaper) {
+      if (!wallpaper || typeof wallpaper !== 'object') return;
+      delete wallpaper.imageUrl;
+      if (wallpaper.imageId && String(wallpaper.image || '').startsWith('blob:')) wallpaper.image = '';
+      if (wallpaper.imageId && String(wallpaper.image || '').startsWith('data:')) wallpaper.image = '';
+    }
+
     function normalizeSceneWallpaperSettings(project) {
       if (!project) return { enabled: false, scenes: [] };
       ensureTalkIds(project);
@@ -1023,6 +1213,7 @@ let state = {
         id: scene.id || ('scene_' + Date.now() + '_' + index + '_' + Math.floor(Math.random() * 1000)),
         name: String(scene.name || '\u30b7\u30fc\u30f3' + (index + 1)),
         talkIds,
+        imageId: scene.imageId || "",
         image: scene.image || "",
         size: Math.max(100, parseInt(scene.size, 10) || 100),
         offsetX: Number.isFinite(Number(scene.offsetX)) ? Number(scene.offsetX) : 50,
@@ -1165,7 +1356,7 @@ let state = {
     function saveState() {
       try {
         if (!editorApplyingCloudState) state.editorUpdatedAt = new Date().toISOString();
-        localStorage.setItem('script_assistant_data_v21', JSON.stringify(state));
+        localStorage.setItem('script_assistant_data_v21', JSON.stringify(cloneStateForLocalStorage()));
         scheduleEditorBackupSync();
         return true;
       } catch (e) {
@@ -1325,7 +1516,8 @@ let state = {
       const wallpaper = project?.wallpaper || {};
       const sceneSettings = getSceneWallpaperSettings(project);
 
-      selectedWallpaperBase64 = wallpaper.image || "";
+      selectedWallpaperBase64 = wallpaper.image || wallpaper.imageUrl || "";
+      selectedWallpaperImageId = wallpaper.imageId || "";
       wallpaperSize = Math.max(100, wallpaper.size || 100);
       wallpaperOffsetX = wallpaper.offsetX ?? 50;
       wallpaperOffsetY = wallpaper.offsetY ?? 50;
@@ -1335,6 +1527,10 @@ let state = {
       document.getElementById('wallpaperSizeSlider').value = wallpaperSize;
       const preview = document.getElementById('wallpaperPreview');
       preview.style.backgroundImage = selectedWallpaperBase64 ? 'url(' + selectedWallpaperBase64 + ')' : "";
+      resolveWallpaperUrl(wallpaper).then(url => {
+        selectedWallpaperBase64 = url || selectedWallpaperBase64;
+        preview.style.backgroundImage = url ? 'url(' + url + ')' : "";
+      });
       editingSceneWallpapers = (sceneSettings.scenes || []).map((scene, index) => normalizeSceneWallpaper(scene, index, project)).filter(Boolean);
       const toggle = document.getElementById('sceneWallpaperToggle');
       if (toggle) toggle.checked = !!sceneSettings.enabled;
@@ -1344,19 +1540,24 @@ let state = {
       openModal('wallpaperModal');
     }
 
-    function previewWallpaper(input) {
+    async function previewWallpaper(input) {
       const file = input.files[0];
       if (!file) return;
 
-      compressImageFile(file, 1400, 0.82, function(dataUrl) {
-        selectedWallpaperBase64 = dataUrl;
+      try {
+        const stored = await storeWallpaperFile(file);
+        selectedWallpaperImageId = stored.id;
+        selectedWallpaperBase64 = stored.url;
         wallpaperSize = 100;
         wallpaperOffsetX = 50;
         wallpaperOffsetY = 50;
         document.getElementById('wallpaperSizeSlider').value = wallpaperSize;
         document.getElementById('wallpaperPreview').style.backgroundImage = `url(${selectedWallpaperBase64})`;
         updateWallpaperPreviewStyle();
-      });
+      } catch (error) {
+        console.error('Wallpaper image save failed:', error);
+        alert('壁紙画像を保存できませんでした。別の画像を選ぶか、画像サイズを小さくしてください。');
+      }
     }
 
     function updateWallpaperPreviewStyle() {
@@ -1373,8 +1574,9 @@ let state = {
       if (!project) return;
 
       pushUndoSnapshot();
-      project.wallpaper = selectedWallpaperBase64 ? {
-        image: selectedWallpaperBase64,
+      project.wallpaper = (selectedWallpaperImageId || selectedWallpaperBase64) ? {
+        imageId: selectedWallpaperImageId,
+        image: selectedWallpaperImageId ? "" : selectedWallpaperBase64,
         size: wallpaperSize,
         offsetX: wallpaperOffsetX,
         offsetY: wallpaperOffsetY
@@ -1397,6 +1599,7 @@ let state = {
       pushUndoSnapshot();
       project.wallpaper = null;
       selectedWallpaperBase64 = "";
+      selectedWallpaperImageId = "";
       saveState();
       applyProjectWallpaper();
       closeModal('wallpaperModal');
@@ -1409,7 +1612,7 @@ let state = {
         return;
       }
       const sceneSettings = getSceneWallpaperSettings(project);
-      if (sceneSettings.enabled && sceneSettings.scenes.some(scene => scene.image)) {
+      if (sceneSettings.enabled && sceneSettings.scenes.some(scene => wallpaperHasImage(scene))) {
         updateSceneWallpaperByScroll(forceUpdate);
         return;
       }
@@ -1417,8 +1620,8 @@ let state = {
     }
 
     function getWallpaperIdentity(wallpaper) {
-      if (!wallpaper || !wallpaper.image) return 'none';
-      return [wallpaper.image.slice(0, 64), wallpaper.size || 100, wallpaper.offsetX ?? 50, wallpaper.offsetY ?? 50].join('|');
+      if (!wallpaperHasImage(wallpaper)) return 'none';
+      return [wallpaper.imageId || String(wallpaper.image || wallpaper.imageUrl || '').slice(0, 64), wallpaper.size || 100, wallpaper.offsetX ?? 50, wallpaper.offsetY ?? 50].join('|');
     }
 
     function getWallpaperLayers() {
@@ -1432,7 +1635,7 @@ let state = {
       const current = layers[activeWallpaperLayerIndex] || layers[0];
       const nextIndex = layers.length > 1 ? 1 - activeWallpaperLayerIndex : activeWallpaperLayerIndex;
       const next = layers[nextIndex] || current;
-      styleWallpaperLayer(next, wallpaper);
+      styleWallpaperLayer(next, wallpaper, key);
       if (layers.length > 1 && next !== current) {
         next.classList.add('active');
         current.classList.remove('active');
@@ -1443,9 +1646,11 @@ let state = {
       currentWallpaperKey = key;
     }
 
-    function styleWallpaperLayer(layer, wallpaper) {
+    async function styleWallpaperLayer(layer, wallpaper, key = '') {
       if (!layer) return;
-      if (!wallpaper || !wallpaper.image) {
+      const expectedKey = key || getWallpaperIdentity(wallpaper);
+      layer.dataset.wallpaperKey = expectedKey;
+      if (!wallpaperHasImage(wallpaper)) {
         layer.style.backgroundImage = "";
         layer.style.backgroundSize = "";
         layer.style.backgroundPosition = "";
@@ -1453,7 +1658,13 @@ let state = {
         return;
       }
       const size = wallpaper.size || 100;
-      layer.style.backgroundImage = 'url(' + wallpaper.image + ')';
+      const imageUrl = await resolveWallpaperUrl(wallpaper);
+      if (layer.dataset.wallpaperKey !== expectedKey) return;
+      if (!imageUrl) {
+        layer.style.backgroundImage = "";
+        return;
+      }
+      layer.style.backgroundImage = 'url(' + imageUrl + ')';
       layer.style.backgroundSize = size === 100 ? 'cover' : size + '%';
       layer.style.backgroundPosition = (wallpaper.offsetX ?? 50) + '% ' + (wallpaper.offsetY ?? 50) + '%';
       layer.style.transform = "";
@@ -1481,7 +1692,7 @@ let state = {
         return;
       }
       const currentTalkId = getCurrentTimelineTalkId();
-      const scenes = settings.scenes.filter(scene => scene.image && Array.isArray(scene.talkIds) && scene.talkIds.length > 0).slice();
+      const scenes = settings.scenes.filter(scene => wallpaperHasImage(scene) && Array.isArray(scene.talkIds) && scene.talkIds.length > 0).slice();
       const scene = currentTalkId ? scenes.find(item => item.talkIds.includes(currentTalkId)) || null : null;
       if (!scene) {
         setEditorWallpaper(project?.wallpaper || null, 'scene-fallback:' + getWallpaperIdentity(project?.wallpaper), forceUpdate);
@@ -1544,7 +1755,7 @@ let state = {
             '<button type="button" class="btn-scene-delete" onclick="deleteSceneWallpaper(\'' + scene.id + '\')">&#21066;&#38500;</button>' +
           '</div>' +
           '<div class="scene-wallpaper-image-row">' +
-            '<div class="scene-wallpaper-thumb" style="background-image:' + (scene.image ? 'url(' + scene.image + ')' : 'none') + '"></div>' +
+            '<div class="scene-wallpaper-thumb" data-scene-wallpaper-thumb="' + scene.id + '" style="background-image:' + (scene.image ? 'url(' + scene.image + ')' : 'none') + '"></div>' +
             '<label class="scene-wallpaper-file-btn" for="' + fileId + '">&#22721;&#32025;&#30011;&#20687;&#12434;&#36984;&#25246;</label>' +
             '<input id="' + fileId + '" type="file" accept="image/*" style="display:none" onchange="previewSceneWallpaperImage(this, \'' + scene.id + '\')">' +
           '</div>' +
@@ -1561,6 +1772,17 @@ let state = {
           '</div>' +
           '<div class="scene-talk-list" id="sceneTalkList_' + scene.id + '">' + renderSceneTalkOptions(scene, project) + '</div>';
         list.appendChild(card);
+      });
+      resolveSceneWallpaperThumbs();
+    }
+
+    function resolveSceneWallpaperThumbs() {
+      editingSceneWallpapers.forEach(scene => {
+        const thumb = document.querySelector('[data-scene-wallpaper-thumb="' + scene.id + '"]');
+        if (!thumb) return;
+        resolveWallpaperUrl(scene).then(url => {
+          thumb.style.backgroundImage = url ? 'url(' + url + ')' : 'none';
+        });
       });
     }
 
@@ -1660,7 +1882,7 @@ let state = {
 
     function addSceneWallpaper() {
       const nextIndex = editingSceneWallpapers.length + 1;
-      editingSceneWallpapers.push({ id: 'scene_' + Date.now() + '_' + Math.floor(Math.random() * 1000), name: '\u30b7\u30fc\u30f3' + nextIndex, talkIds: [], image: '', size: 100, offsetX: 50, offsetY: 50 });
+      editingSceneWallpapers.push({ id: 'scene_' + Date.now() + '_' + Math.floor(Math.random() * 1000), name: '\u30b7\u30fc\u30f3' + nextIndex, talkIds: [], imageId: '', image: '', size: 100, offsetX: 50, offsetY: 50 });
       renderSceneWallpaperList();
       const toggle = document.getElementById('sceneWallpaperToggle');
       if (toggle) toggle.checked = true;
@@ -1731,18 +1953,24 @@ let state = {
       });
     }
 
-    function previewSceneWallpaperImage(input, id) {
+    async function previewSceneWallpaperImage(input, id) {
       const file = input.files[0];
       if (!file) return;
-      compressImageFile(file, 1400, 0.82, function(dataUrl) {
+      try {
+        const stored = await storeWallpaperFile(file);
         const scene = editingSceneWallpapers.find(item => item.id === id);
         if (!scene) return;
-        scene.image = dataUrl;
+        scene.imageId = stored.id;
+        scene.image = "";
+        scene.imageUrl = stored.url;
         scene.size = 100;
         scene.offsetX = 50;
         scene.offsetY = 50;
         renderSceneWallpaperList();
-      });
+      } catch (error) {
+        console.error('Scene wallpaper image save failed:', error);
+        alert('シーン壁紙画像を保存できませんでした。別の画像を選んでください。');
+      }
     }
 
     function removeTalkIdsFromSceneSettings(project, talkIds) {
@@ -2653,7 +2881,7 @@ let state = {
     function sceneWallpaperForTalk(project, talk) {
       const settings = getSceneWallpaperSettings(project);
       if (settings?.enabled && talk?.id) {
-        const scene = (settings.scenes || []).find(item => item.image && Array.isArray(item.talkIds) && item.talkIds.includes(talk.id));
+        const scene = (settings.scenes || []).find(item => wallpaperHasImage(item) && Array.isArray(item.talkIds) && item.talkIds.includes(talk.id));
         if (scene) return scene;
       }
       return null;
@@ -2663,6 +2891,20 @@ let state = {
       if (!wallpaper?.image) return '';
       const size = (wallpaper.size || 100) === 100 ? 'cover' : (wallpaper.size || 100) + '%';
       return 'background-image:url(' + wallpaper.image + ');background-size:' + size + ';background-position:' + (wallpaper.offsetX ?? 50) + '% ' + (wallpaper.offsetY ?? 50) + '%;';
+    }
+
+    function resolveScriptWallpaperImages(project) {
+      document.querySelectorAll('.script-art-image[data-scene-id]').forEach(image => {
+        const sceneId = image.dataset.sceneId;
+        const scene = (getSceneWallpaperSettings(project).scenes || []).find(item => item.id === sceneId);
+        if (!scene) return;
+        resolveWallpaperUrl(scene).then(url => {
+          if (!url) return;
+          image.style.backgroundImage = 'url(' + url + ')';
+          image.style.backgroundSize = 'contain';
+          image.style.backgroundPosition = (scene.offsetX ?? 50) + '% ' + (scene.offsetY ?? 50) + '%';
+        });
+      });
     }
 
     function renderScriptTimeline(project, timeline) {
@@ -2686,10 +2928,11 @@ let state = {
           '</div>' +
           '<div class="script-col script-stage">' + (getStageDirection(talk) ? escapeHtml(getStageDirection(talk)) : '') + '</div>' +
           '<div class="script-col script-art">' +
-            (scene?.image ? '<div class="script-art-image" style="' + wallpaperStyle(scene) + '"></div><span>' + escapeHtml(scene.name || '') + '</span>' : '<div class="script-art-empty">壁紙なし</div>') +
+            (wallpaperHasImage(scene) ? '<div class="script-art-image" data-scene-id="' + scene.id + '" style="' + wallpaperStyle(scene) + '"></div><span>' + escapeHtml(scene.name || '') + '</span>' : '<div class="script-art-empty">\u58c1\u7d19\u306a\u3057</div>') +
           '</div>';
         timeline.appendChild(row);
       });
+      resolveScriptWallpaperImages(project);
       const predicting = document.createElement('div');
       predicting.className = `predicting-msg ${aiStatusMessage ? '' : 'hidden'} ${aiStatusType === 'error' ? 'error' : ''}`;
       predicting.id = 'aiPredicting';
