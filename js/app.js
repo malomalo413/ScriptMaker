@@ -72,6 +72,7 @@ let state = {
     let editorLastSyncAt = '';
     let editorAppReady = false;
     let characterDragState = null;
+    let renamingProjectId = null;
 
     let originalViewportHeight = window.innerHeight;
     const GEMINI_MODEL_CANDIDATES = [
@@ -1447,10 +1448,25 @@ let state = {
         const project = state.projects[id];
         const card = document.createElement('div');
         card.className = 'project-card';
-        card.innerHTML = '<div class="project-info" onclick="openProject(\'' + id + '\')"><h3>' + escapeHtml(project.title) + '</h3><p>&#12461;&#12515;&#12521;&#12463;&#12479;&#12540;: ' + project.characters.length + '&#20154; / &#21488;&#26412;: ' + project.talks.length + '&#34892;</p></div><div class="project-card-actions" onclick="event.stopPropagation()"><select onchange="moveProjectToFolder(event, \'' + id + '\')">' + folderOptions + '</select><button class="duplicate-project-btn" onclick="duplicateProject(event, \'' + id + '\')">&#35079;&#35069;</button><button class="delete-project-btn" onclick="deleteProject(event, \'' + id + '\')">&#21066;&#38500;</button></div>';
+        if (renamingProjectId === id) {
+          card.innerHTML = '<div class="project-info project-rename-editor" onclick="event.stopPropagation()"><input id="projectRenameInput_' + id + '" type="text" value="' + escapeHtml(project.title || '') + '" maxlength="80" aria-label="プロジェクト名"><p>&#12461;&#12515;&#12521;&#12463;&#12479;&#12540;: ' + project.characters.length + '&#20154; / &#21488;&#26412;: ' + project.talks.length + '&#34892;</p></div><div class="project-card-actions" onclick="event.stopPropagation()"><button class="project-rename-save-btn" onclick="confirmProjectRename(event, \'' + id + '\')">&#20445;&#23384;</button><button class="project-rename-cancel-btn" onclick="cancelProjectRename(event)">&#12461;&#12515;&#12531;&#12475;&#12523;</button></div>';
+        } else {
+          card.innerHTML = '<div class="project-info" onclick="openProject(\'' + id + '\')"><h3>' + escapeHtml(project.title) + '</h3><p>&#12461;&#12515;&#12521;&#12463;&#12479;&#12540;: ' + project.characters.length + '&#20154; / &#21488;&#26412;: ' + project.talks.length + '&#34892;</p></div><div class="project-card-actions" onclick="event.stopPropagation()"><select onchange="moveProjectToFolder(event, \'' + id + '\')">' + folderOptions + '</select><button class="project-rename-btn" onclick="beginProjectRename(event, \'' + id + '\')" title="名前を変更">&#9998; &#21517;&#21069;</button><button class="duplicate-project-btn" onclick="duplicateProject(event, \'' + id + '\')">&#35079;&#35069;</button><button class="delete-project-btn" onclick="deleteProject(event, \'' + id + '\')">&#21066;&#38500;</button></div>';
+        }
         const select = card.querySelector('select');
         if (select) select.value = project.folderId || UNCLASSIFIED_FOLDER_ID;
         list.appendChild(card);
+        if (renamingProjectId === id) {
+          const input = card.querySelector('input');
+          if (input) {
+            input.focus();
+            input.select();
+            input.addEventListener('keydown', event => {
+              if (event.key === 'Enter') confirmProjectRename(event, id);
+              if (event.key === 'Escape') cancelProjectRename(event);
+            });
+          }
+        }
       });
       if (!list.children.length) {
         const empty = document.createElement('div');
@@ -1458,6 +1474,34 @@ let state = {
         empty.innerText = '\u3053\u306e\u30d5\u30a9\u30eb\u30c0\u306b\u306f\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002';
         list.appendChild(empty);
       }
+    }
+
+    function beginProjectRename(event, id) {
+      event.stopPropagation();
+      if (!state.projects[id]) return;
+      renamingProjectId = id;
+      renderProjectList();
+    }
+
+    function confirmProjectRename(event, id) {
+      event.stopPropagation();
+      const project = state.projects[id];
+      const input = document.getElementById('projectRenameInput_' + id);
+      if (!project || !input) return;
+      const nextTitle = input.value.trim();
+      if (!nextTitle) return;
+      if (nextTitle !== project.title) {
+        project.title = nextTitle;
+        saveState();
+      }
+      renamingProjectId = null;
+      renderProjectList();
+    }
+
+    function cancelProjectRename(event) {
+      event.stopPropagation();
+      renamingProjectId = null;
+      renderProjectList();
     }
 
     function openModal(id) {
@@ -2849,6 +2893,20 @@ let state = {
       ).join('') + '</select>';
     }
 
+    function scriptColorAvatarHtml(project, name) {
+      const info = project.characters.find(character => character.name === name) ||
+        project.talks.find(talk => talk.charName === name && talk.characterSnapshot)?.characterSnapshot ||
+        { name };
+      if (info && info.avatar) {
+        const radius = info.isRound !== false ? '50%' : '8px';
+        const zoom = info.zoom || 100;
+        const posX = info.offsetX ?? 50;
+        const posY = info.offsetY ?? 50;
+        return '<span class="script-color-avatar" style="border-radius:' + radius + ';background-image:url(' + info.avatar + ');background-size:' + zoom + '%;background-position:' + posX + '% ' + posY + '%"></span>';
+      }
+      return '<span class="script-color-avatar script-color-avatar-dummy">' + escapeHtml((name || '?').slice(0, 2)) + '</span>';
+    }
+
     function renderScriptColorSettings() {
       const list = document.getElementById('scriptColorList');
       const project = state.projects[state.currentProjectId];
@@ -2862,7 +2920,10 @@ let state = {
       list.innerHTML = names.map(name => {
         const color = sanitizeScriptColor(editorScriptColorSettings[name] || '');
         return '<label class="script-color-item">' +
-          '<span class="script-color-name">' + escapeHtml(name) + '</span>' +
+          '<span class="script-color-character">' +
+            scriptColorAvatarHtml(project, name) +
+            '<span class="script-color-name">' + escapeHtml(name) + '</span>' +
+          '</span>' +
           scriptColorSelectHtml(name, color) +
         '</label>';
       }).join('');

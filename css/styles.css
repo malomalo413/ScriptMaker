@@ -8,6 +8,8 @@
       --edit-bg: #fff7ed;
       --tab-active: #3b82f6;
       --ai-color: #8b5cf6;
+      --character-avatar-chat: clamp(44px, 8vw, 48px);
+      --character-avatar-settings: clamp(48px, 9vw, 56px);
     }
 
     * {
@@ -114,6 +116,44 @@
     .project-info p {
       font-size: 13px;
       color: #64748b;
+    }
+    .project-rename-editor {
+      cursor: default;
+    }
+    .project-rename-editor input {
+      width: 100%;
+      min-height: 42px;
+      margin-bottom: 6px;
+      padding: 8px 10px;
+      border: 1px solid var(--primary-color);
+      border-radius: 8px;
+      background: #fff;
+      color: #0f172a;
+      font-size: 16px;
+      font-weight: 900;
+    }
+    .project-rename-btn,
+    .project-rename-save-btn,
+    .project-rename-cancel-btn {
+      border: none;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .project-rename-btn {
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+    .project-rename-save-btn {
+      background: #2563eb;
+      color: #fff;
+    }
+    .project-rename-cancel-btn {
+      background: #e2e8f0;
+      color: #475569;
     }
     .delete-project-btn {
       background: var(--danger-color);
@@ -588,11 +628,35 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      min-height: 48px;
-      padding: 8px 10px;
+      min-height: 68px;
+      padding: 9px 12px;
       border: 1px solid #e2e8f0;
       border-radius: 10px;
       background: #fff;
+    }
+    .script-color-character {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1 1 auto;
+    }
+    .script-color-avatar {
+      width: var(--character-avatar-settings);
+      height: var(--character-avatar-settings);
+      flex: 0 0 var(--character-avatar-settings);
+      display: grid;
+      place-items: center;
+      border: 2px solid rgba(226, 232, 240, .95);
+      background: #cbd5e1 center / cover no-repeat;
+      color: #334155;
+      font-size: 13px;
+      font-weight: 900;
+      overflow: hidden;
+    }
+    .script-color-avatar-dummy {
+      border-radius: 50%;
+      background: #e2e8f0;
     }
     .script-color-name {
       min-width: 0;
@@ -692,8 +756,8 @@
 
     /* アバター表示 */
     .avatar {
-      width: 38px;
-      height: 38px;
+      width: var(--character-avatar-chat);
+      height: var(--character-avatar-chat);
       overflow: hidden;
       flex-shrink: 0;
       border: 1px solid var(--border-color);
@@ -703,8 +767,8 @@
 
     /* ダミー文字アバター */
     .avatar-dummy {
-      width: 38px;
-      height: 38px;
+      width: var(--character-avatar-chat);
+      height: var(--character-avatar-chat);
       border-radius: 50%;
       background: #cbd5e1;
       display: flex;
@@ -1680,6 +1744,10 @@
       display: none;
     }
     @media (max-width: 420px) {
+      :root {
+        --character-avatar-chat: 44px;
+        --character-avatar-settings: 50px;
+      }
       .wallpaper-modal-content {
         width: 100vw;
         max-width: 100vw;
