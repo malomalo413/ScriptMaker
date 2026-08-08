@@ -1594,6 +1594,35 @@
       min-height: 0;
       overflow-y: auto;
     }
+    .scene-wallpaper-tabs {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding: 0 0 4px;
+      flex: 0 0 auto;
+    }
+    .scene-wallpaper-tab {
+      flex: 0 0 auto;
+      border: 1px solid #cbd5e1;
+      border-radius: 999px;
+      background: #fff;
+      color: #334155;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .scene-wallpaper-tab.active {
+      border-color: #3b82f6;
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+    .scene-wallpaper-tab.add {
+      background: #e0f2fe;
+      color: #0369a1;
+      border-color: #bae6fd;
+    }
     .scene-wallpaper-card {
       border: 1px solid var(--border-color);
       border-radius: 8px;
@@ -1637,7 +1666,7 @@
       grid-template-columns: clamp(120px, 18vw, 180px) minmax(0, auto);
       gap: 10px;
       align-items: center;
-      order: 6;
+      order: 1;
     }
     .scene-wallpaper-thumb {
       height: 150px;
@@ -1703,7 +1732,7 @@
       color: #475569;
       font-size: 12px;
       font-weight: 700;
-      order: 2;
+      order: 3;
     }
     .scene-talk-hint {
       color: #94a3b8;
@@ -1718,7 +1747,7 @@
       border: 1px solid #e2e8f0;
       border-radius: 9px;
       background: #fff;
-      order: 1;
+      order: 2;
     }
     .scene-range-title {
       grid-column: 1 / -1;

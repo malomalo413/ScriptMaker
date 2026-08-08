@@ -52,6 +52,7 @@ let state = {
     let aiStatusMessage = "";
     let aiStatusType = "info";
     let editingSceneWallpapers = [];
+    let activeSceneWallpaperId = "";
     let currentWallpaperKey = "";
     let activeWallpaperLayerIndex = 0;
     let sceneWallpaperRaf = 0;
@@ -1260,6 +1261,7 @@ let state = {
         talkIds,
         imageId: scene.imageId || "",
         image: scene.image || "",
+        order: Number.isFinite(Number(scene.order)) ? Number(scene.order) : index,
         size: Math.max(100, parseInt(scene.size, 10) || 100),
         offsetX: Number.isFinite(Number(scene.offsetX)) ? Number(scene.offsetX) : 50,
         offsetY: Number.isFinite(Number(scene.offsetY)) ? Number(scene.offsetY) : 50
@@ -1628,6 +1630,7 @@ let state = {
         preview.classList.toggle('has-image', !!url);
       });
       editingSceneWallpapers = (sceneSettings.scenes || []).map((scene, index) => normalizeSceneWallpaper(scene, index, project)).filter(Boolean);
+      activeSceneWallpaperId = editingSceneWallpapers[0]?.id || "";
       const toggle = document.getElementById('sceneWallpaperToggle');
       if (toggle) toggle.checked = !!sceneSettings.enabled;
       updateWallpaperPreviewStyle();
@@ -1883,57 +1886,74 @@ let state = {
       if (!editingSceneWallpapers.length) {
         const empty = document.createElement('div');
         empty.className = 'scene-wallpaper-empty';
-        empty.innerHTML = '&#12471;&#12540;&#12531;&#12434;&#36861;&#21152;&#12377;&#12427;&#12392;&#12289;&#36984;&#25246;&#12375;&#12383;&#12475;&#12522;&#12501;&#12372;&#12392;&#12395;&#22721;&#32025;&#12434;&#20999;&#12426;&#26367;&#12360;&#12425;&#12428;&#12414;&#12377;&#12290;';
+        empty.innerHTML = '<p>&#12471;&#12540;&#12531;&#12434;&#36861;&#21152;&#12377;&#12427;&#12392;&#12289;&#36984;&#25246;&#12375;&#12383;&#12475;&#12522;&#12501;&#12372;&#12392;&#12395;&#22721;&#32025;&#12434;&#20999;&#12426;&#26367;&#12360;&#12425;&#12428;&#12414;&#12377;&#12290;</p><button type="button" class="btn-scene-add" onclick="addSceneWallpaper()">＋ シーン追加</button>';
         list.appendChild(empty);
         return;
       }
-      editingSceneWallpapers.forEach((scene) => {
-        const card = document.createElement('div');
-        card.className = 'scene-wallpaper-card';
-        card.dataset.sceneId = scene.id;
-        const fileId = 'sceneWallpaperInput_' + scene.id;
-        const rangeDefault = sceneRangeDefaultNumbers(scene, project);
-        const startOptions = renderSceneRangeOptions(project, rangeDefault.start);
-        const endOptions = renderSceneRangeOptions(project, rangeDefault.end);
-        const charOptions = ['<option value="">&#35441;&#32773;&#12391;&#32094;&#12426;&#36796;&#12415;</option>'].concat(project.characters.map(char => '<option value="' + escapeHtml(char.name) + '">' + escapeHtml(char.name) + '</option>')).join('');
-        card.innerHTML =
-          '<div class="scene-wallpaper-card-head">' +
-            '<input type="text" value="' + escapeHtml(scene.name) + '" placeholder="&#12471;&#12540;&#12531;&#21517;" oninput="updateSceneWallpaperField(\'' + scene.id + '\', \'name\', this.value)">' +
-            '<button type="button" class="btn-scene-delete" onclick="deleteSceneWallpaper(\'' + scene.id + '\')">&#21066;&#38500;</button>' +
+      if (!editingSceneWallpapers.some(scene => scene.id === activeSceneWallpaperId)) {
+        activeSceneWallpaperId = editingSceneWallpapers[0]?.id || "";
+      }
+      const tabs = document.createElement('div');
+      tabs.className = 'scene-wallpaper-tabs';
+      tabs.innerHTML = editingSceneWallpapers.map((scene, index) => {
+        const active = scene.id === activeSceneWallpaperId ? ' active' : '';
+        return '<button type="button" class="scene-wallpaper-tab' + active + '" onclick="selectSceneWallpaperTab(\'' + scene.id + '\')">' + escapeHtml(scene.name || ('シーン' + (index + 1))) + '</button>';
+      }).join('') + '<button type="button" class="scene-wallpaper-tab add" onclick="addSceneWallpaper()">＋</button>';
+      list.appendChild(tabs);
+
+      const scene = editingSceneWallpapers.find(item => item.id === activeSceneWallpaperId) || editingSceneWallpapers[0];
+      if (!scene) return;
+      const card = document.createElement('div');
+      card.className = 'scene-wallpaper-card';
+      card.dataset.sceneId = scene.id;
+      const fileId = 'sceneWallpaperInput_' + scene.id;
+      const rangeDefault = sceneRangeDefaultNumbers(scene, project);
+      const startOptions = renderSceneRangeOptions(project, rangeDefault.start);
+      const endOptions = renderSceneRangeOptions(project, rangeDefault.end);
+      const charOptions = ['<option value="">&#35441;&#32773;&#12391;&#32094;&#12426;&#36796;&#12415;</option>'].concat(project.characters.map(char => '<option value="' + escapeHtml(char.name) + '">' + escapeHtml(char.name) + '</option>')).join('');
+      card.innerHTML =
+        '<div class="scene-wallpaper-card-head">' +
+          '<input type="text" value="' + escapeHtml(scene.name) + '" placeholder="&#12471;&#12540;&#12531;&#21517;" oninput="updateSceneWallpaperField(\'' + scene.id + '\', \'name\', this.value)">' +
+          '<button type="button" class="btn-scene-delete" onclick="deleteSceneWallpaper(\'' + scene.id + '\')">&#21066;&#38500;</button>' +
+        '</div>' +
+        '<div class="scene-wallpaper-main">' +
+          '<div class="scene-wallpaper-dropzone" data-scene-wallpaper-drop="' + scene.id + '" data-scene-wallpaper-thumb="' + scene.id + '" style="background-image:' + (scene.image ? 'url(' + scene.image + ')' : 'none') + '"><span>＋ 画像を設定</span></div>' +
+          '<div class="scene-wallpaper-image-actions">' +
+            '<label class="scene-wallpaper-file-btn" for="' + fileId + '">画像を変更</label>' +
+            '<button type="button" class="scene-wallpaper-remove-btn" onclick="removeSceneWallpaperImage(\'' + scene.id + '\')">画像を削除</button>' +
           '</div>' +
-          '<div class="scene-wallpaper-main">' +
-            '<div class="scene-wallpaper-dropzone" data-scene-wallpaper-drop="' + scene.id + '" data-scene-wallpaper-thumb="' + scene.id + '" style="background-image:' + (scene.image ? 'url(' + scene.image + ')' : 'none') + '"><span>＋ 壁紙画像</span></div>' +
-            '<div class="scene-wallpaper-image-actions">' +
-              '<label class="scene-wallpaper-file-btn" for="' + fileId + '">画像を変更</label>' +
-              '<button type="button" class="scene-wallpaper-remove-btn" onclick="removeSceneWallpaperImage(\'' + scene.id + '\')">画像を削除</button>' +
-            '</div>' +
-            '<input id="' + fileId + '" type="file" accept="image/*" style="display:none" onchange="previewSceneWallpaperImage(this, \'' + scene.id + '\')">' +
-          '</div>' +
-          '<div class="scene-range-tools">' +
-            '<strong class="scene-range-title">適用範囲</strong>' +
-            '<label for="sceneRangeStart_' + scene.id + '">&#38283;&#22987;</label>' +
-            '<select id="sceneRangeStart_' + scene.id + '">' + startOptions + '</select>' +
-            '<label for="sceneRangeEnd_' + scene.id + '">&#32066;&#20102;</label>' +
-            '<select id="sceneRangeEnd_' + scene.id + '">' + endOptions + '</select>' +
-            '<button type="button" onclick="applySceneTalkRange(\'' + scene.id + '\', true)">&#31684;&#22258;&#12434;&#36984;&#25246;</button>' +
-            '<button type="button" class="scene-range-clear" onclick="applySceneTalkRange(\'' + scene.id + '\', false)">&#31684;&#22258;&#12434;&#35299;&#38500;</button>' +
-            '<button type="button" onclick="selectAllSceneTalks(\'' + scene.id + '\')">&#20840;&#36984;&#25246;</button>' +
-            '<button type="button" class="scene-range-clear" onclick="clearSceneTalks(\'' + scene.id + '\')">&#20840;&#35299;&#38500;</button>' +
-          '</div>' +
-          '<div class="scene-talk-tools">' +
-            '<span id="sceneTalkCount_' + scene.id + '">' + getSceneTalkCountLabel(scene) + '</span>' +
-            '<span class="scene-talk-hint">行全体をタップして選択できます</span>' +
-          '</div>' +
-          '<div class="scene-talk-filters">' +
-            '<input type="search" id="sceneTalkSearch_' + scene.id + '" placeholder="&#26908;&#32034;" oninput="filterSceneTalkOptions(\'' + scene.id + '\')">' +
-            '<select id="sceneTalkChar_' + scene.id + '" onchange="filterSceneTalkOptions(\'' + scene.id + '\')">' + charOptions + '</select>' +
-          '</div>' +
-          '<div class="scene-talk-list" id="sceneTalkList_' + scene.id + '">' + renderSceneTalkOptions(scene, project) + '</div>';
-        list.appendChild(card);
-      });
+          '<input id="' + fileId + '" type="file" accept="image/*" style="display:none" onchange="previewSceneWallpaperImage(this, \'' + scene.id + '\')">' +
+        '</div>' +
+        '<div class="scene-range-tools">' +
+          '<strong class="scene-range-title">適用範囲</strong>' +
+          '<label for="sceneRangeStart_' + scene.id + '">&#38283;&#22987;</label>' +
+          '<select id="sceneRangeStart_' + scene.id + '">' + startOptions + '</select>' +
+          '<label for="sceneRangeEnd_' + scene.id + '">&#32066;&#20102;</label>' +
+          '<select id="sceneRangeEnd_' + scene.id + '">' + endOptions + '</select>' +
+          '<button type="button" onclick="applySceneTalkRange(\'' + scene.id + '\', true)">&#31684;&#22258;&#12434;&#36984;&#25246;</button>' +
+          '<button type="button" class="scene-range-clear" onclick="applySceneTalkRange(\'' + scene.id + '\', false)">&#31684;&#22258;&#12434;&#35299;&#38500;</button>' +
+          '<button type="button" onclick="selectAllSceneTalks(\'' + scene.id + '\')">&#20840;&#36984;&#25246;</button>' +
+          '<button type="button" class="scene-range-clear" onclick="clearSceneTalks(\'' + scene.id + '\')">&#20840;&#35299;&#38500;</button>' +
+        '</div>' +
+        '<div class="scene-talk-tools">' +
+          '<span id="sceneTalkCount_' + scene.id + '">' + getSceneTalkCountLabel(scene) + '</span>' +
+          '<span class="scene-talk-hint">行全体をタップして選択できます</span>' +
+        '</div>' +
+        '<div class="scene-talk-filters">' +
+          '<input type="search" id="sceneTalkSearch_' + scene.id + '" placeholder="&#26908;&#32034;" oninput="filterSceneTalkOptions(\'' + scene.id + '\')">' +
+          '<select id="sceneTalkChar_' + scene.id + '" onchange="filterSceneTalkOptions(\'' + scene.id + '\')">' + charOptions + '</select>' +
+        '</div>' +
+        '<div class="scene-talk-list" id="sceneTalkList_' + scene.id + '">' + renderSceneTalkOptions(scene, project) + '</div>';
+      list.appendChild(card);
       resolveSceneWallpaperThumbs();
       initSceneWallpaperDropzones();
       syncSceneTalkSelectionDom();
+    }
+
+    function selectSceneWallpaperTab(id) {
+      if (!editingSceneWallpapers.some(scene => scene.id === id)) return;
+      activeSceneWallpaperId = id;
+      renderSceneWallpaperList();
     }
 
     function sceneRangeDefaultNumbers(scene, project) {
@@ -2082,7 +2102,9 @@ let state = {
 
     function addSceneWallpaper() {
       const nextIndex = editingSceneWallpapers.length + 1;
-      editingSceneWallpapers.push({ id: 'scene_' + Date.now() + '_' + Math.floor(Math.random() * 1000), name: '\u30b7\u30fc\u30f3' + nextIndex, talkIds: [], imageId: '', image: '', size: 100, offsetX: 50, offsetY: 50 });
+      const scene = { id: 'scene_' + Date.now() + '_' + Math.floor(Math.random() * 1000), name: '\u30b7\u30fc\u30f3' + nextIndex, talkIds: [], imageId: '', image: '', order: nextIndex - 1, size: 100, offsetX: 50, offsetY: 50 };
+      editingSceneWallpapers.push(scene);
+      activeSceneWallpaperId = scene.id;
       renderSceneWallpaperList();
       const toggle = document.getElementById('sceneWallpaperToggle');
       if (toggle) toggle.checked = true;
@@ -2090,7 +2112,14 @@ let state = {
     }
 
     function deleteSceneWallpaper(id) {
+      const scene = editingSceneWallpapers.find(item => item.id === id);
+      if (!scene) return;
+      if (!confirm((scene.name || 'シーン') + 'を削除しますか？')) return;
+      const oldIndex = editingSceneWallpapers.findIndex(item => item.id === id);
       editingSceneWallpapers = editingSceneWallpapers.filter(scene => scene.id !== id);
+      if (activeSceneWallpaperId === id) {
+        activeSceneWallpaperId = editingSceneWallpapers[Math.max(0, oldIndex - 1)]?.id || editingSceneWallpapers[0]?.id || "";
+      }
       renderSceneWallpaperList();
     }
 
@@ -2098,6 +2127,10 @@ let state = {
       const scene = editingSceneWallpapers.find(item => item.id === id);
       if (!scene) return;
       scene[field] = value;
+      if (field === 'name') {
+        const tab = document.querySelector('.scene-wallpaper-tab.active');
+        if (tab && activeSceneWallpaperId === id) tab.textContent = value || 'シーン';
+      }
     }
 
     function toggleSceneTalkSelection(sceneId, talkId, checked) {
@@ -2191,6 +2224,7 @@ let state = {
         scene.size = 100;
         scene.offsetX = 50;
         scene.offsetY = 50;
+        activeSceneWallpaperId = id;
         renderSceneWallpaperList();
       } catch (error) {
         console.error('Scene wallpaper image save failed:', error);
