@@ -1380,10 +1380,86 @@
       height: min(90dvh, 860px);
       max-height: 90dvh;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
     .wallpaper-modal-content .wallpaper-preview-box {
       height: clamp(170px, 28dvh, 280px);
       background-size: contain;
+    }
+    .wallpaper-compact-header {
+      display: grid;
+      grid-template-columns: clamp(150px, 22vw, 220px) minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      background: #f8fafc;
+      flex: 0 0 auto;
+    }
+    .wallpaper-modal-content .wallpaper-preview-box.wallpaper-compact-thumb {
+      height: clamp(72px, 10dvh, 92px);
+      background-size: contain;
+      display: grid;
+      place-items: center;
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 900;
+      text-align: center;
+      padding: 8px;
+    }
+    .wallpaper-preview-box.has-image .wallpaper-empty-label {
+      display: none;
+    }
+    .wallpaper-compact-controls {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+    .wallpaper-compact-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: #334155;
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .wallpaper-compact-title span {
+      color: var(--primary-color);
+    }
+    .wallpaper-compact-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .wallpaper-compact-actions .file-label,
+    .wallpaper-remove-image-btn {
+      min-height: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      border-radius: 8px;
+      padding: 7px 11px;
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .wallpaper-remove-image-btn {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+    .wallpaper-size-row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 800;
     }
     .wallpaper-modal-content .file-input-row {
       touch-action: auto;
@@ -1392,14 +1468,17 @@
       min-height: 0;
       display: flex;
       flex-direction: column;
+      flex: 1 1 auto;
+      overflow: hidden;
     }
     .wallpaper-modal-content .scene-wallpaper-controls {
       min-height: 0;
       display: flex;
       flex-direction: column;
       flex: 1 1 auto;
+      overflow: hidden;
     }
-    .wallpaper-modal-content.drag-over .file-input-row,
+    .wallpaper-modal-content.drag-over .wallpaper-compact-header,
     .scene-wallpaper-card.drag-over .scene-wallpaper-dropzone {
       border-color: #3b82f6;
       background: #eff6ff;
@@ -1419,6 +1498,17 @@
       font-weight: bold;
       font-size: 14px;
       cursor: pointer;
+    }
+    .wallpaper-modal-actions {
+      position: sticky;
+      bottom: 0;
+      z-index: 2;
+      flex: 0 0 auto;
+      margin: 0 -20px -20px;
+      padding: 10px 20px;
+      border-top: 1px solid #e2e8f0;
+      background: rgba(255, 255, 255, .96);
+      backdrop-filter: blur(8px);
     }
     .btn-modal-cancel { background: #e2e2e8; color: #475569; }
     .btn-modal-confirm { background: var(--primary-color); color: white; }
@@ -1450,15 +1540,17 @@
 
 
     .scene-wallpaper-section {
-      margin-top: 12px;
+      margin-top: 0;
       border-top: 1px solid var(--border-color);
       padding-top: 12px;
     }
     .scene-wallpaper-toggle-row {
+      display: inline-flex;
       align-items: center;
       gap: 8px;
       font-weight: 700;
       color: #334155;
+      min-height: 36px;
     }
     .scene-wallpaper-controls {
       margin-top: 10px;
@@ -1468,7 +1560,8 @@
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
+      flex: 0 0 auto;
     }
     .scene-wallpaper-head small {
       display: block;
@@ -1499,6 +1592,7 @@
       max-height: none;
       flex: 1 1 auto;
       min-height: 0;
+      overflow-y: auto;
     }
     .scene-wallpaper-card {
       border: 1px solid var(--border-color);
@@ -1508,6 +1602,7 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
+      min-height: min(620px, 100%);
     }
     .scene-wallpaper-card-head {
       display: flex;
@@ -1537,6 +1632,13 @@
       gap: 12px;
       align-items: center;
     }
+    .scene-wallpaper-main {
+      display: grid;
+      grid-template-columns: clamp(120px, 18vw, 180px) minmax(0, auto);
+      gap: 10px;
+      align-items: center;
+      order: 6;
+    }
     .scene-wallpaper-thumb {
       height: 150px;
       border: 1px dashed #cbd5e1;
@@ -1544,7 +1646,7 @@
       background: #fff center / contain no-repeat;
     }
     .scene-wallpaper-dropzone {
-      min-height: 150px;
+      min-height: 70px;
       border: 2px dashed #cbd5e1;
       border-radius: 10px;
       background: #fff center / contain no-repeat;
@@ -1601,16 +1703,28 @@
       color: #475569;
       font-size: 12px;
       font-weight: 700;
+      order: 2;
+    }
+    .scene-talk-hint {
+      color: #94a3b8;
+      font-weight: 700;
     }
     .scene-range-tools {
       display: grid;
-      grid-template-columns: auto minmax(72px, 110px) auto minmax(72px, 110px) auto auto;
+      grid-template-columns: auto minmax(100px, 1fr) auto minmax(100px, 1fr) repeat(4, auto);
       gap: 8px;
       align-items: center;
       padding: 8px;
       border: 1px solid #e2e8f0;
       border-radius: 9px;
       background: #fff;
+      order: 1;
+    }
+    .scene-range-title {
+      grid-column: 1 / -1;
+      color: #0f172a;
+      font-size: 13px;
+      font-weight: 900;
     }
     .scene-range-tools label {
       color: #475569;
@@ -1661,6 +1775,7 @@
       display: grid;
       grid-template-columns: 1fr 0.82fr;
       gap: 8px;
+      order: 4;
     }
     .scene-talk-filters input,
     .scene-talk-filters select {
@@ -1684,9 +1799,12 @@
       background: white;
       padding: 6px;
       -webkit-overflow-scrolling: touch;
+      order: 5;
+      flex: 1 1 auto;
+      min-height: 320px;
     }
     .wallpaper-modal-content .scene-talk-list {
-      max-height: min(38dvh, 430px);
+      max-height: none;
     }
     .scene-talk-option {
       display: grid;
@@ -1754,13 +1872,31 @@
         height: 100dvh;
         max-height: 100dvh;
         border-radius: 0;
+        padding: 14px;
       }
-      .scene-wallpaper-image-row {
+      .wallpaper-compact-header {
+        grid-template-columns: 92px minmax(0, 1fr);
+        gap: 8px;
+        padding: 8px;
+      }
+      .wallpaper-modal-content .wallpaper-preview-box.wallpaper-compact-thumb {
+        height: 72px;
+      }
+      .wallpaper-compact-actions .file-label,
+      .wallpaper-remove-image-btn {
+        min-height: 32px;
+        padding: 7px 9px;
+        font-size: 12px;
+      }
+      .wallpaper-size-row {
         grid-template-columns: 1fr;
+        gap: 4px;
       }
-      .scene-wallpaper-thumb,
+      .scene-wallpaper-main {
+        grid-template-columns: 92px minmax(0, 1fr);
+      }
       .scene-wallpaper-dropzone {
-        height: 190px;
+        min-height: 70px;
       }
       .scene-range-tools {
         grid-template-columns: auto 1fr auto 1fr;
@@ -1778,11 +1914,21 @@
         align-items: flex-start;
         flex-direction: column;
       }
+      .scene-talk-hint {
+        display: none;
+      }
       .scene-talk-tool-buttons {
         width: 100%;
       }
       .scene-talk-tool-buttons button {
         flex: 1;
+      }
+      .scene-talk-list {
+        min-height: 44dvh;
+      }
+      .wallpaper-modal-actions {
+        margin: 0 -14px -14px;
+        padding: 10px 14px;
       }
     }
 

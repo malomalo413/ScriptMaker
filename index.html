@@ -14,11 +14,11 @@
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="./assets/icons/icon-512.png">
-  <link rel="stylesheet" href="./css/styles.css?v=52">
+  <link rel="stylesheet" href="./css/styles.css?v=53">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
   <script src="./js/firebase-config.js?v=30" defer></script>
   <script src="./js/firebase-share.js?v=37" defer></script>
-  <script src="./js/app.js?v=61" defer></script>
+  <script src="./js/app.js?v=62" defer></script>
 </head>
 <body class="auth-locked">
 
@@ -195,35 +195,39 @@
   <div id="wallpaperModal" class="custom-modal hidden">
     <div class="modal-content wallpaper-modal-content">
       <h4>トーク画面の壁紙設定</h4>
-      <div class="file-input-row">
-        <label class="file-label" for="wallpaperInput">壁紙画像を選択</label>
-        <input type="file" id="wallpaperInput" accept="image/*" style="display:none;" onchange="previewWallpaper(this)">
-        <div id="wallpaperPreview" class="wallpaper-preview-box"></div>
-      </div>
-      <div class="modal-row">
-        <label style="display:flex; justify-content:space-between; color:#64748b; font-size:12px;">
-          <span>画像サイズ</span>
-          <span id="wallpaperSizeVal" style="font-weight:bold; color:var(--primary-color);">100%</span>
-        </label>
-        <input type="range" id="wallpaperSizeSlider" min="100" max="250" value="100" step="2" oninput="updateWallpaperPreviewStyle()">
+      <div class="wallpaper-compact-header">
+        <div id="wallpaperPreview" class="wallpaper-preview-box wallpaper-compact-thumb">
+          <span class="wallpaper-empty-label">＋ 壁紙画像を選択</span>
+        </div>
+        <div class="wallpaper-compact-controls">
+          <div class="wallpaper-compact-title">
+            <strong>通常壁紙</strong>
+            <span id="wallpaperSizeVal">100%</span>
+          </div>
+          <div class="wallpaper-compact-actions">
+            <label class="file-label" for="wallpaperInput">画像を変更</label>
+            <button type="button" class="wallpaper-remove-image-btn" onclick="removeMainWallpaperImage()">画像を削除</button>
+          </div>
+          <input type="file" id="wallpaperInput" accept="image/*" style="display:none;" onchange="previewWallpaper(this)">
+          <label class="wallpaper-size-row">
+            <span>画像サイズ</span>
+            <input type="range" id="wallpaperSizeSlider" min="100" max="250" value="100" step="2" oninput="updateWallpaperPreviewStyle()">
+          </label>
+        </div>
       </div>
       <div class="scene-wallpaper-section">
-        <div class="modal-row-inline scene-wallpaper-toggle-row">
-          <input type="checkbox" id="sceneWallpaperToggle" onchange="toggleSceneWallpaperControls()">
-          <label for="sceneWallpaperToggle">&#12471;&#12540;&#12531;&#20999;&#12426;&#26367;&#12360;&#12434;&#26377;&#21177;&#21270;</label>
+        <div class="scene-wallpaper-head">
+          <label class="scene-wallpaper-toggle-row" for="sceneWallpaperToggle">
+            <input type="checkbox" id="sceneWallpaperToggle" onchange="toggleSceneWallpaperControls()">
+            <span>&#12471;&#12540;&#12531;&#20999;&#12426;&#26367;&#12360;&#12434;&#26377;&#21177;&#21270;</span>
+          </label>
+          <button type="button" class="btn-scene-add" onclick="addSceneWallpaper()">＋ シーン追加</button>
         </div>
         <div id="sceneWallpaperControls" class="scene-wallpaper-controls hidden">
-          <div class="scene-wallpaper-head">
-            <div>
-              <strong>&#12471;&#12540;&#12531;&#20999;&#12426;&#26367;&#12360;</strong>
-              <small>&#34920;&#31034;&#20013;&#12398;&#12475;&#12522;&#12501;&#30058;&#21495;&#12391;&#22721;&#32025;&#12434;&#20999;&#12426;&#26367;&#12360;&#12414;&#12377;</small>
-            </div>
-            <button type="button" class="btn-scene-add" onclick="addSceneWallpaper()">&#12471;&#12540;&#12531;&#36861;&#21152;</button>
-          </div>
           <div id="sceneWallpaperList" class="scene-wallpaper-list"></div>
         </div>
       </div>
-      <div class="modal-actions">
+      <div class="modal-actions wallpaper-modal-actions">
         <button class="btn-modal-cancel" onclick="clearWallpaper()">削除</button>
         <button class="btn-modal-cancel" onclick="closeModal('wallpaperModal')">キャンセル</button>
         <button class="btn-modal-confirm" id="wallpaperConfirmBtn" type="button" ontouchstart="confirmWallpaper(); return false;" onpointerdown="confirmWallpaper(); return false;" onclick="confirmWallpaper(); return false;">決定</button>

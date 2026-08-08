@@ -1621,9 +1621,11 @@ let state = {
       document.getElementById('wallpaperSizeSlider').value = wallpaperSize;
       const preview = document.getElementById('wallpaperPreview');
       preview.style.backgroundImage = selectedWallpaperBase64 ? 'url(' + selectedWallpaperBase64 + ')' : "";
+      preview.classList.toggle('has-image', !!selectedWallpaperBase64);
       resolveWallpaperUrl(wallpaper).then(url => {
         selectedWallpaperBase64 = url || selectedWallpaperBase64;
         preview.style.backgroundImage = url ? 'url(' + url + ')' : "";
+        preview.classList.toggle('has-image', !!url);
       });
       editingSceneWallpapers = (sceneSettings.scenes || []).map((scene, index) => normalizeSceneWallpaper(scene, index, project)).filter(Boolean);
       const toggle = document.getElementById('sceneWallpaperToggle');
@@ -1646,7 +1648,9 @@ let state = {
         wallpaperOffsetX = 50;
         wallpaperOffsetY = 50;
         document.getElementById('wallpaperSizeSlider').value = wallpaperSize;
-        document.getElementById('wallpaperPreview').style.backgroundImage = `url(${selectedWallpaperBase64})`;
+        const preview = document.getElementById('wallpaperPreview');
+        preview.style.backgroundImage = `url(${selectedWallpaperBase64})`;
+        preview.classList.add('has-image');
         updateWallpaperPreviewStyle();
       } catch (error) {
         console.error('Wallpaper image save failed:', error);
@@ -1657,6 +1661,22 @@ let state = {
     async function previewWallpaper(input) {
       await setMainWallpaperFile(input.files[0]);
       input.value = '';
+    }
+
+    function removeMainWallpaperImage() {
+      selectedWallpaperBase64 = "";
+      selectedWallpaperImageId = "";
+      wallpaperSize = 100;
+      wallpaperOffsetX = 50;
+      wallpaperOffsetY = 50;
+      const slider = document.getElementById('wallpaperSizeSlider');
+      if (slider) slider.value = wallpaperSize;
+      const preview = document.getElementById('wallpaperPreview');
+      if (preview) {
+        preview.style.backgroundImage = "";
+        preview.classList.remove('has-image');
+      }
+      updateWallpaperPreviewStyle();
     }
 
     function initWallpaperDropArea() {
@@ -1689,6 +1709,7 @@ let state = {
       const preview = document.getElementById('wallpaperPreview');
       preview.style.backgroundSize = wallpaperSize + "%";
       preview.style.backgroundPosition = `${wallpaperOffsetX}% ${wallpaperOffsetY}%`;
+      preview.classList.toggle('has-image', !!selectedWallpaperBase64);
     }
 
     function confirmWallpaper() {
@@ -1880,28 +1901,28 @@ let state = {
             '<input type="text" value="' + escapeHtml(scene.name) + '" placeholder="&#12471;&#12540;&#12531;&#21517;" oninput="updateSceneWallpaperField(\'' + scene.id + '\', \'name\', this.value)">' +
             '<button type="button" class="btn-scene-delete" onclick="deleteSceneWallpaper(\'' + scene.id + '\')">&#21066;&#38500;</button>' +
           '</div>' +
-          '<div class="scene-wallpaper-image-row">' +
-            '<div class="scene-wallpaper-dropzone" data-scene-wallpaper-drop="' + scene.id + '" data-scene-wallpaper-thumb="' + scene.id + '" style="background-image:' + (scene.image ? 'url(' + scene.image + ')' : 'none') + '"><span>&#30011;&#20687;&#12434;&#12371;&#12371;&#12395;&#12489;&#12525;&#12483;&#12503;<br>&#12414;&#12383;&#12399;&#30011;&#20687;&#12434;&#36984;&#25246;</span></div>' +
+          '<div class="scene-wallpaper-main">' +
+            '<div class="scene-wallpaper-dropzone" data-scene-wallpaper-drop="' + scene.id + '" data-scene-wallpaper-thumb="' + scene.id + '" style="background-image:' + (scene.image ? 'url(' + scene.image + ')' : 'none') + '"><span>＋ 壁紙画像</span></div>' +
             '<div class="scene-wallpaper-image-actions">' +
-              '<label class="scene-wallpaper-file-btn" for="' + fileId + '">&#30011;&#20687;&#12434;&#36984;&#25246;</label>' +
-              '<button type="button" class="scene-wallpaper-remove-btn" onclick="removeSceneWallpaperImage(\'' + scene.id + '\')">&#30011;&#20687;&#12434;&#21066;&#38500;</button>' +
+              '<label class="scene-wallpaper-file-btn" for="' + fileId + '">画像を変更</label>' +
+              '<button type="button" class="scene-wallpaper-remove-btn" onclick="removeSceneWallpaperImage(\'' + scene.id + '\')">画像を削除</button>' +
             '</div>' +
             '<input id="' + fileId + '" type="file" accept="image/*" style="display:none" onchange="previewSceneWallpaperImage(this, \'' + scene.id + '\')">' +
           '</div>' +
           '<div class="scene-range-tools">' +
+            '<strong class="scene-range-title">適用範囲</strong>' +
             '<label for="sceneRangeStart_' + scene.id + '">&#38283;&#22987;</label>' +
             '<select id="sceneRangeStart_' + scene.id + '">' + startOptions + '</select>' +
             '<label for="sceneRangeEnd_' + scene.id + '">&#32066;&#20102;</label>' +
             '<select id="sceneRangeEnd_' + scene.id + '">' + endOptions + '</select>' +
             '<button type="button" onclick="applySceneTalkRange(\'' + scene.id + '\', true)">&#31684;&#22258;&#12434;&#36984;&#25246;</button>' +
             '<button type="button" class="scene-range-clear" onclick="applySceneTalkRange(\'' + scene.id + '\', false)">&#31684;&#22258;&#12434;&#35299;&#38500;</button>' +
+            '<button type="button" onclick="selectAllSceneTalks(\'' + scene.id + '\')">&#20840;&#36984;&#25246;</button>' +
+            '<button type="button" class="scene-range-clear" onclick="clearSceneTalks(\'' + scene.id + '\')">&#20840;&#35299;&#38500;</button>' +
           '</div>' +
           '<div class="scene-talk-tools">' +
             '<span id="sceneTalkCount_' + scene.id + '">' + getSceneTalkCountLabel(scene) + '</span>' +
-            '<div class="scene-talk-tool-buttons">' +
-              '<button type="button" onclick="selectAllSceneTalks(\'' + scene.id + '\')">&#20840;&#36984;&#25246;</button>' +
-              '<button type="button" onclick="clearSceneTalks(\'' + scene.id + '\')">&#36984;&#25246;&#35299;&#38500;</button>' +
-            '</div>' +
+            '<span class="scene-talk-hint">行全体をタップして選択できます</span>' +
           '</div>' +
           '<div class="scene-talk-filters">' +
             '<input type="search" id="sceneTalkSearch_' + scene.id + '" placeholder="&#26908;&#32034;" oninput="filterSceneTalkOptions(\'' + scene.id + '\')">' +
