@@ -23,6 +23,11 @@ let viewerLoadErrorType = '';
 let printAssetsReadyPromise = Promise.resolve();
 let viewerDisplayMode = 'chat';
 let viewerRequestedFullscreenForOrientation = false;
+const VIEWER_PDF_PAGE_WIDTH = 1123;
+const VIEWER_PDF_PAGE_HEIGHT = 794;
+const VIEWER_PDF_PAGE_WIDTH_PT = 841.89;
+const VIEWER_PDF_PAGE_HEIGHT_PT = 595.28;
+const VIEWER_PDF_MAX_UNITS_PER_PAGE = 24;
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -846,6 +851,53 @@ function printGroupKey(info) {
   return (info?.sceneName || '') + '|' + wallpaperIdentity(wallpaper);
 }
 
+function estimatePrintTalkUnits(talk) {
+  const textLength = String(talk?.text || '').length;
+  const stageLength = stageDirectionText(talk).length;
+  return Math.max(1, Math.ceil(textLength / 34)) + (stageLength ? Math.max(1, Math.ceil(stageLength / 28)) : 0);
+}
+
+function splitPrintGroupsByPageCapacity(groups) {
+  const result = [];
+  groups.forEach(group => {
+    let current = null;
+    let units = 0;
+    const flush = () => {
+      if (current?.talks.length) result.push(current);
+      current = null;
+      units = 0;
+    };
+    group.talks.forEach(entry => {
+      const nextUnits = estimatePrintTalkUnits(entry.talk);
+      if (current?.talks.length && units + nextUnits > VIEWER_PDF_MAX_UNITS_PER_PAGE) flush();
+      if (!current) {
+        current = {
+          key: group.key,
+          sceneName: group.sceneName,
+          wallpaper: group.wallpaper,
+          talks: [],
+          partIndex: 1,
+          partCount: 1
+        };
+      }
+      current.talks.push(entry);
+      units += nextUnits;
+    });
+    flush();
+  });
+
+  const counts = new Map();
+  result.forEach(group => counts.set(group.key, (counts.get(group.key) || 0) + 1));
+  const indexes = new Map();
+  result.forEach(group => {
+    const next = (indexes.get(group.key) || 0) + 1;
+    indexes.set(group.key, next);
+    group.partIndex = next;
+    group.partCount = counts.get(group.key) || 1;
+  });
+  return result;
+}
+
 function buildPrintGroups() {
   const talks = viewerProject?.talks || [];
   const groups = [];
@@ -863,13 +915,15 @@ function buildPrintGroups() {
     }
     groups[groups.length - 1].talks.push({ talk, index });
   });
-  return groups.length ? groups : [{ key: 'empty', sceneName: '', wallpaper: viewerProject?.wallpaper || null, talks: [] }];
+  const baseGroups = groups.length ? groups : [{ key: 'empty', sceneName: '', wallpaper: viewerProject?.wallpaper || null, talks: [] }];
+  return splitPrintGroupsByPageCapacity(baseGroups);
 }
 
 function buildScriptPageHtml(group) {
   const wallpaper = group.wallpaper;
   const title = escapeHtml(viewerProject.title || '\u53f0\u672c');
-  const sceneTitle = escapeHtml(group.sceneName || (wallpaper?.image ? '\u58c1\u7d19\u30b7\u30fc\u30f3' : '\u58c1\u7d19\u306a\u3057'));
+  const baseSceneTitle = group.sceneName || (wallpaper?.image ? '\u58c1\u7d19\u30b7\u30fc\u30f3' : '\u58c1\u7d19\u306a\u3057');
+  const sceneTitle = escapeHtml(baseSceneTitle + (group.partCount > 1 ? ' ' + group.partIndex + '/' + group.partCount : ''));
   const imageHtml = wallpaper?.image
     ? '<img class="viewer-print-wallpaper-image" src="' + escapeHtml(wallpaper.image) + '" alt="' + sceneTitle + '">'
     : '<div class="viewer-print-no-wallpaper">\u58c1\u7d19\u306a\u3057</div>';
@@ -968,13 +1022,18 @@ function printDocumentStyles() {
       font-size: 14px;
       white-space: nowrap;
     }
+    .viewer-print-toolbar button.secondary {
+      background: #e2e8f0;
+      color: #334155;
+    }
     .viewer-print-pages {
       display: block;
       padding: 16px;
     }
     .viewer-print-page {
-      max-width: 920px;
-      min-height: 1120px;
+      width: ${VIEWER_PDF_PAGE_WIDTH}px;
+      min-height: ${VIEWER_PDF_PAGE_HEIGHT}px;
+      max-width: calc(100vw - 32px);
       margin: 0 auto 16px;
       padding: 22px;
       background: #fff;
@@ -1004,8 +1063,8 @@ function printDocumentStyles() {
     }
     .viewer-print-layout {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 38%;
-      gap: 28px;
+      grid-template-columns: minmax(0, 72%) minmax(220px, 28%);
+      gap: 14px;
       align-items: start;
     }
     .viewer-print-script { min-width: 0; }
@@ -1038,7 +1097,7 @@ function printDocumentStyles() {
     }
     .viewer-print-talk {
       display: grid;
-      grid-template-columns: 36px 78px minmax(0, 1fr) minmax(130px, .7fr);
+      grid-template-columns: 36px 78px minmax(0, 1fr) minmax(130px, .58fr);
       gap: 6px;
       margin: 0 0 6px;
       padding-left: 7px;
@@ -1047,10 +1106,15 @@ function printDocumentStyles() {
       page-break-inside: avoid;
       font-size: 12px;
       line-height: 1.6;
+      min-width: 0;
+      writing-mode: horizontal-tb;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: anywhere;
     }
     .viewer-print-talk.right { border-left-color: #3b82f6; }
     .viewer-print-talk.scene {
-      grid-template-columns: 36px 78px minmax(0, 1fr) minmax(130px, .7fr);
+      grid-template-columns: 36px 78px minmax(0, 1fr) minmax(130px, .58fr);
       border-left-color: #94a3b8;
       background: #f1f5f9;
       padding: 4px 6px;
@@ -1065,6 +1129,8 @@ function printDocumentStyles() {
     .viewer-print-text {
       white-space: pre-wrap;
       overflow-wrap: anywhere;
+      word-break: normal;
+      writing-mode: horizontal-tb;
     }
     .viewer-print-stage-direction {
       display: block;
@@ -1107,28 +1173,31 @@ function printDocumentStyles() {
       }
     }
     @media print {
-      @page { size: A4; margin: 14mm; }
+      @page { size: A4 landscape; margin: 10mm; }
       html, body {
-        width: auto;
+        width: 277mm;
         height: auto;
         overflow: visible;
         background: #fff !important;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
       }
       .viewer-print-toolbar { display: none !important; }
       .viewer-print-pages {
         padding: 0;
       }
       .viewer-print-page {
+        width: 277mm;
         max-width: none;
-        min-height: calc(297mm - 28mm);
+        min-height: 190mm;
         margin: 0;
         padding: 0;
         box-shadow: none;
       }
       .viewer-print-layout {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 38%;
-        gap: 12mm;
+        grid-template-columns: minmax(0, 72%) minmax(0, 28%);
+        gap: 5mm;
       }
       .viewer-print-art {
         min-height: 110mm;
@@ -1144,16 +1213,321 @@ function printDocumentStyles() {
   `;
 }
 
+function printableDocumentScript() {
+  return `
+    const PDF_PAGE_WIDTH = ${VIEWER_PDF_PAGE_WIDTH};
+    const PDF_PAGE_HEIGHT = ${VIEWER_PDF_PAGE_HEIGHT};
+    const PDF_PAGE_WIDTH_PT = ${VIEWER_PDF_PAGE_WIDTH_PT};
+    const PDF_PAGE_HEIGHT_PT = ${VIEWER_PDF_PAGE_HEIGHT_PT};
+    function setPdfStatus(text, isError) {
+      const status = document.getElementById('viewerPrintStatus');
+      if (!status) return;
+      status.textContent = text || '';
+      status.style.color = isError ? '#dc2626' : '#475569';
+    }
+    function safeFileName(name) {
+      const base = String(name || 'ScriptMaker').replace(/[\\\\/:*?"<>|]/g, '_').trim() || 'ScriptMaker';
+      const date = new Date().toISOString().slice(0, 10);
+      return base + '_' + date + '.pdf';
+    }
+    function asciiBytes(value) {
+      const text = String(value);
+      const bytes = new Uint8Array(text.length);
+      for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i) & 0xff;
+      return bytes;
+    }
+    function binaryBytes(binary) {
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i) & 0xff;
+      return bytes;
+    }
+    function concatBytes(parts) {
+      const total = parts.reduce((sum, part) => sum + part.length, 0);
+      const output = new Uint8Array(total);
+      let offset = 0;
+      parts.forEach(part => {
+        output.set(part, offset);
+        offset += part.length;
+      });
+      return output;
+    }
+    function jpegBinaryFromDataUrl(dataUrl) {
+      return atob(String(dataUrl).split(',')[1] || '');
+    }
+    function buildPdfFromJpegs(pages) {
+      const parts = [];
+      const offsets = [0];
+      let position = 0;
+      const add = part => { parts.push(part); position += part.length; };
+      const addAscii = text => add(asciiBytes(text));
+      const addObject = (id, bodyParts) => {
+        offsets[id] = position;
+        addAscii(id + ' 0 obj\\n');
+        bodyParts.forEach(part => typeof part === 'string' ? addAscii(part) : add(part));
+        addAscii('\\nendobj\\n');
+      };
+      addAscii('%PDF-1.4\\n%\\xE2\\xE3\\xCF\\xD3\\n');
+      const kids = [];
+      const pageObjects = [];
+      let nextId = 3;
+      pages.forEach((page, index) => {
+        const pageId = nextId++;
+        const contentId = nextId++;
+        const imageId = nextId++;
+        kids.push(pageId + ' 0 R');
+        pageObjects.push({ pageId, contentId, imageId, page, imageName: 'Im' + index });
+      });
+      addObject(1, ['<< /Type /Catalog /Pages 2 0 R >>']);
+      addObject(2, ['<< /Type /Pages /Kids [', kids.join(' '), '] /Count ', String(pages.length), ' >>']);
+      pageObjects.forEach(item => {
+        addObject(item.pageId, [
+          '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + PDF_PAGE_WIDTH_PT + ' ' + PDF_PAGE_HEIGHT_PT + '] ',
+          '/Resources << /XObject << /' + item.imageName + ' ' + item.imageId + ' 0 R >> >> /Contents ' + item.contentId + ' 0 R >>'
+        ]);
+        const stream = 'q\\n' + PDF_PAGE_WIDTH_PT + ' 0 0 ' + PDF_PAGE_HEIGHT_PT + ' 0 0 cm\\n/' + item.imageName + ' Do\\nQ\\n';
+        addObject(item.contentId, ['<< /Length ' + stream.length + ' >>\\nstream\\n' + stream + 'endstream']);
+        const jpeg = binaryBytes(item.page.binary);
+        addObject(item.imageId, [
+          '<< /Type /XObject /Subtype /Image /Width ' + item.page.width + ' /Height ' + item.page.height,
+          ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + jpeg.length + ' >>\\nstream\\n',
+          jpeg,
+          '\\nendstream'
+        ]);
+      });
+      const xrefOffset = position;
+      addAscii('xref\\n0 ' + nextId + '\\n');
+      addAscii('0000000000 65535 f \\n');
+      for (let i = 1; i < nextId; i++) addAscii(String(offsets[i]).padStart(10, '0') + ' 00000 n \\n');
+      addAscii('trailer\\n<< /Size ' + nextId + ' /Root 1 0 R >>\\nstartxref\\n' + xrefOffset + '\\n%%EOF');
+      return new Blob([concatBytes(parts)], { type: 'application/pdf' });
+    }
+    async function waitForImages() {
+      const images = [...document.querySelectorAll('.viewer-print-pages img')];
+      await Promise.race([
+        Promise.all(images.map(image => image.complete ? Promise.resolve() : new Promise(resolve => {
+          image.onload = resolve;
+          image.onerror = resolve;
+        }))),
+        new Promise(resolve => setTimeout(resolve, 5000))
+      ]);
+      if (document.fonts?.ready) await document.fonts.ready.catch(() => {});
+    }
+    function colorForTalk(row) {
+      if (row.classList.contains('script-color-red')) return '#991b1b';
+      if (row.classList.contains('script-color-blue')) return '#1e3a8a';
+      if (row.classList.contains('script-color-green')) return '#166534';
+      if (row.classList.contains('script-color-yellow')) return '#854d0e';
+      return '#111827';
+    }
+    function fillRoundRect(ctx, x, y, width, height, radius) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+      ctx.fill();
+    }
+    function wrapCanvasText(ctx, text, maxWidth) {
+      const output = [];
+      String(text || '').split(/\\r?\\n/).forEach(sourceLine => {
+        let line = '';
+        Array.from(sourceLine).forEach(char => {
+          const next = line + char;
+          if (line && ctx.measureText(next).width > maxWidth) {
+            output.push(line);
+            line = char;
+          } else {
+            line = next;
+          }
+        });
+        output.push(line);
+      });
+      return output.length ? output : [''];
+    }
+    function loadCanvasImage(src) {
+      return new Promise(resolve => {
+        if (!src || /^data:image\\/svg/i.test(src)) {
+          resolve(null);
+          return;
+        }
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        if (!src.startsWith('data:') && !src.startsWith('blob:')) img.crossOrigin = 'anonymous';
+        img.src = src;
+      });
+    }
+    function drawContainImage(ctx, image, x, y, width, height) {
+      if (!image) {
+        ctx.fillStyle = '#f1f5f9';
+        fillRoundRect(ctx, x, y, width, height, 10);
+        ctx.fillStyle = '#64748b';
+        ctx.font = '16px sans-serif';
+        ctx.fillText('壁紙なし', x + 18, y + 34);
+        return;
+      }
+      const ratio = Math.min(width / image.naturalWidth, height / image.naturalHeight);
+      const drawWidth = image.naturalWidth * ratio;
+      const drawHeight = image.naturalHeight * ratio;
+      const drawX = x + (width - drawWidth) / 2;
+      const drawY = y + (height - drawHeight) / 2;
+      ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+    }
+    async function renderPageToJpeg(page) {
+      const scale = Math.min(2, Math.max(1.25, window.devicePixelRatio || 1.5));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(PDF_PAGE_WIDTH * scale);
+      canvas.height = Math.round(PDF_PAGE_HEIGHT * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.scale(scale, scale);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, PDF_PAGE_WIDTH, PDF_PAGE_HEIGHT);
+
+      const title = page.querySelector('.viewer-print-title')?.textContent?.trim() || document.title.replace(/ PDF$/, '') || 'ScriptMaker';
+      const scene = page.querySelector('.viewer-print-scene')?.textContent?.trim() || '';
+      ctx.fillStyle = '#0f172a';
+      ctx.font = '700 28px sans-serif';
+      ctx.fillText(title, 26, 40);
+      ctx.font = '700 15px sans-serif';
+      ctx.fillText(scene, 28, 66);
+      ctx.strokeStyle = '#111827';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(24, 82);
+      ctx.lineTo(PDF_PAGE_WIDTH - 24, 82);
+      ctx.stroke();
+
+      const artX = 788;
+      const artY = 106;
+      const artW = 308;
+      const artH = 620;
+      ctx.fillStyle = '#f8fafc';
+      fillRoundRect(ctx, artX - 8, artY - 8, artW + 16, artH + 16, 12);
+      const imageSrc = page.querySelector('.viewer-print-wallpaper-image')?.getAttribute('src') || '';
+      drawContainImage(ctx, await loadCanvasImage(imageSrc), artX, artY, artW, artH);
+
+      const rows = [...page.querySelectorAll('.viewer-print-talk')];
+      const numberX = 30;
+      const nameX = 86;
+      const textX = 168;
+      const stageX = 552;
+      const textW = 360;
+      const stageW = 210;
+      let y = 112;
+      rows.forEach(row => {
+        if (y > PDF_PAGE_HEIGHT - 42) return;
+        const number = row.querySelector('.viewer-print-number')?.textContent?.trim() || '';
+        const name = row.querySelector('.viewer-print-name')?.textContent?.trim() || '';
+        const text = row.querySelector('.viewer-print-text')?.textContent || '';
+        const stage = row.querySelector('.viewer-print-stage-direction')?.textContent || '';
+        const isScene = row.classList.contains('scene');
+        const color = isScene ? '#475569' : colorForTalk(row);
+        ctx.font = '14px sans-serif';
+        const textLines = wrapCanvasText(ctx, text, textW);
+        const stageLines = wrapCanvasText(ctx, stage, stageW);
+        const lineCount = Math.max(textLines.length, stage ? stageLines.length : 1);
+        const rowH = Math.max(30, lineCount * 20 + 10);
+        if (isScene) {
+          ctx.fillStyle = '#f1f5f9';
+          fillRoundRect(ctx, numberX - 6, y - 14, stageX + stageW - numberX + 12, rowH, 7);
+        }
+        ctx.fillStyle = '#e2e8f0';
+        fillRoundRect(ctx, numberX - 2, y - 14, 42, 22, 6);
+        ctx.fillStyle = '#475569';
+        ctx.font = '700 13px sans-serif';
+        ctx.fillText(number, numberX + 5, y + 2);
+        ctx.fillStyle = color;
+        ctx.font = '700 13px sans-serif';
+        ctx.fillText(name, nameX, y + 2);
+        ctx.font = '14px sans-serif';
+        textLines.forEach((line, index) => ctx.fillText(line, textX, y + index * 20 + 2));
+        if (stage) {
+          ctx.fillStyle = 'rgba(100, 116, 139, 0.18)';
+          fillRoundRect(ctx, stageX - 8, y - 14, stageW + 16, rowH - 2, 7);
+          ctx.fillStyle = '#475569';
+          ctx.font = '13px sans-serif';
+          stageLines.forEach((line, index) => ctx.fillText(line, stageX, y + index * 19 + 2));
+        }
+        y += rowH + 4;
+      });
+
+      return { binary: jpegBinaryFromDataUrl(canvas.toDataURL('image/jpeg', 0.92)), width: canvas.width, height: canvas.height };
+    }
+    async function savePdfBlob(blob, fileName) {
+      if (window.showSaveFilePicker) {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: fileName,
+            types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }]
+          });
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          return;
+        } catch (error) {
+          if (error && error.name === 'AbortError') throw error;
+          console.warn('File picker failed, falling back to download', error);
+        }
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+    async function downloadViewerPdf() {
+      const button = document.getElementById('viewerDownloadPdfButton');
+      try {
+        if (button) {
+          button.disabled = true;
+          button.textContent = 'PDF生成中...';
+        }
+        setPdfStatus('画像とページを準備しています...', false);
+        await waitForImages();
+        const pages = [...document.querySelectorAll('.viewer-print-page')];
+        if (!pages.length) throw new Error('No print pages.');
+        const rendered = [];
+        for (let i = 0; i < pages.length; i++) {
+          setPdfStatus('PDF生成中... ' + (i + 1) + ' / ' + pages.length, false);
+          rendered.push(await renderPageToJpeg(pages[i]));
+        }
+        const blob = buildPdfFromJpegs(rendered);
+        await savePdfBlob(blob, safeFileName(document.title.replace(/ PDF$/, '')));
+        setPdfStatus('PDFを保存しました。', false);
+      } catch (error) {
+        console.error('PDF download failed', error);
+        if (error?.name === 'AbortError') setPdfStatus('PDF保存をキャンセルしました。', false);
+        else setPdfStatus('PDFを生成できませんでした。印刷ボタンをお試しください。', true);
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = 'PDFをダウンロード';
+        }
+      }
+    }
+    window.downloadViewerPdf = downloadViewerPdf;
+  `;
+}
+
 function buildPrintableHtml() {
   const pages = document.getElementById('viewerPrintPages')?.innerHTML || '';
   const title = escapeHtml(viewerProject?.title || '\u53f0\u672c');
   return '<!doctype html><html lang="ja"><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width, initial-scale=1">' +
     '<title>' + title + ' PDF</title><style>' + printDocumentStyles() + '</style></head>' +
-    '<body><div class="viewer-print-toolbar"><strong>' + title + '</strong>' +
-    '<button type="button" onclick="window.print()">印刷 / PDF保存</button></div>' +
+    '<body><div class="viewer-print-toolbar"><strong>' + title + '</strong><span id="viewerPrintStatus"></span>' +
+    '<button id="viewerDownloadPdfButton" type="button" onclick="downloadViewerPdf()">PDF&#12434;&#12480;&#12454;&#12531;&#12525;&#12540;&#12489;</button><button class="secondary" type="button" onclick="window.print()">&#21360;&#21047;</button></div>' +
     '<main class="viewer-print-pages">' + pages + '</main>' +
-    '<script>window.addEventListener("load",function(){setTimeout(function(){try{window.print()}catch(e){}},300);});<\/script>' +
+    '<script>' + printableDocumentScript() + '<\/script>' +
     '</body></html>';
 }
 
