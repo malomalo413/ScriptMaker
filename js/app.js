@@ -1460,8 +1460,14 @@ let state = {
       }
     }
 
-    function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
-    function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+    function openModal(id) {
+      document.getElementById(id).classList.remove('hidden');
+      document.body.classList.add('modal-open');
+    }
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+      if (!document.querySelector('.custom-modal:not(.hidden)')) document.body.classList.remove('modal-open');
+    }
 
     function initCharacterModalActions() {
       const confirmBtn = document.getElementById('charConfirmBtn');
@@ -1582,10 +1588,10 @@ let state = {
       renderSceneWallpaperList();
       toggleSceneWallpaperControls();
       openModal('wallpaperModal');
+      initWallpaperDropArea();
     }
 
-    async function previewWallpaper(input) {
-      const file = input.files[0];
+    async function setMainWallpaperFile(file) {
       if (!file) return;
 
       try {
@@ -1602,6 +1608,34 @@ let state = {
         console.error('Wallpaper image save failed:', error);
         alert('壁紙画像を保存できませんでした。別の画像を選ぶか、画像サイズを小さくしてください。');
       }
+    }
+
+    async function previewWallpaper(input) {
+      await setMainWallpaperFile(input.files[0]);
+      input.value = '';
+    }
+
+    function initWallpaperDropArea() {
+      const modal = document.getElementById('wallpaperModal');
+      const preview = document.getElementById('wallpaperPreview');
+      if (!modal || !preview) return;
+      preview.ondragenter = event => {
+        event.preventDefault();
+        modal.querySelector('.wallpaper-modal-content')?.classList.add('drag-over');
+      };
+      preview.ondragover = event => {
+        event.preventDefault();
+        modal.querySelector('.wallpaper-modal-content')?.classList.add('drag-over');
+      };
+      preview.ondragleave = event => {
+        if (!preview.contains(event.relatedTarget)) modal.querySelector('.wallpaper-modal-content')?.classList.remove('drag-over');
+      };
+      preview.ondrop = event => {
+        event.preventDefault();
+        modal.querySelector('.wallpaper-modal-content')?.classList.remove('drag-over');
+        const file = Array.from(event.dataTransfer?.files || []).find(item => /^image\/(jpeg|png|webp|jpg)/i.test(item.type));
+        if (file) setMainWallpaperFile(file);
+      };
     }
 
     function updateWallpaperPreviewStyle() {
@@ -1791,7 +1825,11 @@ let state = {
       editingSceneWallpapers.forEach((scene) => {
         const card = document.createElement('div');
         card.className = 'scene-wallpaper-card';
+        card.dataset.sceneId = scene.id;
         const fileId = 'sceneWallpaperInput_' + scene.id;
+        const rangeDefault = sceneRangeDefaultNumbers(scene, project);
+        const startOptions = renderSceneRangeOptions(project, rangeDefault.start);
+        const endOptions = renderSceneRangeOptions(project, rangeDefault.end);
         const charOptions = ['<option value="">&#35441;&#32773;&#12391;&#32094;&#12426;&#36796;&#12415;</option>'].concat(project.characters.map(char => '<option value="' + escapeHtml(char.name) + '">' + escapeHtml(char.name) + '</option>')).join('');
         card.innerHTML =
           '<div class="scene-wallpaper-card-head">' +
@@ -1799,9 +1837,20 @@ let state = {
             '<button type="button" class="btn-scene-delete" onclick="deleteSceneWallpaper(\'' + scene.id + '\')">&#21066;&#38500;</button>' +
           '</div>' +
           '<div class="scene-wallpaper-image-row">' +
-            '<div class="scene-wallpaper-thumb" data-scene-wallpaper-thumb="' + scene.id + '" style="background-image:' + (scene.image ? 'url(' + scene.image + ')' : 'none') + '"></div>' +
-            '<label class="scene-wallpaper-file-btn" for="' + fileId + '">&#22721;&#32025;&#30011;&#20687;&#12434;&#36984;&#25246;</label>' +
+            '<div class="scene-wallpaper-dropzone" data-scene-wallpaper-drop="' + scene.id + '" data-scene-wallpaper-thumb="' + scene.id + '" style="background-image:' + (scene.image ? 'url(' + scene.image + ')' : 'none') + '"><span>&#30011;&#20687;&#12434;&#12371;&#12371;&#12395;&#12489;&#12525;&#12483;&#12503;<br>&#12414;&#12383;&#12399;&#30011;&#20687;&#12434;&#36984;&#25246;</span></div>' +
+            '<div class="scene-wallpaper-image-actions">' +
+              '<label class="scene-wallpaper-file-btn" for="' + fileId + '">&#30011;&#20687;&#12434;&#36984;&#25246;</label>' +
+              '<button type="button" class="scene-wallpaper-remove-btn" onclick="removeSceneWallpaperImage(\'' + scene.id + '\')">&#30011;&#20687;&#12434;&#21066;&#38500;</button>' +
+            '</div>' +
             '<input id="' + fileId + '" type="file" accept="image/*" style="display:none" onchange="previewSceneWallpaperImage(this, \'' + scene.id + '\')">' +
+          '</div>' +
+          '<div class="scene-range-tools">' +
+            '<label for="sceneRangeStart_' + scene.id + '">&#38283;&#22987;</label>' +
+            '<select id="sceneRangeStart_' + scene.id + '">' + startOptions + '</select>' +
+            '<label for="sceneRangeEnd_' + scene.id + '">&#32066;&#20102;</label>' +
+            '<select id="sceneRangeEnd_' + scene.id + '">' + endOptions + '</select>' +
+            '<button type="button" onclick="applySceneTalkRange(\'' + scene.id + '\', true)">&#31684;&#22258;&#12434;&#36984;&#25246;</button>' +
+            '<button type="button" class="scene-range-clear" onclick="applySceneTalkRange(\'' + scene.id + '\', false)">&#31684;&#22258;&#12434;&#35299;&#38500;</button>' +
           '</div>' +
           '<div class="scene-talk-tools">' +
             '<span id="sceneTalkCount_' + scene.id + '">' + getSceneTalkCountLabel(scene) + '</span>' +
@@ -1818,6 +1867,23 @@ let state = {
         list.appendChild(card);
       });
       resolveSceneWallpaperThumbs();
+      initSceneWallpaperDropzones();
+      syncSceneTalkSelectionDom();
+    }
+
+    function sceneRangeDefaultNumbers(scene, project) {
+      const indexes = (scene.talkIds || []).map(id => (project.talks || []).findIndex(talk => talk.id === id) + 1).filter(index => index > 0);
+      if (indexes.length) return { start: Math.min(...indexes), end: Math.max(...indexes) };
+      return { start: 1, end: Math.max(1, (project.talks || []).length) };
+    }
+
+    function renderSceneRangeOptions(project, selectedNumber) {
+      return (project.talks || []).map((talk, index) => {
+        const number = String(index + 1).padStart(3, '0');
+        const name = escapeHtml(talk.charName || '');
+        const selected = Number(selectedNumber) === index + 1 ? ' selected' : '';
+        return '<option value="' + (index + 1) + '"' + selected + '>' + number + ' ' + name + '</option>';
+      }).join('');
     }
 
     function resolveSceneWallpaperThumbs() {
@@ -1826,7 +1892,31 @@ let state = {
         if (!thumb) return;
         resolveWallpaperUrl(scene).then(url => {
           thumb.style.backgroundImage = url ? 'url(' + url + ')' : 'none';
+          thumb.classList.toggle('has-image', !!url);
         });
+      });
+    }
+
+    function initSceneWallpaperDropzones() {
+      document.querySelectorAll('[data-scene-wallpaper-drop]').forEach(zone => {
+        const sceneId = zone.dataset.sceneWallpaperDrop;
+        zone.ondragenter = event => {
+          event.preventDefault();
+          zone.closest('.scene-wallpaper-card')?.classList.add('drag-over');
+        };
+        zone.ondragover = event => {
+          event.preventDefault();
+          zone.closest('.scene-wallpaper-card')?.classList.add('drag-over');
+        };
+        zone.ondragleave = event => {
+          if (!zone.contains(event.relatedTarget)) zone.closest('.scene-wallpaper-card')?.classList.remove('drag-over');
+        };
+        zone.ondrop = event => {
+          event.preventDefault();
+          zone.closest('.scene-wallpaper-card')?.classList.remove('drag-over');
+          const file = Array.from(event.dataTransfer?.files || []).find(item => /^image\/(jpeg|png|webp|jpg)/i.test(item.type));
+          if (file) setSceneWallpaperFile(sceneId, file);
+        };
       });
     }
 
@@ -1838,9 +1928,9 @@ let state = {
         const summary = escapeHtml((talk.text || '').replace(/\s+/g, ' ').slice(0, 42));
         const charName = escapeHtml(talk.charName || '');
         const ownerText = owner ? '<small>' + escapeHtml(owner.name) + '&#12391;&#36984;&#25246;&#20013;</small>' : '';
-        return '<label class="scene-talk-option' + ownedClass + '" data-talk-id="' + talk.id + '" data-char="' + charName + '" data-search="' + escapeHtml((talk.charName || '') + ' ' + (talk.text || '')) + '">' +
+        return '<label class="scene-talk-option' + ownedClass + (checked ? ' is-selected' : '') + '" data-talk-id="' + talk.id + '" data-char="' + charName + '" data-search="' + escapeHtml((talk.charName || '') + ' ' + (talk.text || '')) + '">' +
           '<input type="checkbox" ' + checked + ' onchange="toggleSceneTalkSelection(\'' + scene.id + '\', \'' + talk.id + '\', this.checked)">' +
-          '<span><strong>' + (index + 1) + '. ' + charName + '</strong><em>' + summary + '</em>' + ownerText + '</span>' +
+          '<span><strong>' + String(index + 1).padStart(3, '0') + ' ' + charName + '</strong><em>' + summary + '</em>' + ownerText + '</span>' +
         '</label>';
       }).join('');
     }
@@ -1903,9 +1993,9 @@ let state = {
     }
 
     function syncSceneTalkSelectionDom(talkId) {
-      const owner = editingSceneWallpapers.find(scene => Array.isArray(scene.talkIds) && scene.talkIds.includes(talkId)) || null;
       document.querySelectorAll('.scene-talk-option').forEach(row => {
-        if (row.dataset.talkId !== talkId) return;
+        if (talkId && row.dataset.talkId !== talkId) return;
+        const owner = editingSceneWallpapers.find(scene => Array.isArray(scene.talkIds) && scene.talkIds.includes(row.dataset.talkId)) || null;
         const list = row.closest('.scene-talk-list');
         const sceneId = list ? list.id.replace(/^sceneTalkList_/, '') : '';
         const input = row.querySelector('input[type="checkbox"]');
@@ -1913,6 +2003,7 @@ let state = {
         const oldOwnerLabel = row.querySelector('small');
         const isOwnerScene = !!owner && owner.id === sceneId;
         if (input) input.checked = isOwnerScene;
+        row.classList.toggle('is-selected', isOwnerScene);
         row.classList.toggle('scene-talk-owned', !!owner && !isOwnerScene);
         if (oldOwnerLabel) oldOwnerLabel.remove();
         if (owner && !isOwnerScene && textWrap) {
@@ -1955,26 +2046,52 @@ let state = {
       syncSceneTalkSelectionDom(talkId);
     }
 
+    function sceneRangeTalkIds(sceneId) {
+      const project = state.projects[state.currentProjectId];
+      if (!project) return [];
+      ensureTalkIds(project);
+      const startInput = document.getElementById('sceneRangeStart_' + sceneId);
+      const endInput = document.getElementById('sceneRangeEnd_' + sceneId);
+      let start = parseInt(startInput?.value, 10) || 1;
+      let end = parseInt(endInput?.value, 10) || start;
+      if (start > end) [start, end] = [end, start];
+      return project.talks.slice(start - 1, end).map(talk => talk.id).filter(Boolean);
+    }
+
+    function applySceneTalkRange(sceneId, shouldSelect) {
+      const scene = editingSceneWallpapers.find(item => item.id === sceneId);
+      if (!scene) return;
+      const ids = sceneRangeTalkIds(sceneId);
+      if (shouldSelect) {
+        editingSceneWallpapers.forEach(item => {
+          if (item.id !== sceneId) item.talkIds = (item.talkIds || []).filter(id => !ids.includes(id));
+        });
+        scene.talkIds = [...new Set([...(scene.talkIds || []), ...ids])];
+      } else {
+        scene.talkIds = (scene.talkIds || []).filter(id => !ids.includes(id));
+      }
+      enforceUniqueSceneTalkSelections(editingSceneWallpapers);
+      syncSceneTalkSelectionDom();
+    }
+
     function selectAllSceneTalks(sceneId) {
       const project = state.projects[state.currentProjectId];
       const scene = editingSceneWallpapers.find(item => item.id === sceneId);
       if (!project || !scene) return;
-      const visibleIds = getVisibleSceneTalkIds(sceneId);
-      const filtersActive = isSceneTalkFilterActive(sceneId);
-      const ids = filtersActive ? visibleIds : project.talks.map(talk => talk.id);
+      const ids = project.talks.map(talk => talk.id);
       editingSceneWallpapers.forEach(item => {
         if (item.id !== sceneId) item.talkIds = (item.talkIds || []).filter(id => !ids.includes(id));
       });
       scene.talkIds = [...new Set([...(scene.talkIds || []), ...ids])];
       enforceUniqueSceneTalkSelections(editingSceneWallpapers);
-      rerenderSceneWallpaperListKeepingScroll(sceneId);
+      syncSceneTalkSelectionDom();
     }
 
     function clearSceneTalks(sceneId) {
       const scene = editingSceneWallpapers.find(item => item.id === sceneId);
       if (!scene) return;
       scene.talkIds = [];
-      rerenderSceneWallpaperListKeepingScroll(sceneId);
+      syncSceneTalkSelectionDom();
     }
 
     function getVisibleSceneTalkIds(sceneId) {
@@ -1997,7 +2114,42 @@ let state = {
       });
     }
 
+    async function setSceneWallpaperFile(id, file) {
+      if (!file) return;
+      try {
+        const stored = await storeWallpaperFile(file);
+        const scene = editingSceneWallpapers.find(item => item.id === id);
+        if (!scene) return;
+        scene.imageId = stored.id;
+        scene.image = "";
+        scene.imageUrl = stored.url;
+        scene.size = 100;
+        scene.offsetX = 50;
+        scene.offsetY = 50;
+        renderSceneWallpaperList();
+      } catch (error) {
+        console.error('Scene wallpaper image save failed:', error);
+        alert('シーン壁紙画像を保存できませんでした。別の画像を選んでください。');
+      }
+    }
+
+    function removeSceneWallpaperImage(id) {
+      const scene = editingSceneWallpapers.find(item => item.id === id);
+      if (!scene) return;
+      scene.imageId = '';
+      scene.image = '';
+      scene.imageUrl = '';
+      const thumb = document.querySelector('[data-scene-wallpaper-thumb="' + scene.id + '"]');
+      if (thumb) {
+        thumb.style.backgroundImage = 'none';
+        thumb.classList.remove('has-image');
+      }
+    }
+
     async function previewSceneWallpaperImage(input, id) {
+      await setSceneWallpaperFile(id, input.files[0]);
+      input.value = '';
+      return;
       const file = input.files[0];
       if (!file) return;
       try {
