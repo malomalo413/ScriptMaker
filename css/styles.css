@@ -209,12 +209,46 @@
       transition: opacity 460ms ease;
       will-change: opacity, background-image;
     }
+    .editor-wallpaper-layer::before,
+    .editor-wallpaper-layer::after {
+      content: "";
+      display: none;
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image: var(--chat-wallpaper-image, none);
+      background-position: var(--chat-wallpaper-position, center);
+      background-repeat: no-repeat;
+    }
     .editor-wallpaper-layer.active {
       opacity: 1;
     }
     .editor-view > *:not(.editor-wallpaper-layer) {
       position: relative;
       z-index: 1;
+    }
+
+    @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+      .editor-view.display-mode-chat .editor-wallpaper-layer {
+        background-image: none !important;
+        background-color: #e5e7eb;
+        overflow: hidden;
+      }
+      .editor-view.display-mode-chat .editor-wallpaper-layer::before,
+      .editor-view.display-mode-chat .editor-wallpaper-layer::after {
+        display: block;
+      }
+      .editor-view.display-mode-chat .editor-wallpaper-layer::before {
+        inset: -42px;
+        background-size: cover;
+        filter: blur(30px);
+        opacity: .42;
+        transform: scale(1.04);
+      }
+      .editor-view.display-mode-chat .editor-wallpaper-layer::after {
+        background-size: contain;
+        background-color: rgba(15, 23, 42, .08);
+      }
     }
 
     .nav-bar {

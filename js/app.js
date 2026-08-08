@@ -1800,6 +1800,8 @@ let state = {
         layer.style.backgroundImage = "";
         layer.style.backgroundSize = "";
         layer.style.backgroundPosition = "";
+        layer.style.removeProperty('--chat-wallpaper-image');
+        layer.style.removeProperty('--chat-wallpaper-position');
         layer.style.transform = "";
         return;
       }
@@ -1808,11 +1810,15 @@ let state = {
       if (layer.dataset.wallpaperKey !== expectedKey) return;
       if (!imageUrl) {
         layer.style.backgroundImage = "";
+        layer.style.removeProperty('--chat-wallpaper-image');
+        layer.style.removeProperty('--chat-wallpaper-position');
         return;
       }
       layer.style.backgroundImage = 'url(' + imageUrl + ')';
       layer.style.backgroundSize = size === 100 ? 'cover' : size + '%';
       layer.style.backgroundPosition = (wallpaper.offsetX ?? 50) + '% ' + (wallpaper.offsetY ?? 50) + '%';
+      layer.style.setProperty('--chat-wallpaper-image', 'url("' + imageUrl.replace(/"/g, '\\"') + '")');
+      layer.style.setProperty('--chat-wallpaper-position', (wallpaper.offsetX ?? 50) + '% ' + (wallpaper.offsetY ?? 50) + '%');
       layer.style.transform = "";
     }
 

@@ -35,6 +35,17 @@ html, body {
   transition: opacity .55s ease;
   z-index: 0;
 }
+.viewer-wallpaper::before,
+.viewer-wallpaper::after {
+  content: "";
+  display: none;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--chat-wallpaper-image, none);
+  background-position: var(--chat-wallpaper-position, center);
+  background-repeat: no-repeat;
+}
 .viewer-wallpaper.active { opacity: 1; }
 .viewer-header {
   position: relative;
@@ -228,6 +239,29 @@ html, body {
   padding: 4px 8px;
   font-size: 12px;
   font-weight: 800;
+}
+
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+  .viewer-app.viewer-mode-chat .viewer-wallpaper {
+    background-image: none !important;
+    background-color: #e5e7eb;
+    overflow: hidden;
+  }
+  .viewer-app.viewer-mode-chat .viewer-wallpaper::before,
+  .viewer-app.viewer-mode-chat .viewer-wallpaper::after {
+    display: block;
+  }
+  .viewer-app.viewer-mode-chat .viewer-wallpaper::before {
+    inset: -42px;
+    background-size: cover;
+    filter: blur(30px);
+    opacity: .42;
+    transform: scale(1.04);
+  }
+  .viewer-app.viewer-mode-chat .viewer-wallpaper::after {
+    background-size: contain;
+    background-color: rgba(15, 23, 42, .08);
+  }
 }
 .viewer-timeline {
   position: relative;

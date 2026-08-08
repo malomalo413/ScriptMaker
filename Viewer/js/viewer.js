@@ -1554,11 +1554,17 @@ function openPrintableWindow() {
 function styleLayer(layer, wallpaper) {
   if (!wallpaper?.image) {
     layer.style.backgroundImage = '';
+    layer.style.backgroundSize = '';
+    layer.style.backgroundPosition = '';
+    layer.style.removeProperty('--chat-wallpaper-image');
+    layer.style.removeProperty('--chat-wallpaper-position');
     return;
   }
   layer.style.backgroundImage = 'url(' + wallpaper.image + ')';
   layer.style.backgroundSize = (wallpaper.size || 100) === 100 ? 'cover' : (wallpaper.size || 100) + '%';
   layer.style.backgroundPosition = (wallpaper.offsetX ?? 50) + '% ' + (wallpaper.offsetY ?? 50) + '%';
+  layer.style.setProperty('--chat-wallpaper-image', 'url("' + String(wallpaper.image).replace(/"/g, '\\"') + '")');
+  layer.style.setProperty('--chat-wallpaper-position', (wallpaper.offsetX ?? 50) + '% ' + (wallpaper.offsetY ?? 50) + '%');
 }
 
 function setWallpaper(wallpaper, key, force = false) {
