@@ -1774,9 +1774,37 @@ let state = {
       return [document.getElementById('editorWallpaperLayer'), document.getElementById('editorWallpaperLayerNext')].filter(Boolean);
     }
 
+    function isDesktopChatWallpaperMode() {
+      return editorDisplayMode !== 'script'
+        && window.matchMedia?.('(min-width: 1024px) and (hover: hover) and (pointer: fine)').matches;
+    }
+
+    function updateEditorDesktopChatWallpaperFrame() {
+      const layers = getWallpaperLayers();
+      const editorView = document.getElementById('editorView');
+      const timeline = document.getElementById('talkTimeline');
+      if (!layers.length) return;
+      if (!isDesktopChatWallpaperMode() || !editorView || !timeline) {
+        layers.forEach(layer => {
+          layer.style.removeProperty('--chat-wallpaper-frame-top');
+          layer.style.removeProperty('--chat-wallpaper-frame-bottom');
+        });
+        return;
+      }
+      const viewRect = editorView.getBoundingClientRect();
+      const timelineRect = timeline.getBoundingClientRect();
+      const top = Math.max(0, Math.round(timelineRect.top - viewRect.top));
+      const bottom = Math.max(0, Math.round(viewRect.bottom - timelineRect.bottom));
+      layers.forEach(layer => {
+        layer.style.setProperty('--chat-wallpaper-frame-top', top + 'px');
+        layer.style.setProperty('--chat-wallpaper-frame-bottom', bottom + 'px');
+      });
+    }
+
     function setEditorWallpaper(wallpaper, key, forceUpdate = false) {
       const layers = getWallpaperLayers();
       if (layers.length === 0) return;
+      updateEditorDesktopChatWallpaperFrame();
       if (!forceUpdate && key === currentWallpaperKey) return;
       const current = layers[activeWallpaperLayerIndex] || layers[0];
       const nextIndex = layers.length > 1 ? 1 - activeWallpaperLayerIndex : activeWallpaperLayerIndex;
@@ -1794,6 +1822,7 @@ let state = {
 
     async function styleWallpaperLayer(layer, wallpaper, key = '') {
       if (!layer) return;
+      updateEditorDesktopChatWallpaperFrame();
       const expectedKey = key || getWallpaperIdentity(wallpaper);
       layer.dataset.wallpaperKey = expectedKey;
       if (!wallpaperHasImage(wallpaper)) {
@@ -3024,6 +3053,7 @@ let state = {
       editorDisplayMode = mode === 'script' ? 'script' : 'chat';
       initEditorDisplayModeControls();
       renderTimeline();
+      updateEditorDesktopChatWallpaperFrame();
       applyProjectWallpaper(true);
       syncEditorOrientationForDisplayMode(true);
     }
@@ -5184,6 +5214,7 @@ unlock();
       editorView.style.height = vh + 'px';
       editorView.style.maxHeight = vh + 'px';
       editorView.style.transform = '';
+      updateEditorDesktopChatWallpaperFrame();
       scrollTimelineForKeyboard();
     }
 

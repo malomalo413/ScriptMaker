@@ -259,8 +259,10 @@ html, body {
     transform: scale(1.04);
   }
   .viewer-app.viewer-mode-chat .viewer-wallpaper::after {
+    top: var(--chat-wallpaper-frame-top, 0px);
+    bottom: var(--chat-wallpaper-frame-bottom, 0px);
     background-size: contain;
-    background-color: rgba(15, 23, 42, .08);
+    background-position: center center;
   }
 }
 .viewer-timeline {

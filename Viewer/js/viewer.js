@@ -412,6 +412,7 @@ function setViewerDisplayMode(mode) {
   applyViewerDisplayModeClass();
   renderTimeline();
   preparePrintPages();
+  updateViewerDesktopChatWallpaperFrame();
   applyWallpaper(true);
   syncViewerOrientationForDisplayMode(true);
 }
@@ -1552,6 +1553,7 @@ function openPrintableWindow() {
 }
 
 function styleLayer(layer, wallpaper) {
+  updateViewerDesktopChatWallpaperFrame();
   if (!wallpaper?.image) {
     layer.style.backgroundImage = '';
     layer.style.backgroundSize = '';
@@ -1567,9 +1569,42 @@ function styleLayer(layer, wallpaper) {
   layer.style.setProperty('--chat-wallpaper-position', (wallpaper.offsetX ?? 50) + '% ' + (wallpaper.offsetY ?? 50) + '%');
 }
 
+function viewerWallpaperLayers() {
+  return [document.getElementById('viewerWallpaperA'), document.getElementById('viewerWallpaperB')].filter(Boolean);
+}
+
+function isDesktopViewerChatWallpaperMode() {
+  return viewerDisplayMode !== 'script'
+    && window.matchMedia?.('(min-width: 1024px) and (hover: hover) and (pointer: fine)').matches;
+}
+
+function updateViewerDesktopChatWallpaperFrame() {
+  const layers = viewerWallpaperLayers();
+  const app = document.getElementById('viewerApp');
+  const timeline = document.getElementById('viewerTimeline');
+  if (!layers.length) return;
+  if (!isDesktopViewerChatWallpaperMode() || !app || !timeline) {
+    layers.forEach(layer => {
+      layer.style.removeProperty('--chat-wallpaper-frame-top');
+      layer.style.removeProperty('--chat-wallpaper-frame-bottom');
+    });
+    return;
+  }
+  const appRect = app.getBoundingClientRect();
+  const timelineRect = timeline.getBoundingClientRect();
+  const top = Math.max(0, Math.round(timelineRect.top - appRect.top));
+  const bottom = Math.max(0, Math.round(appRect.bottom - timelineRect.bottom));
+  layers.forEach(layer => {
+    layer.style.setProperty('--chat-wallpaper-frame-top', top + 'px');
+    layer.style.setProperty('--chat-wallpaper-frame-bottom', bottom + 'px');
+  });
+}
+
 function setWallpaper(wallpaper, key, force = false) {
+  updateViewerDesktopChatWallpaperFrame();
   if (!force && key === currentWallpaperKey) return;
-  const layers = [document.getElementById('viewerWallpaperA'), document.getElementById('viewerWallpaperB')];
+  const layers = viewerWallpaperLayers();
+  if (!layers.length) return;
   const current = layers[activeLayer];
   const nextIndex = 1 - activeLayer;
   const next = layers[nextIndex];
@@ -1717,6 +1752,16 @@ window.addEventListener('load', async () => {
   document.getElementById('viewerPasswordInput').addEventListener('keydown', event => { if (event.key === 'Enter') submitViewerPassword(); });
   document.getElementById('viewerClearSavedPassword').addEventListener('click', clearSavedViewerPassword);
   document.getElementById('viewerLogoutButton').addEventListener('click', logoutViewerAuth);
+  window.addEventListener('resize', () => {
+    updateViewerDesktopChatWallpaperFrame();
+    applyWallpaper(true);
+  });
+  window.addEventListener('orientationchange', () => {
+    setTimeout(() => {
+      updateViewerDesktopChatWallpaperFrame();
+      applyWallpaper(true);
+    }, 120);
+  });
   initCountControls();
 
   const project = await loadSharedProject();
