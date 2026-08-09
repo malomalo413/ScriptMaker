@@ -1774,9 +1774,8 @@ let state = {
       return [document.getElementById('editorWallpaperLayer'), document.getElementById('editorWallpaperLayerNext')].filter(Boolean);
     }
 
-    function isDesktopChatWallpaperMode() {
-      return editorDisplayMode !== 'script'
-        && window.matchMedia?.('(min-width: 1024px) and (hover: hover) and (pointer: fine)').matches;
+    function isChatWallpaperContainMode() {
+      return editorDisplayMode !== 'script';
     }
 
     function updateEditorDesktopChatWallpaperFrame() {
@@ -1784,7 +1783,7 @@ let state = {
       const editorView = document.getElementById('editorView');
       const timeline = document.getElementById('talkTimeline');
       if (!layers.length) return;
-      if (!isDesktopChatWallpaperMode() || !editorView || !timeline) {
+      if (!isChatWallpaperContainMode() || !editorView || !timeline) {
         layers.forEach(layer => {
           layer.style.removeProperty('--chat-wallpaper-frame-top');
           layer.style.removeProperty('--chat-wallpaper-frame-bottom');

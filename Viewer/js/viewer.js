@@ -1573,9 +1573,8 @@ function viewerWallpaperLayers() {
   return [document.getElementById('viewerWallpaperA'), document.getElementById('viewerWallpaperB')].filter(Boolean);
 }
 
-function isDesktopViewerChatWallpaperMode() {
-  return viewerDisplayMode !== 'script'
-    && window.matchMedia?.('(min-width: 1024px) and (hover: hover) and (pointer: fine)').matches;
+function isViewerChatWallpaperContainMode() {
+  return viewerDisplayMode !== 'script';
 }
 
 function updateViewerDesktopChatWallpaperFrame() {
@@ -1583,7 +1582,7 @@ function updateViewerDesktopChatWallpaperFrame() {
   const app = document.getElementById('viewerApp');
   const timeline = document.getElementById('viewerTimeline');
   if (!layers.length) return;
-  if (!isDesktopViewerChatWallpaperMode() || !app || !timeline) {
+  if (!isViewerChatWallpaperContainMode() || !app || !timeline) {
     layers.forEach(layer => {
       layer.style.removeProperty('--chat-wallpaper-frame-top');
       layer.style.removeProperty('--chat-wallpaper-frame-bottom');
@@ -1752,16 +1751,16 @@ window.addEventListener('load', async () => {
   document.getElementById('viewerPasswordInput').addEventListener('keydown', event => { if (event.key === 'Enter') submitViewerPassword(); });
   document.getElementById('viewerClearSavedPassword').addEventListener('click', clearSavedViewerPassword);
   document.getElementById('viewerLogoutButton').addEventListener('click', logoutViewerAuth);
-  window.addEventListener('resize', () => {
+  const refreshViewerWallpaperFrame = () => {
     updateViewerDesktopChatWallpaperFrame();
     applyWallpaper(true);
-  });
+  };
+  window.addEventListener('resize', refreshViewerWallpaperFrame);
   window.addEventListener('orientationchange', () => {
-    setTimeout(() => {
-      updateViewerDesktopChatWallpaperFrame();
-      applyWallpaper(true);
-    }, 120);
+    setTimeout(refreshViewerWallpaperFrame, 120);
   });
+  window.visualViewport?.addEventListener('resize', refreshViewerWallpaperFrame);
+  window.visualViewport?.addEventListener('scroll', refreshViewerWallpaperFrame);
   initCountControls();
 
   const project = await loadSharedProject();

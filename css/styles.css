@@ -228,29 +228,27 @@
       z-index: 1;
     }
 
-    @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
-      .editor-view.display-mode-chat .editor-wallpaper-layer {
-        background-image: none !important;
-        background-color: #e5e7eb;
-        overflow: hidden;
-      }
-      .editor-view.display-mode-chat .editor-wallpaper-layer::before,
-      .editor-view.display-mode-chat .editor-wallpaper-layer::after {
-        display: block;
-      }
-      .editor-view.display-mode-chat .editor-wallpaper-layer::before {
-        inset: -42px;
-        background-size: cover;
-        filter: blur(30px);
-        opacity: .42;
-        transform: scale(1.04);
-      }
-      .editor-view.display-mode-chat .editor-wallpaper-layer::after {
-        top: var(--chat-wallpaper-frame-top, 0px);
-        bottom: var(--chat-wallpaper-frame-bottom, 0px);
-        background-size: contain;
-        background-position: center center;
-      }
+    .editor-view.display-mode-chat .editor-wallpaper-layer {
+      background-image: none !important;
+      background-color: #e5e7eb;
+      overflow: hidden;
+    }
+    .editor-view.display-mode-chat .editor-wallpaper-layer::before,
+    .editor-view.display-mode-chat .editor-wallpaper-layer::after {
+      display: block;
+    }
+    .editor-view.display-mode-chat .editor-wallpaper-layer::before {
+      inset: -42px;
+      background-size: cover;
+      filter: blur(30px);
+      opacity: .42;
+      transform: scale(1.04);
+    }
+    .editor-view.display-mode-chat .editor-wallpaper-layer::after {
+      top: var(--chat-wallpaper-frame-top, 0px);
+      bottom: var(--chat-wallpaper-frame-bottom, 0px);
+      background-size: contain;
+      background-position: center center;
     }
 
     .nav-bar {

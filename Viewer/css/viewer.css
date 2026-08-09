@@ -241,29 +241,27 @@ html, body {
   font-weight: 800;
 }
 
-@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
-  .viewer-app.viewer-mode-chat .viewer-wallpaper {
-    background-image: none !important;
-    background-color: #e5e7eb;
-    overflow: hidden;
-  }
-  .viewer-app.viewer-mode-chat .viewer-wallpaper::before,
-  .viewer-app.viewer-mode-chat .viewer-wallpaper::after {
-    display: block;
-  }
-  .viewer-app.viewer-mode-chat .viewer-wallpaper::before {
-    inset: -42px;
-    background-size: cover;
-    filter: blur(30px);
-    opacity: .42;
-    transform: scale(1.04);
-  }
-  .viewer-app.viewer-mode-chat .viewer-wallpaper::after {
-    top: var(--chat-wallpaper-frame-top, 0px);
-    bottom: var(--chat-wallpaper-frame-bottom, 0px);
-    background-size: contain;
-    background-position: center center;
-  }
+.viewer-app.viewer-mode-chat .viewer-wallpaper {
+  background-image: none !important;
+  background-color: #e5e7eb;
+  overflow: hidden;
+}
+.viewer-app.viewer-mode-chat .viewer-wallpaper::before,
+.viewer-app.viewer-mode-chat .viewer-wallpaper::after {
+  display: block;
+}
+.viewer-app.viewer-mode-chat .viewer-wallpaper::before {
+  inset: -42px;
+  background-size: cover;
+  filter: blur(30px);
+  opacity: .42;
+  transform: scale(1.04);
+}
+.viewer-app.viewer-mode-chat .viewer-wallpaper::after {
+  top: var(--chat-wallpaper-frame-top, 0px);
+  bottom: var(--chat-wallpaper-frame-bottom, 0px);
+  background-size: contain;
+  background-position: center center;
 }
 .viewer-timeline {
   position: relative;
