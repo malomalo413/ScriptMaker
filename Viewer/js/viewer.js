@@ -1738,11 +1738,11 @@ function spreadsheetCell(value) {
 }
 
 function safeSpreadsheetFileName(value) {
-  const base = String(value || 'ScriptMaker')
+  const base = String(value || '\u53f0\u672c')
     .replace(/[\\/:*?"<>|]/g, '_')
-    .replace(/\s+/g, '_')
+    .trim()
     .replace(/^_+|_+$/g, '');
-  return base || 'ScriptMaker';
+  return base || '\u53f0\u672c';
 }
 
 function viewerSpreadsheetRows() {
@@ -1752,62 +1752,27 @@ function viewerSpreadsheetRows() {
     .map(talk => [talk.charName || '', talk.text || '']);
 }
 
-function spreadsheetTsvCell(value) {
-  return String(value ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-}
-
-function spreadsheetTsv(rows) {
-  return rows.map(row => row.map(spreadsheetTsvCell).join('\t')).join('\n');
-}
-
 function downloadViewerSpreadsheetCsv(rows) {
   const csv = '\uFEFF' + rows.map(row => row.map(spreadsheetCell).join(',')).join('\r\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
-  const date = new Date().toISOString().slice(0, 10);
   const link = document.createElement('a');
   link.href = url;
-  link.download = safeSpreadsheetFileName(viewerProject.title) + '_' + date + '.csv';
+  link.download = safeSpreadsheetFileName(viewerProject.title) + '.csv';
   document.body.appendChild(link);
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function copySpreadsheetRowsForGoogleSheets(rows) {
-  if (!navigator.clipboard?.writeText) return Promise.resolve(false);
-  return navigator.clipboard.writeText(spreadsheetTsv(rows))
-    .then(() => true)
-    .catch(error => {
-      console.warn('Viewer spreadsheet clipboard copy failed', error);
-      return false;
-    });
-}
-
-function openGoogleSpreadsheet() {
-  const popup = window.open('https://docs.google.com/spreadsheets/u/0/create', '_blank', 'noopener');
-  return !!popup;
-}
-
 function exportViewerSpreadsheet() {
   if (!viewerProject) return;
-  const rows = [['\u8a71\u8005', '\u30bb\u30ea\u30d5'], ...viewerSpreadsheetRows()];
+  const rows = [['\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u540d', '\u30bb\u30ea\u30d5'], ...viewerSpreadsheetRows()];
   if (rows.length <= 1) {
     alert('\u66f8\u304d\u51fa\u305b\u308b\u30bb\u30ea\u30d5\u304c\u3042\u308a\u307e\u305b\u3093\u3002');
     return;
   }
   downloadViewerSpreadsheetCsv(rows);
-  const copyPromise = copySpreadsheetRowsForGoogleSheets(rows);
-  const opened = openGoogleSpreadsheet();
-  copyPromise.then(copied => {
-    if (opened && copied) {
-      alert('CSV\u3092\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u3057\u3001Google\u30b9\u30d7\u30ec\u30c3\u30c9\u30b7\u30fc\u30c8\u3092\u958b\u304d\u307e\u3057\u305f\u3002\u65b0\u3057\u3044\u30b7\u30fc\u30c8\u4e0a\u3067\u8cbc\u308a\u4ed8\u3051\u308b\u3068\u3001\u8a71\u8005\u3068\u30bb\u30ea\u30d5\u304c\u8868\u306b\u306a\u308a\u307e\u3059\u3002');
-    } else if (opened) {
-      alert('CSV\u3092\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u3057\u3001Google\u30b9\u30d7\u30ec\u30c3\u30c9\u30b7\u30fc\u30c8\u3092\u958b\u304d\u307e\u3057\u305f\u3002\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u3057\u305fCSV\u3092Google\u30b9\u30d7\u30ec\u30c3\u30c9\u30b7\u30fc\u30c8\u3078\u30a4\u30f3\u30dd\u30fc\u30c8\u3057\u3066\u304f\u3060\u3055\u3044\u3002');
-    } else {
-      alert('CSV\u3092\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u3057\u307e\u3057\u305f\u3002Google\u30b9\u30d7\u30ec\u30c3\u30c9\u30b7\u30fc\u30c8\u3092\u958b\u3051\u306a\u3044\u5834\u5408\u306f\u3001\u30d6\u30e9\u30a6\u30b6\u306e\u30dd\u30c3\u30d7\u30a2\u30c3\u30d7\u8a31\u53ef\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002');
-    }
-  });
 }
 
 window.addEventListener('load', async () => {
