@@ -87,6 +87,7 @@ html, body {
   white-space: nowrap;
 }
 .viewer-pdf-button { background: #0f766e; }
+.viewer-spreadsheet-button { background: #2563eb; }
 .viewer-display-mode-bar {
   position: relative;
   z-index: 2;
@@ -708,6 +709,7 @@ html, body {
   }
   .viewer-settings-button { padding: 8px 10px; font-size: 12px; }
   .viewer-pdf-button { order: -1; }
+  .viewer-spreadsheet-button { order: -1; }
   .viewer-count-panel { padding: 6px 10px; }
   .viewer-count-panel summary { min-height: 30px; }
   .viewer-count-panel summary strong { font-size: 12px; }

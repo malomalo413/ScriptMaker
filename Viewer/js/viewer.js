@@ -618,6 +618,7 @@ function renderViewer(project) {
   syncViewerOrientationForDisplayMode(false);
   document.getElementById('viewerTitle').innerText = viewerProject.title || '\u53f0\u672c';
   document.getElementById('viewerPdfButton')?.classList.remove('hidden');
+  document.getElementById('viewerSpreadsheetButton')?.classList.remove('hidden');
   renderSettingsOptions();
   renderViewerScriptColorOptions();
   renderTimeline();
@@ -1729,12 +1730,60 @@ function printViewerPdf() {
   }
 }
 
+function spreadsheetCell(value) {
+  return '"' + String(value ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/"/g, '""') + '"';
+}
+
+function safeSpreadsheetFileName(value) {
+  const base = String(value || 'ScriptMaker')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return base || 'ScriptMaker';
+}
+
+function viewerSpreadsheetRows() {
+  if (!viewerProject) return [];
+  return (viewerProject.talks || [])
+    .filter(talk => String(talk?.text || '').trim())
+    .map(talk => [talk.charName || '', talk.text || '']);
+}
+
+function exportViewerSpreadsheet() {
+  if (!viewerProject) return;
+  const rows = [['\u8a71\u8005', '\u30bb\u30ea\u30d5'], ...viewerSpreadsheetRows()];
+  if (rows.length <= 1) {
+    alert('\u66f8\u304d\u51fa\u305b\u308b\u30bb\u30ea\u30d5\u304c\u3042\u308a\u307e\u305b\u3093\u3002');
+    return;
+  }
+  const csv = '\uFEFF' + rows.map(row => row.map(spreadsheetCell).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const date = new Date().toISOString().slice(0, 10);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = safeSpreadsheetFileName(viewerProject.title) + '_' + date + '.csv';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 window.addEventListener('load', async () => {
   const pdfButton = document.getElementById('viewerPdfButton');
   pdfButton.addEventListener('click', printViewerPdf);
   pdfButton.addEventListener('touchend', event => {
     event.preventDefault();
     printViewerPdf();
+  }, { passive: false });
+  const spreadsheetButton = document.getElementById('viewerSpreadsheetButton');
+  spreadsheetButton?.addEventListener('click', exportViewerSpreadsheet);
+  spreadsheetButton?.addEventListener('touchend', event => {
+    event.preventDefault();
+    exportViewerSpreadsheet();
   }, { passive: false });
   document.querySelectorAll('input[name="viewerDisplayMode"]').forEach(input => {
     input.addEventListener('change', event => setViewerDisplayMode(event.target.value));
