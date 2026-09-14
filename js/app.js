@@ -21,12 +21,10 @@ const SCRIPTMAKER_WALLPAPER_WEBP_QUALITY = 0.85;
 
 let state = {
       currentProjectId: null,
-      projects: {},
-      apiKey: "",
-      aiToggle: true
+      projects: {}
     };
 
-    let currentCharacter = 'らん';
+    let currentCharacter = '情景描写';
     let isEditMode = false;
     let editingCharName = null;
     let charModalMode = 'project-add';
@@ -37,7 +35,6 @@ let state = {
     let editingTalkIndex = null;
     let editingTalkId = null;
     let selectedTalkIndexes = new Set();
-    let predictedTalks = []; 
     let selectedWallpaperBase64 = "";
     let selectedWallpaperImageId = "";
     let wallpaperSize = 100;
@@ -45,12 +42,9 @@ let state = {
     let wallpaperOffsetY = 50;
     let wallpaperPanStart = null;
     let wallpaperPanOffset = null;
-    let predictionRequestId = 0;
     let isSortingTalks = false;
     let pendingTimelineRender = false;
     let suppressTalkClickUntil = 0;
-    let aiStatusMessage = "";
-    let aiStatusType = "info";
     let editingSceneWallpapers = [];
     let activeSceneWallpaperId = "";
     let currentWallpaperKey = "";
@@ -74,15 +68,10 @@ let state = {
     let editorAppReady = false;
     let characterDragState = null;
     let renamingProjectId = null;
+    let pendingScriptImport = { parsed: [], rejected: [] };
+    let characterSaveInProgress = false;
 
     let originalViewportHeight = window.innerHeight;
-    const GEMINI_MODEL_CANDIDATES = [
-      'gemini-2.5-flash',
-      'gemini-flash-latest',
-      'gemini-3.5-flash'
-    ];
-
-
     async function hashPasswordText(value) {
       const input = String(value || '');
       if (window.crypto?.subtle && window.TextEncoder) {
@@ -787,22 +776,12 @@ let state = {
       const saved = localStorage.getItem('script_assistant_data_v21');
       if (saved) {
         state = JSON.parse(saved);
-        if (state.apiKey === undefined) state.apiKey = "";
-        if (state.aiToggle === undefined) state.aiToggle = true;
       } else {
         state.projects["p_default"] = {
           title: "チャットプロジェクト",
-          characters: [
-            { name: "らん", avatar: "", isRound: true, zoom: 100, isProtagonist: true },
-            { name: "キャラ2", avatar: "", isRound: true, zoom: 100, isProtagonist: false }
-          ],
-          talks: [
-            { charName: "らん", text: "セリフを長押し（0.4秒）すると、画面下の中央にゴミ箱が現れます！" },
-            { charName: "キャラ2", text: "そのままゴミ箱までスワイプして指を離すと消去できるよ！" }
-          ]
+          characters: [],
+          talks: []
         };
-        state.apiKey = "";
-        state.aiToggle = true;
         saveState();
       }
 
@@ -814,9 +793,6 @@ let state = {
         renderTimeline();
       }).catch(error => console.warn('Wallpaper migration failed:', error));
       syncCharacterLibraryFromProjects();
-
-      document.getElementById('apiKey').value = state.apiKey;
-      document.getElementById('aiToggle').checked = state.aiToggle;
 
       renderProjectList();
       initSortableDragAndTrash();
@@ -1008,6 +984,132 @@ let state = {
         offsetY: character.offsetY ?? 50,
         isProtagonist: !!isProtagonist
       };
+    }
+
+    function findLibraryCharacterByName(name) {
+      const normalizedName = String(name || '').trim();
+      return loadCharacterLibrary().find(character => character.name === normalizedName) || null;
+    }
+
+    function openScriptImportModal() {
+      pendingScriptImport = { parsed: [], rejected: [] };
+      const input = document.getElementById('scriptImportInput');
+      const preview = document.getElementById('scriptImportPreview');
+      const addButton = document.getElementById('scriptImportAddButton');
+      if (input) input.value = '';
+      if (preview) preview.innerHTML = '';
+      if (addButton) addButton.disabled = true;
+      openModal('scriptImportModal');
+      setTimeout(() => input?.focus({ preventScroll: true }), 80);
+    }
+
+    function isIgnorableScriptImportLine(line) {
+      const trimmed = String(line || '').trim();
+      return !trimmed || /^```(?:[A-Za-z0-9_-]+)?$/.test(trimmed);
+    }
+
+    function parseScriptImportLine(line, lineNumber) {
+      if (isIgnorableScriptImportLine(line)) return null;
+      const match = String(line).match(/^([^：:]+)[：:](.*)$/);
+      if (!match) {
+        return { rejected: true, lineNumber, raw: String(line || '').trim(), reason: '話者名とセリフを判別できませんでした' };
+      }
+      const charName = match[1].trim();
+      const text = match[2].trim();
+      if (!charName || !text) {
+        return { rejected: true, lineNumber, raw: String(line || '').trim(), reason: '話者名またはセリフが空です' };
+      }
+      return { lineNumber, charName, text };
+    }
+
+    function classifyScriptImportRows(rows) {
+      const project = state.projects[state.currentProjectId];
+      const existingNames = new Set((project?.characters || []).map(character => character.name));
+      const plannedNames = new Set(existingNames);
+      return rows.map(row => {
+        if (row.charName === '情景描写') return { ...row, characterStatus: '情景描写' };
+        if (existingNames.has(row.charName)) return { ...row, characterStatus: '既存キャラクター' };
+        if (plannedNames.has(row.charName)) return { ...row, characterStatus: '追加予定キャラクター' };
+        const libraryCharacter = findLibraryCharacterByName(row.charName);
+        const status = libraryCharacter ? 'ライブラリから追加' : '新規キャラクター';
+        plannedNames.add(row.charName);
+        return { ...row, characterStatus: status };
+      });
+    }
+
+    function parseScriptImportInput() {
+      const input = document.getElementById('scriptImportInput');
+      const lines = String(input?.value || '').split(/\r?\n/);
+      const parsed = [];
+      const rejected = [];
+      lines.forEach((line, index) => {
+        const result = parseScriptImportLine(line, index + 1);
+        if (!result) return;
+        if (result.rejected) rejected.push(result);
+        else parsed.push(result);
+      });
+      pendingScriptImport = { parsed: classifyScriptImportRows(parsed), rejected };
+      renderScriptImportPreview();
+    }
+
+    function renderScriptImportPreview() {
+      const preview = document.getElementById('scriptImportPreview');
+      const addButton = document.getElementById('scriptImportAddButton');
+      if (!preview) return;
+      const parsed = pendingScriptImport.parsed || [];
+      const rejected = pendingScriptImport.rejected || [];
+      const rowsHtml = parsed.map((row, index) =>
+        '<div class="script-import-row">' +
+          '<strong>' + (index + 1) + '</strong>' +
+          '<strong>' + escapeHtml(row.charName) + '</strong>' +
+          '<span>' + escapeHtml(row.text) + '</span>' +
+          '<em class="script-import-badge">' + escapeHtml(row.characterStatus) + '</em>' +
+        '</div>'
+      ).join('');
+      const rejectedHtml = rejected.map(row =>
+        '<div class="script-import-row warning">' +
+          '<strong>' + row.lineNumber + '</strong>' +
+          '<span>' + escapeHtml(row.raw || '(空行)') + '<br>' + escapeHtml(row.reason) + '</span>' +
+        '</div>'
+      ).join('');
+      preview.innerHTML =
+        '<div class="script-import-summary">解析結果: ' + parsed.length + '件 / 解析できなかった行: ' + rejected.length + '件</div>' +
+        rowsHtml +
+        rejectedHtml;
+      if (addButton) addButton.disabled = parsed.length === 0;
+    }
+
+    function ensureImportedCharacter(project, charName) {
+      if (!project || !charName || charName === '情景描写') return;
+      if (!Array.isArray(project.characters)) project.characters = [];
+      if (project.characters.some(character => character.name === charName)) return;
+      const libraryCharacter = findLibraryCharacterByName(charName);
+      const isProtagonist = !project.characters.some(character => character.isProtagonist);
+      const character = libraryCharacter
+        ? cloneLibraryCharacterForProject(libraryCharacter, isProtagonist)
+        : { name: charName, avatar: '', isRound: true, zoom: 100, offsetX: 50, offsetY: 50, isProtagonist };
+      project.characters.push(character);
+      registerCharacterInLibrary(character);
+    }
+
+    function addParsedScriptToProject() {
+      const project = state.projects[state.currentProjectId];
+      const rows = pendingScriptImport.parsed || [];
+      if (!project || !rows.length) return;
+      pushUndoSnapshot();
+      rows.forEach(row => ensureImportedCharacter(project, row.charName));
+      rows.forEach(row => {
+        const prepared = prepareTalkInputForSave(row.charName, row.text);
+        project.talks.push(createTalkRecord(row.charName, prepared.text, prepared.stageDirection));
+      });
+      currentCharacter = rows[rows.length - 1].charName || currentCharacter;
+      saveState();
+      syncCharacterLibraryFromProjects();
+      renderCharSelector();
+      renderTimeline();
+      updateMetaStats();
+      closeModal('scriptImportModal');
+      scrollToBottom();
     }
 
     function openImageDb() {
@@ -1317,7 +1419,6 @@ let state = {
       document.getElementById('projectTitle').innerText = project.title;
       document.getElementById('projectTitle').onclick = renameCurrentProject;
       updateHistoryButtons();
-      predictedTalks = [];
       editingTalkIndex = null;
       editingTalkId = null;
       selectedTalkIndexes.clear();
@@ -1410,23 +1511,6 @@ let state = {
         console.error("保存エラー:", e);
         alert("画像データが大きすぎるため保存できませんでした。別の画像を選ぶか、画像サイズを小さくしてください。");
         return false;
-      }
-    }
-
-    function saveAiConfig() {
-      state.apiKey = document.getElementById('apiKey').value.trim();
-      state.aiToggle = document.getElementById('aiToggle').checked;
-      predictedTalks = [];
-      saveState();
-      updateAiStatus();
-      closeModal('aiConfigModal');
-      alert("AI設定とAPIキーを保存しました。");
-
-      const project = state.projects[state.currentProjectId];
-      if (state.aiToggle && state.apiKey && project && project.talks.length > 0) {
-        callGeminiApiForPrediction();
-      } else {
-        renderTimeline();
       }
     }
 
@@ -1525,8 +1609,6 @@ let state = {
         confirmSaveCharacter();
       };
 
-      confirmBtn.addEventListener('pointerup', runConfirm);
-      confirmBtn.addEventListener('touchend', runConfirm);
       confirmBtn.addEventListener('click', runConfirm);
     }
 
@@ -1556,10 +1638,7 @@ let state = {
       const id = "p_" + Date.now();
       state.projects[id] = {
         title: name,
-        characters: [
-          { name: "らん", avatar: "", isRound: true, zoom: 100, isProtagonist: true },
-          { name: "キャラ2", avatar: "", isRound: true, zoom: 100, isProtagonist: false }
-        ],
+        characters: [],
         talks: [],
         folderId: state.currentFolderId || UNCLASSIFIED_FOLDER_ID
       };
@@ -1886,7 +1965,7 @@ let state = {
       const project = state.projects[state.currentProjectId];
       if (!timeline || !project || !Array.isArray(project.talks) || project.talks.length === 0) return null;
       const timelineRect = timeline.getBoundingClientRect();
-      const bubbles = Array.from(timeline.querySelectorAll('.chat-bubble:not(.ai-predicted)'));
+      const bubbles = Array.from(timeline.querySelectorAll('.chat-bubble'));
       if (bubbles.length === 0) return null;
       const anchorY = timelineRect.top + Math.min(90, Math.max(24, timelineRect.height * 0.18));
       let best = bubbles[0];
@@ -2322,7 +2401,6 @@ let state = {
         currentCharacter = '情景描写';
       }
 
-      predictedTalks = [];
       editingTalkIndex = null;
       editingTalkId = null;
       updateInlineEditState();
@@ -2330,6 +2408,7 @@ let state = {
       renderCharSelector();
       renderTimeline();
       updateMetaStats();
+      setTimeout(scrollToBottom, 0);
       setTimeout(forceResizeViewport, 100);
     }
 
@@ -2341,7 +2420,6 @@ let state = {
       document.body.classList.remove('edit-mode-active');
       document.getElementById('modeToggleBtn').innerText = '編集';
       document.getElementById('modeToggleBtn').classList.remove('editing');
-      predictedTalks = [];
       editingTalkIndex = null;
       editingTalkId = null;
       updateInlineEditState();
@@ -2387,14 +2465,6 @@ let state = {
       addBtn.onclick = openCharacterLibraryModal;
       addBtn.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>`;
       container.appendChild(addBtn);
-
-      const aiBtn = document.createElement('button');
-      aiBtn.className = 'char-ai-btn';
-      aiBtn.type = 'button';
-      aiBtn.title = 'タップでAI予測を再生成 / 長押しでAPIキー設定';
-      aiBtn.innerHTML = '🤖';
-      initAiButtonActions(aiBtn);
-      container.appendChild(aiBtn);
     }
 
     function initCharacterDeleteDrag(btn, charName) {
@@ -2606,64 +2676,6 @@ let state = {
       saveState();
     }
 
-    function initAiButtonActions(aiBtn) {
-      let longPressTimer = null;
-      let didLongPress = false;
-
-      const clearTimer = () => {
-        if (longPressTimer) {
-          clearTimeout(longPressTimer);
-          longPressTimer = null;
-        }
-      };
-
-      aiBtn.addEventListener('pointerdown', function(e) {
-        e.preventDefault();
-        didLongPress = false;
-        clearTimer();
-        longPressTimer = setTimeout(() => {
-          didLongPress = true;
-          openModal('aiConfigModal');
-        }, 550);
-      });
-
-      aiBtn.addEventListener('pointerup', function(e) {
-        e.preventDefault();
-        clearTimer();
-        if (!didLongPress) refreshAiPredictionsFromButton();
-      });
-
-      aiBtn.addEventListener('pointercancel', clearTimer);
-      aiBtn.addEventListener('pointerleave', clearTimer);
-      aiBtn.addEventListener('contextmenu', function(e) {
-        e.preventDefault();
-      });
-      aiBtn.onclick = function(e) {
-        e.preventDefault();
-      };
-    }
-
-    function refreshAiPredictionsFromButton() {
-      const project = state.projects[state.currentProjectId];
-      state.aiToggle = true;
-      document.getElementById('aiToggle').checked = true;
-      predictionRequestId++;
-      aiStatusMessage = "AIが予測を更新中...";
-      aiStatusType = "info";
-      saveState();
-      renderTimeline();
-
-      if (!state.apiKey) {
-        aiStatusMessage = "";
-        renderTimeline();
-        openModal('aiConfigModal');
-        return;
-      }
-      if (project && project.talks.length > 0) {
-        callGeminiApiForPrediction({ append: false, count: 3 });
-      }
-    }
-
     function selectChar(element, name) {
       const input = document.getElementById('inputSpeech');
       const shouldKeepKeyboard = document.body.classList.contains('keyboard-focused') || document.activeElement === input;
@@ -2691,6 +2703,7 @@ let state = {
 
     function openCharAddModal() {
       resetAvatarGesture();
+      characterSaveInProgress = false;
       charModalMode = 'project-add';
       editingCharName = null;
       editingLibraryCharacterSignature = null;
@@ -2712,6 +2725,7 @@ let state = {
 
     function openCharEditModal(name) {
       resetAvatarGesture();
+      characterSaveInProgress = false;
       charModalMode = 'project-edit';
       editingCharName = name;
       editingLibraryCharacterSignature = null;
@@ -2743,6 +2757,7 @@ let state = {
       const character = findLibraryCharacter(signature);
       if (!character) return;
       resetAvatarGesture();
+      characterSaveInProgress = false;
       charModalMode = 'library-edit';
       editingCharName = null;
       editingLibraryCharacterSignature = signature;
@@ -2799,9 +2814,14 @@ let state = {
     }
 
     function confirmSaveCharacter() {
+      if (characterSaveInProgress) return;
+      characterSaveInProgress = true;
       resetAvatarGesture();
       const name = document.getElementById('newCharName').value.trim();
-      if (!name) return;
+      if (!name) {
+        characterSaveInProgress = false;
+        return;
+      }
 
       const project = state.projects[state.currentProjectId];
       const isRound = document.getElementById('charRoundCheck').checked;
@@ -2817,7 +2837,10 @@ let state = {
           offsetX: avatarOffsetX,
           offsetY: avatarOffsetY
         });
-        if (!updated) return;
+        if (!updated) {
+          characterSaveInProgress = false;
+          return;
+        }
         const library = loadCharacterLibrary().filter(item => characterLibrarySignature(item) !== editingLibraryCharacterSignature);
         mergeCharacterIntoLibraryList(library, updated);
         saveCharacterLibrary(library);
@@ -2825,15 +2848,17 @@ let state = {
         closeModal('charModal');
         renderCharacterLibrary();
         openModal('charLibraryModal');
+        setTimeout(() => { characterSaveInProgress = false; }, 0);
         return;
       }
 
-      pushUndoSnapshot();
       if (editingCharName === null) {
         if (project.characters.some(c => c.name === name) || name === '情景描写') {
           alert("同名のキャラクターが既に存在します。");
+          characterSaveInProgress = false;
           return;
         }
+        pushUndoSnapshot();
         if (isProtagonist) project.characters.forEach(c => c.isProtagonist = false);
         const newCharacter = { name: name, avatar: selectedAvatarBase64, isRound: isRound, zoom: zoom, offsetX: avatarOffsetX, offsetY: avatarOffsetY, isProtagonist: isProtagonist };
         project.characters.push(newCharacter);
@@ -2844,8 +2869,10 @@ let state = {
         if (char) {
           if (name !== editingCharName && (project.characters.some(c => c.name === name) || name === '情景描写')) {
             alert("同名のキャラクターが既に存在します。");
+            characterSaveInProgress = false;
             return;
           }
+          pushUndoSnapshot();
 
           project.talks.forEach(t => {
             if (t.charName === editingCharName) {
@@ -2876,6 +2903,7 @@ let state = {
       renderTimeline();
       closeModal('charModal');
       saveState();
+      setTimeout(() => { characterSaveInProgress = false; }, 0);
     }
 
     function isProtagonistTalk(project, charName) {
@@ -2922,6 +2950,22 @@ let state = {
 
     function getStageDirection(talk) {
       return String(talk?.stageDirection || talk?.note || '').trim();
+    }
+
+    function normalizeStageDirectionForDisplay(value) {
+      const text = String(value || '').trim();
+      if (!text) return '';
+      const fullWidth = text.match(/^（([\s\S]*)）$/);
+      if (fullWidth) return fullWidth[1].trim();
+      const halfWidth = text.match(/^\(([\s\S]*)\)$/);
+      if (halfWidth) return halfWidth[1].trim();
+      return text;
+    }
+
+    function talkTextWithStageDirection(talk) {
+      const text = String(talk?.text || '');
+      const stageDirection = normalizeStageDirectionForDisplay(getStageDirection(talk));
+      return stageDirection ? text + '（' + stageDirection + '）' : text;
     }
 
     function stageDirectionHtml(talk) {
@@ -3254,6 +3298,80 @@ let state = {
       });
     }
 
+    function isInteractiveTalkTarget(target) {
+      return !!target?.closest?.('button, input, textarea, select, label, .talk-edit-tools, .talk-edit-tools *, .talk-select');
+    }
+
+    function initTalkEditLongPress(element, talkId) {
+      if (!element || !talkId) return;
+      const longPressMs = 600;
+      const moveCancelThreshold = 10;
+      let timer = null;
+      let pointerId = null;
+      let startX = 0;
+      let startY = 0;
+      let startScrollTop = 0;
+      let didLongPress = false;
+      let cancelled = false;
+
+      const cancel = () => {
+        if (timer) clearTimeout(timer);
+        timer = null;
+        pointerId = null;
+        cancelled = true;
+      };
+
+      element.addEventListener('pointerdown', event => {
+        if (event.button != null && event.button !== 0) return;
+        if (isEditMode || isSortingTalks || isInteractiveTalkTarget(event.target)) return;
+        const timeline = document.getElementById('talkTimeline');
+        cancelled = false;
+        didLongPress = false;
+        pointerId = event.pointerId;
+        startX = event.clientX;
+        startY = event.clientY;
+        startScrollTop = timeline ? timeline.scrollTop : 0;
+        timer = setTimeout(() => {
+          timer = null;
+          if (cancelled || isSortingTalks) return;
+          didLongPress = true;
+          suppressTalkClickUntil = Date.now() + 700;
+          if (navigator.vibrate) navigator.vibrate(20);
+          startInlineTalkEditById(talkId);
+        }, longPressMs);
+      });
+
+      element.addEventListener('pointermove', event => {
+        if (pointerId !== event.pointerId) return;
+        const timeline = document.getElementById('talkTimeline');
+        const moved = Math.hypot(event.clientX - startX, event.clientY - startY);
+        const scrolled = timeline ? Math.abs(timeline.scrollTop - startScrollTop) : 0;
+        if (moved > moveCancelThreshold || scrolled > 2) cancel();
+      });
+
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach(type => {
+        element.addEventListener(type, event => {
+          if (pointerId !== null && event.pointerId != null && pointerId !== event.pointerId) return;
+          if (didLongPress) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+          cancel();
+        });
+      });
+
+      element.addEventListener('click', event => {
+        if (Date.now() < suppressTalkClickUntil) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        if (window.matchMedia?.('(pointer: fine)').matches && !isEditMode && !isSortingTalks && !isInteractiveTalkTarget(event.target)) {
+          startInlineTalkEditById(talkId);
+        }
+      });
+    }
+
     function renderScriptTimeline(project, timeline) {
       timeline.innerHTML = '';
       loadEditorScriptColorSettings();
@@ -3264,14 +3382,11 @@ let state = {
         row.className = 'script-row' + scriptColorClassForCharacter(talk.charName) + (editingTalkId === talk.id ? ' inline-edit-target' : '');
         row.dataset.index = index;
         row.dataset.talkId = talk.id;
-        row.onclick = function() {
-          if (Date.now() < suppressTalkClickUntil || isSortingTalks) return;
-          startInlineTalkEditById(row.dataset.talkId);
-        };
+        initTalkEditLongPress(row, talk.id);
         row.innerHTML =
           '<div class="script-col script-dialogue">' +
             '<div class="script-meta"><span>' + formatTalkNumber(index) + '</span><strong>' + escapeHtml(talk.charName || '') + '</strong></div>' +
-            '<div class="script-text">' + escapeHtml(talk.text || '') + '</div>' +
+            '<div class="script-text">' + escapeHtml(talkTextWithStageDirection(talk)) + '</div>' +
           '</div>' +
           '<div class="script-col script-stage">' + (getStageDirection(talk) ? escapeHtml(getStageDirection(talk)) : '') + '</div>' +
           '<div class="script-col script-art">' +
@@ -3280,11 +3395,6 @@ let state = {
         timeline.appendChild(row);
       });
       resolveScriptWallpaperImages(project);
-      const predicting = document.createElement('div');
-      predicting.className = `predicting-msg ${aiStatusMessage ? '' : 'hidden'} ${aiStatusType === 'error' ? 'error' : ''}`;
-      predicting.id = 'aiPredicting';
-      predicting.innerText = aiStatusMessage || 'AIが予測を更新中...';
-      timeline.appendChild(predicting);
       updateSelectedTalkCount();
     }
 
@@ -3315,17 +3425,7 @@ let state = {
         bubble.dataset.index = index;
         bubble.dataset.talkId = talk.id;
 
-        bubble.onpointerup = function(e) {
-          if (Date.now() < suppressTalkClickUntil || isSortingTalks) return;
-          if (e.pointerType === 'touch') {
-            e.preventDefault();
-            startInlineTalkEditById(bubble.dataset.talkId);
-          }
-        };
-        bubble.onclick = function() {
-          if (Date.now() < suppressTalkClickUntil || isSortingTalks) return;
-          startInlineTalkEditById(bubble.dataset.talkId);
-        };
+        initTalkEditLongPress(bubble, talk.id);
 
         let avatarHtml = '';
         if (!isScene) avatarHtml = avatarHtmlForCharacterInfo(talkCharacterInfo(project, talk), talk.charName);
@@ -3336,8 +3436,7 @@ let state = {
           ${avatarHtml}
           <div class="bubble-content">
             <span class="char-name">${escapeHtml(talk.charName)}</span>
-            <div class="message-text">${escapeHtml(talk.text || '')}</div>
-            ${stageDirectionHtml(talk)}
+            <div class="message-text">${escapeHtml(talkTextWithStageDirection(talk))}</div>
             <div class="talk-edit-tools" onclick="event.stopPropagation()">
               <button onclick="moveTalk(event, ${index}, -1)">↑</button>
               <button onclick="moveTalk(event, ${index}, 1)">↓</button>
@@ -3349,42 +3448,8 @@ let state = {
         `;
         timeline.appendChild(bubble);
       });
-
-      // 2. AI予測結果（半透明・3回分）のレンダリング処理
-      if (state.aiToggle && predictedTalks.length > 0) {
-        predictedTalks.forEach((talk, idx) => {
-          const isScene = talk.charName === '情景描写';
-          const isRight = isTalkRight(project, talk) && !isScene;
-          const bubble = document.createElement('div');
-          bubble.className = `chat-bubble ${isScene ? 'scene' : (isRight ? 'right' : 'left')} ai-predicted`;
-
-          bubble.onclick = function() {
-            acceptAiPrediction(idx);
-          };
-
-          let avatarHtml = '';
-          if (!isScene) avatarHtml = avatarHtmlForCharacterInfo(talkCharacterInfo(project, talk), talk.charName);
-
-          bubble.innerHTML = `
-            ${avatarHtml}
-            <div class="bubble-content">
-              <span class="char-name">${escapeHtml(talk.charName)} (予測候補)</span>
-              <div class="message-text">${escapeHtml(talk.text || '')}</div>
-            </div>
-          `;
-          timeline.appendChild(bubble);
-        });
-      }
-
-      // 3. ローディング表記の制御
-      const predicting = document.createElement('div');
-      predicting.className = `predicting-msg ${aiStatusMessage ? '' : 'hidden'} ${aiStatusType === 'error' ? 'error' : ''}`;
-      predicting.id = 'aiPredicting';
-      predicting.innerText = aiStatusMessage || 'AIが予測を更新中...';
-      timeline.appendChild(predicting);
       
       updateSelectedTalkCount();
-      scrollToBottom();
       scheduleSceneWallpaperUpdate();
     }
 
@@ -3402,6 +3467,7 @@ let state = {
           cancelInlineTalkEdit();
           return;
         }
+        const anchor = captureTalkViewportAnchor(editingTalkId);
         pushUndoSnapshot();
         const prepared = prepareTalkInputForSave(currentCharacter, text, getStageDirection(resolved.talk));
         project.talks[resolved.index] = { ...resolved.talk, charName: currentCharacter, text: prepared.text };
@@ -3411,326 +3477,29 @@ let state = {
           delete project.talks[resolved.index].stageDirection;
           delete project.talks[resolved.index].note;
         }
-        predictedTalks = [];
         saveState();
         finishInlineTalkEdit();
         renderTimeline();
         updateMetaStats();
-        scrollToBottom();
-        callGeminiApiForPrediction();
+        restoreTalkViewportAnchor(anchor);
         return;
       }
 
       pushUndoSnapshot();
       const prepared = prepareTalkInputForSave(currentCharacter, text);
       project.talks.push(createTalkRecord(currentCharacter, prepared.text, prepared.stageDirection));
-      predictedTalks = [];
 
       saveState();
       renderTimeline();
       updateMetaStats();
       clearInputSpeech();
       scrollToBottom();
-      callGeminiApiForPrediction();
     }
 
     function sendMessageOnEnter(e) {
       if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
       e.preventDefault();
       sendMessage();
-    }
-
-    /* 🎯 【構造修正】Gemini 1.5 FlashのJSON構造に対応*/
-    async function callGeminiApiForPrediction(options = {}) {
-      const append = !!options.append;
-      const count = Math.max(1, Math.min(3, options.count || 3));
-      const requestId = ++predictionRequestId;
-      if (!state.aiToggle) return;
-      if (!state.apiKey) {
-        console.log("APIキーが未入力です。");
-        return;
-      }
-
-      const project = state.projects[state.currentProjectId];
-      if (!project || project.talks.length === 0) return;
-
-      aiStatusMessage = append ? "AIが続きを補充中..." : "AIが予測を更新中...";
-      aiStatusType = "info";
-      const loader = document.getElementById('aiPredicting');
-      if (loader) {
-        loader.innerText = aiStatusMessage;
-        loader.classList.remove('hidden', 'error');
-      }
-      scrollToBottom();
-
-      const charNames = project.characters.map(c => c.name);
-      if (!charNames.includes("情景描写")) charNames.push("情景描写");
-
-      const recentTalks = project.talks.slice(-15);
-      const contextText = recentTalks.map(t => `[${t.charName}]: ${t.text}`).join("\n");
-      const keptPredictionText = append && predictedTalks.length > 0
-        ? predictedTalks.map(t => `[${t.charName}]: ${t.text}`).join("\n")
-        : "なし";
-
-      const prompt = `あなたはチャット形式の台本作成アシスタントです。
-これまでの台本の流れを読み取り、自然に続く返信を予測してください。
-
-厳守ルール:
-- 出力はJSON配列だけにしてください。説明文、挨拶、Markdown、コードフェンスは禁止です。
-- JSON配列の要素数は必ず ${count} 件にしてください。
-- 各要素は {"charName":"キャラクター名","text":"セリフ"} の形だけにしてください。
-- charName は必ず以下の利用可能キャラクター名のいずれかにしてください。
-- text はそのまま台本に使える短い1行のセリフにしてください。
-- text 内に改行を入れないでください。
-- text 内に引用符や記号が必要な場合は、JSONとして正しくエスケープしてください。
-- 途中で文章を切らず、必ず閉じ括弧 ] まで出力してください。
-
-利用可能キャラクター:
-${charNames.join(', ')}
-
-出力例:
-[
-  {"charName":"キャラクター名","text":"セリフ"}
-]
-
-これまでの台本:
-${contextText}
-
-画面に残っている予測候補:
-${keptPredictionText}
-
-今回必要な追加予測数: ${count}件
-すでに画面に残っている予測候補は作り直さず、その続きを${count}件だけ出してください。`;
-
-      try {
-        const data = await requestGeminiPrediction(prompt);
-        const rawText = data.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("").trim();
-        if (!rawText) throw new Error("AIから空の応答が返りました。");
-
-        const parsed = parsePredictionItems(rawText);
-        if (!Array.isArray(parsed)) throw new Error("AI応答がJSON配列ではありません。");
-
-        if (requestId !== predictionRequestId) return;
-
-        const newPredictions = normalizePredictionItems(parsed, charNames, project)
-          .filter(item => !predictedTalks.some(existing => existing.charName === item.charName && existing.text === item.text))
-          .slice(0, count);
-
-        const nextPredictions = append
-          ? predictedTalks.concat(newPredictions).slice(0, 3)
-          : newPredictions.slice(0, 3);
-
-        if (nextPredictions.length === 0) {
-          throw new Error("表示できる予測セリフがありませんでした。");
-        }
-
-        predictedTalks = nextPredictions;
-        aiStatusMessage = "";
-        aiStatusType = "info";
-      } catch (e) {
-        if (requestId !== predictionRequestId) return;
-        console.error("Gemini prediction error:", e);
-        aiStatusMessage = "予測の更新に失敗しました。もう一度お試しください。";
-        aiStatusType = "error";
-      } finally {
-        if (requestId !== predictionRequestId) return;
-        renderTimeline();
-      }
-    }
-
-    function normalizePredictionItems(items, charNames, project) {
-      const validNames = new Set(charNames);
-      return items
-        .filter(item => item && typeof item.charName === 'string' && typeof item.text === 'string')
-        .map(item => ({
-          charName: validNames.has(item.charName.trim()) ? item.charName.trim() : (project.characters[0]?.name || currentCharacter),
-          text: cleanupPredictionValue(item.text)
-        }))
-        .filter(item => item.text);
-    }
-
-    async function requestGeminiPrediction(prompt) {
-      let lastError = null;
-
-      for (const model of GEMINI_MODEL_CANDIDATES) {
-        try {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(state.apiKey)}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [
-                {
-                  role: "user",
-                  parts: [{ text: prompt }]
-                }
-              ],
-              generationConfig: {
-                temperature: 0.8,
-                maxOutputTokens: 512,
-                responseMimeType: "application/json",
-                responseSchema: {
-                  type: "ARRAY",
-                  items: {
-                    type: "OBJECT",
-                    properties: {
-                      charName: { type: "STRING" },
-                      text: { type: "STRING" }
-                    },
-                    required: ["charName", "text"]
-                  }
-                }
-              }
-            })
-          });
-
-          if (response.ok) return response.json();
-
-          const errorData = await response.json().catch(() => ({}));
-          const message = errorData.error?.message || `HTTP error: ${response.status}`;
-          lastError = new Error(message);
-
-          const canTryNextModel = response.status === 404 || /not found|not supported|model/i.test(message);
-          if (!canTryNextModel) break;
-        } catch (error) {
-          lastError = error;
-          break;
-        }
-      }
-
-      throw lastError || new Error("Gemini API request failed.");
-    }
-
-    function parsePredictionItems(text) {
-      const jsonText = extractJsonArrayText(text);
-      try {
-        return JSON.parse(jsonText);
-      } catch (error) {
-        console.warn("Gemini raw response could not be parsed as JSON:", text);
-        const repaired = parseLoosePredictionItems(jsonText);
-        if (repaired.length > 0) return repaired;
-        throw error;
-      }
-    }
-
-    function parseLoosePredictionItems(text) {
-      const items = [];
-      const blocks = extractObjectBlocks(text);
-      blocks.forEach(block => {
-        const charName = readJsonishStringValue(block, 'charName');
-        const itemText = readJsonishStringValue(block, 'text');
-        if (charName && itemText) {
-          items.push({
-            charName: cleanupPredictionValue(charName),
-            text: cleanupPredictionValue(itemText)
-          });
-        }
-      });
-      return items;
-    }
-
-    function extractObjectBlocks(text) {
-      const blocks = [];
-      let depth = 0;
-      let start = -1;
-      let inString = false;
-      let escaped = false;
-
-      for (let i = 0; i < text.length; i++) {
-        const ch = text[i];
-        if (inString) {
-          if (escaped) {
-            escaped = false;
-          } else if (ch === '\\') {
-            escaped = true;
-          } else if (ch === '"') {
-            inString = false;
-          }
-          continue;
-        }
-        if (ch === '"') {
-          inString = true;
-        } else if (ch === '{') {
-          if (depth === 0) start = i;
-          depth++;
-        } else if (ch === '}') {
-          depth--;
-          if (depth === 0 && start !== -1) {
-            blocks.push(text.slice(start, i + 1));
-            start = -1;
-          }
-        }
-      }
-
-      if (blocks.length === 0) {
-        const roughBlocks = text.match(/\{[\s\S]*?(?=\}\s*,|\}\s*\]|$)/g) || [];
-        return roughBlocks.map(block => block.endsWith('}') ? block : block + '}');
-      }
-      return blocks;
-    }
-
-    function readJsonishStringValue(block, key) {
-      const keyIndex = block.indexOf(`"${key}"`);
-      if (keyIndex === -1) return "";
-      const colonIndex = block.indexOf(':', keyIndex);
-      if (colonIndex === -1) return "";
-      const quoteIndex = block.indexOf('"', colonIndex);
-      if (quoteIndex === -1) return "";
-
-      let result = "";
-      let escaped = false;
-      for (let i = quoteIndex + 1; i < block.length; i++) {
-        const ch = block[i];
-        if (escaped) {
-          result += ch;
-          escaped = false;
-          continue;
-        }
-        if (ch === '\\') {
-          escaped = true;
-          continue;
-        }
-        if (ch === '"') {
-          const rest = block.slice(i + 1).trimStart();
-          if (rest.startsWith(',') || rest.startsWith('}')) return result;
-        }
-        result += ch;
-      }
-      return result;
-    }
-
-    function cleanupPredictionValue(value) {
-      return value.replace(/\s+/g, ' ').trim();
-    }
-
-    function extractJsonArrayText(text) {
-      let cleaned = text.trim();
-      if (cleaned.startsWith("```")) {
-        cleaned = cleaned.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
-      }
-
-      const start = cleaned.indexOf('[');
-      const end = cleaned.lastIndexOf(']');
-      if (start !== -1 && (end === -1 || end <= start)) return cleaned.slice(start);
-      if (start === -1 || end === -1 || end <= start) return cleaned;
-      return cleaned.slice(start, end + 1);
-    }
-
-    function acceptAiPrediction(untilIndex) {
-      const project = state.projects[state.currentProjectId];
-      const prediction = predictedTalks[untilIndex];
-      if (prediction && !prediction.isSystem && prediction.charName !== "システム警告") {
-        pushUndoSnapshot();
-        project.talks.push(createTalkRecord(prediction.charName, prediction.text));
-      }
-      predictedTalks.splice(untilIndex, 1);
-      saveState();
-      renderTimeline();
-      updateMetaStats();
-
-      const missingCount = Math.max(0, 3 - predictedTalks.length);
-      if (missingCount > 0) {
-        callGeminiApiForPrediction({ append: true, count: missingCount });
-      }
     }
 
     function openEditTalkModal(index) {
@@ -3804,6 +3573,36 @@ ${keptPredictionText}
           target.scrollIntoView({ block: 'nearest' });
         }
       }, 0);
+    }
+
+    function captureTalkViewportAnchor(talkId) {
+      const timeline = document.getElementById('talkTimeline');
+      if (!timeline || !talkId) return null;
+      const target = Array.from(timeline.querySelectorAll('[data-talk-id]')).find(item => item.dataset.talkId === talkId);
+      if (!target) return { talkId, scrollTop: timeline.scrollTop };
+      return {
+        talkId,
+        scrollTop: timeline.scrollTop,
+        top: target.getBoundingClientRect().top
+      };
+    }
+
+    function restoreTalkViewportAnchor(anchor) {
+      const timeline = document.getElementById('talkTimeline');
+      if (!timeline || !anchor) return;
+      const restore = () => {
+        const target = Array.from(timeline.querySelectorAll('[data-talk-id]')).find(item => item.dataset.talkId === anchor.talkId);
+        if (target && Number.isFinite(anchor.top)) {
+          const nextTop = target.getBoundingClientRect().top;
+          timeline.scrollTop += nextTop - anchor.top;
+        } else if (Number.isFinite(anchor.scrollTop)) {
+          timeline.scrollTop = anchor.scrollTop;
+        }
+      };
+      requestAnimationFrame(() => {
+        restore();
+        requestAnimationFrame(restore);
+      });
     }
 
     function finishInlineTalkEdit() {
@@ -3936,7 +3735,6 @@ ${keptPredictionText}
         clearInputSpeech();
       }
       selectedTalkIndexes.clear();
-      predictedTalks = [];
       saveState();
       renderTimeline();
       updateMetaStats();
@@ -3955,7 +3753,6 @@ ${keptPredictionText}
         clearInputSpeech();
       }
       normalizeSelectedTalksAfterMutation();
-      predictedTalks = [];
       saveState();
       renderTimeline();
       updateMetaStats();
@@ -4001,7 +3798,6 @@ ${keptPredictionText}
         delete talk.stageDirection;
         delete talk.note;
       }
-      predictedTalks = [];
       saveState();
       closeModal('stageDirectionModal');
       renderTimeline();
@@ -4015,7 +3811,6 @@ ${keptPredictionText}
       pushUndoSnapshot();
       project.talks.splice(index + 1, 0, createTalkRecord(original.charName, original.text, getStageDirection(original)));
       selectedTalkIndexes.clear();
-      predictedTalks = [];
       saveState();
       renderTimeline();
       updateMetaStats();
@@ -4152,14 +3947,6 @@ ${keptPredictionText}
         <div class="count-total">合計文字数: ${total}文字</div>
         <div class="count-breakdown">${breakdown || '<span>キャラクター別: 0文字</span>'}</div>
       `;
-    }
-
-    function updateAiStatus() {
-      const isAiOn = document.getElementById('aiToggle').checked;
-      if (!isAiOn) {
-        predictedTalks = [];
-        renderTimeline();
-      }
     }
 
     function scrollToBottom() {
@@ -4958,8 +4745,8 @@ unlock();
 
       timeline._sortable = Sortable.create(timeline, {
         animation: 180,
-        draggable: '.chat-bubble:not(.ai-predicted)',
-        filter: '#aiPredicting, .ai-predicted, .talk-select, .talk-edit-tools, .talk-edit-tools *',
+        draggable: '.chat-bubble',
+        filter: '.talk-select, .talk-edit-tools, .talk-edit-tools *',
         preventOnFilter: false,
         delay: 400,
         delayOnTouchOnly: true,
@@ -4976,7 +4763,6 @@ unlock();
         onStart: function(evt) {
           isSortingTalks = true;
           pendingTimelineRender = false;
-          predictionRequestId++;
           draggingItem = evt.item;
           if (draggingItem) lockDragShape(draggingItem);
           document.body.classList.add('talk-sorting-active');
@@ -5038,7 +4824,7 @@ unlock();
     function getSortableTalkIndex(evt) {
       if (Number.isInteger(evt.newDraggableIndex)) return evt.newDraggableIndex;
       if (Number.isInteger(evt.newIndex)) {
-        const timelineItems = Array.from(document.querySelectorAll('#talkTimeline .chat-bubble:not(.ai-predicted)'));
+        const timelineItems = Array.from(document.querySelectorAll('#talkTimeline .chat-bubble'));
         return timelineItems.indexOf(evt.item);
       }
       return NaN;
