@@ -966,6 +966,18 @@ let state = {
       saveCharacterLibrary(list);
     }
 
+    function updateCharacterLibraryAfterProjectEdit(previousCharacter, updatedCharacter) {
+      const previousSignature = characterLibrarySignature(previousCharacter);
+      const updatedSignature = characterLibrarySignature(updatedCharacter);
+      const list = loadCharacterLibrary().filter(item => {
+        const signature = characterLibrarySignature(item);
+        if (signature === previousSignature && signature !== updatedSignature) return false;
+        return true;
+      });
+      mergeCharacterIntoLibraryList(list, updatedCharacter);
+      saveCharacterLibrary(list);
+    }
+
     function syncCharacterLibraryFromProjects() {
       const list = loadCharacterLibrary();
       Object.values(state.projects || {}).forEach(project => {
@@ -2473,6 +2485,8 @@ let state = {
       let timer = null;
       let startPoint = null;
       let movedBeforeLongPress = false;
+      let longPressReady = false;
+      let suppressNextClick = false;
 
       const clearTimer = () => {
         if (timer) {
@@ -2485,11 +2499,15 @@ let state = {
         if (e.button != null && e.button !== 0) return;
         clearTimer();
         movedBeforeLongPress = false;
+        longPressReady = false;
         startPoint = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
         timer = setTimeout(() => {
           timer = null;
           if (movedBeforeLongPress) return;
-          startCharacterDeleteDrag(btn, charName, e);
+          longPressReady = true;
+          suppressNextClick = true;
+          suppressTalkClickUntil = Date.now() + 700;
+          navigator.vibrate?.(25);
         }, longPressMs);
       });
 
@@ -2499,8 +2517,13 @@ let state = {
         const dy = e.clientY - startPoint.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
         if (!characterDragState && distance > moveCancelThreshold) {
-          movedBeforeLongPress = true;
-          clearTimer();
+          if (!longPressReady) {
+            movedBeforeLongPress = true;
+            clearTimer();
+            return;
+          }
+          e.preventDefault();
+          startCharacterDeleteDrag(btn, charName, e);
           return;
         }
         if (characterDragState?.button === btn) {
@@ -2514,6 +2537,14 @@ let state = {
         if (characterDragState?.button === btn) {
           e.preventDefault();
           finishCharacterDeleteDrag(e);
+          startPoint = null;
+          return;
+        }
+        if (longPressReady && !movedBeforeLongPress) {
+          e.preventDefault();
+          openCharEditModal(charName);
+          startPoint = null;
+          longPressReady = false;
           return;
         }
         if (!movedBeforeLongPress) {
@@ -2521,12 +2552,22 @@ let state = {
           selectChar(btn, charName);
         }
         startPoint = null;
+        longPressReady = false;
       });
 
       btn.addEventListener('pointercancel', function() {
         clearTimer();
         cancelCharacterDeleteDrag();
         startPoint = null;
+        longPressReady = false;
+      });
+
+      btn.addEventListener('click', function(e) {
+        if (suppressNextClick || Date.now() < suppressTalkClickUntil) {
+          e.preventDefault();
+          e.stopPropagation();
+          suppressNextClick = false;
+        }
       });
 
       btn.addEventListener('contextmenu', function(e) {
@@ -2711,7 +2752,9 @@ let state = {
       avatarOffsetX = 50;
       avatarOffsetY = 50;
       document.getElementById('charModalTitle').innerText = "キャラクター追加";
+      document.getElementById('charConfirmBtn').innerText = "追加";
       document.getElementById('newCharName').value = "";
+      document.getElementById('newCharAvatar').value = "";
       document.getElementById('newCharName').disabled = false;
       document.getElementById('charRoundCheck').checked = true;
       const project = state.projects[state.currentProjectId];
@@ -2731,9 +2774,12 @@ let state = {
       editingLibraryCharacterSignature = null;
       const project = state.projects[state.currentProjectId];
       const char = project.characters.find(c => c.name === name);
+      if (!char) return;
 
-      document.getElementById('charModalTitle').innerText = `${name} のアバター編集`;
+      document.getElementById('charModalTitle').innerText = `${name}を編集`;
+      document.getElementById('charConfirmBtn').innerText = "変更を保存";
       document.getElementById('newCharName').value = char.name;
+      document.getElementById('newCharAvatar').value = "";
       document.getElementById('newCharName').disabled = false;
       
       selectedAvatarBase64 = char.avatar || "";
@@ -2763,7 +2809,9 @@ let state = {
       editingLibraryCharacterSignature = signature;
 
       document.getElementById('charModalTitle').innerText = 'ライブラリのキャラクター編集';
+      document.getElementById('charConfirmBtn').innerText = "変更を保存";
       document.getElementById('newCharName').value = character.name;
+      document.getElementById('newCharAvatar').value = "";
       document.getElementById('newCharName').disabled = false;
       selectedAvatarBase64 = character.avatar || '';
       document.getElementById('charRoundCheck').checked = character.isRound !== false;
@@ -2868,15 +2916,28 @@ let state = {
         const char = project.characters.find(c => c.name === editingCharName);
         if (char) {
           if (name !== editingCharName && (project.characters.some(c => c.name === name) || name === '情景描写')) {
-            alert("同名のキャラクターが既に存在します。");
+            alert("同じ名前のキャラクターが既に存在します。");
             characterSaveInProgress = false;
             return;
           }
+          const previousCharacter = characterSnapshot(char);
           pushUndoSnapshot();
 
           project.talks.forEach(t => {
             if (t.charName === editingCharName) {
               t.charName = name;
+              if (t.characterSnapshot?.name === editingCharName) {
+                t.characterSnapshot = {
+                  ...t.characterSnapshot,
+                  name,
+                  avatar: selectedAvatarBase64,
+                  isRound,
+                  zoom,
+                  offsetX: avatarOffsetX,
+                  offsetY: avatarOffsetY,
+                  isProtagonist
+                };
+              }
             }
           });
 
@@ -2887,7 +2948,7 @@ let state = {
           char.zoom = zoom;
           char.offsetX = avatarOffsetX;
           char.offsetY = avatarOffsetY;
-          registerCharacterInLibrary(char);
+          updateCharacterLibraryAfterProjectEdit(previousCharacter, char);
           if (isProtagonist) {
             project.characters.forEach(c => {
               if (c !== char) c.isProtagonist = false;
@@ -2901,6 +2962,7 @@ let state = {
 
       renderCharSelector();
       renderTimeline();
+      updateMetaStats();
       closeModal('charModal');
       saveState();
       setTimeout(() => { characterSaveInProgress = false; }, 0);
