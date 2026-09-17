@@ -13,6 +13,9 @@ const SCRIPTMAKER_EDITOR_CLOUD_LAST_ID_KEY = 'scriptmaker_editor_cloud_last_proj
 const SCRIPTMAKER_EDITOR_BACKUP_META_KEY = 'scriptmaker_editor_backup_sync_meta_v1';
 const SCRIPTMAKER_EDITOR_BACKUP_DEVICE_KEY = 'scriptmaker_editor_backup_device_v1';
 const SCRIPTMAKER_EDITOR_BACKUP_FAIL_KEY = 'scriptmaker_editor_backup_fail_v1';
+const SCRIPTMAKER_EDITOR_SYNC_DEBOUNCE_MS = 1200;
+const SCRIPTMAKER_EDITOR_SYNC_POLL_MS = 45000;
+const SCRIPTMAKER_EDITOR_LEGACY_SYNC_TIME = '1970-01-01T00:00:00.000Z';
 const SCRIPTMAKER_SCRIPT_COLOR_PREFIX = 'scriptmaker_editor_script_colors_v1:';
 const SCRIPTMAKER_IMAGE_DB_NAME = 'scriptmaker_editor_images_v1';
 const SCRIPTMAKER_IMAGE_STORE_NAME = 'images';
@@ -65,8 +68,13 @@ let state = {
     let cloudSyncUrlHandled = false;
     let editorScriptColorSettings = {};
     let editorCloudSyncTimer = null;
+    let editorCloudPullTimer = null;
+    let editorCloudPollTimer = null;
     let editorCloudSyncInFlight = false;
+    let editorCloudPullInFlight = false;
     let editorApplyingCloudState = false;
+    let editorBackupRealtimeUnsubscribe = null;
+    let editorBackupSyncEventsBound = false;
     let editorLastSyncAt = '';
     let editorAppReady = false;
     let characterDragState = null;
@@ -338,12 +346,18 @@ let state = {
     }
 
     function buildEditorBackupBasePayload() {
+      ensureEditorSyncMetadata();
+      if (!state.updatedByDeviceId) state.updatedByDeviceId = getEditorBackupDevice().id;
       const updatedAt = state.editorUpdatedAt || new Date().toISOString();
       return {
         id: 'main',
         title: 'ScriptMaker Editor',
         schemaVersion: 2,
+        revision: Number(state.editorRevision) || 0,
         updatedAt,
+        updatedByDeviceId: state.updatedByDeviceId || '',
+        projectIndex: buildProjectSyncIndex(state),
+        deletedProjects: state.deletedProjects || {},
         data: {
           state,
           auxiliary: {
@@ -355,6 +369,105 @@ let state = {
       };
     }
 
+    function ensureEditorSyncMetadata() {
+      if (!state || typeof state !== 'object') return;
+      if (!state.deletedProjects || typeof state.deletedProjects !== 'object') state.deletedProjects = {};
+      if (!Number.isFinite(Number(state.editorRevision))) state.editorRevision = 0;
+      if (!state.editorUpdatedAt) state.editorUpdatedAt = SCRIPTMAKER_EDITOR_LEGACY_SYNC_TIME;
+      Object.entries(state.projects || {}).forEach(([projectId, project]) => {
+        if (!project || typeof project !== 'object') return;
+        if (!project.id) project.id = projectId;
+        if (!Number.isFinite(Number(project.revision))) project.revision = 0;
+        if (!project.updatedAt) project.updatedAt = state.editorUpdatedAt || SCRIPTMAKER_EDITOR_LEGACY_SYNC_TIME;
+        if (!project.updatedByDeviceId) project.updatedByDeviceId = state.updatedByDeviceId || '';
+      });
+    }
+
+    function touchEditorSyncMetadata() {
+      if (editorApplyingCloudState) return;
+      ensureEditorSyncMetadata();
+      const now = new Date().toISOString();
+      const device = getEditorBackupDevice();
+      state.editorUpdatedAt = now;
+      state.editorRevision = (Number(state.editorRevision) || 0) + 1;
+      state.updatedByDeviceId = device.id;
+      const project = state.projects?.[state.currentProjectId];
+      if (project) {
+        project.updatedAt = now;
+        project.revision = (Number(project.revision) || 0) + 1;
+        project.updatedByDeviceId = device.id;
+      }
+    }
+
+    function buildProjectSyncIndex(sourceState) {
+      const projects = sourceState?.projects || {};
+      const index = {};
+      Object.entries(projects).forEach(([id, project]) => {
+        index[id] = {
+          id,
+          title: project?.title || '',
+          revision: Number(project?.revision) || 0,
+          updatedAt: project?.updatedAt || sourceState?.editorUpdatedAt || '',
+          updatedByDeviceId: project?.updatedByDeviceId || sourceState?.updatedByDeviceId || ''
+        };
+      });
+      return index;
+    }
+
+    function syncRecordTime(record) {
+      const value = record?.updatedAt || record?.deletedAt || record?.cloudUpdatedAt || '';
+      if (value && typeof value.toDate === 'function') return value.toDate().getTime();
+      if (value && Number.isFinite(value.seconds)) return value.seconds * 1000 + Math.floor((value.nanoseconds || 0) / 1000000);
+      const parsed = Date.parse(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function compareSyncRecords(a, b) {
+      const aTime = syncRecordTime(a);
+      const bTime = syncRecordTime(b);
+      if (aTime !== bTime) return aTime > bTime ? 1 : -1;
+      const aRevision = Number(a?.revision) || 0;
+      const bRevision = Number(b?.revision) || 0;
+      if (aRevision !== bRevision) return aRevision > bRevision ? 1 : -1;
+      return 0;
+    }
+
+    function newerDeletedProject(a, b) {
+      if (!a) return b || null;
+      if (!b) return a;
+      return syncRecordTime(b) > syncRecordTime(a) ? b : a;
+    }
+
+    function recordProjectDeletion(projectId, project) {
+      ensureEditorSyncMetadata();
+      const now = new Date().toISOString();
+      const device = getEditorBackupDevice();
+      state.deletedProjects[projectId] = {
+        id: projectId,
+        title: project?.title || '',
+        deletedAt: now,
+        revision: Number(project?.revision) || 0,
+        deletedByDeviceId: device.id
+      };
+    }
+
+    function renderEditorAfterCloudApply() {
+      normalizeProjectData();
+      syncCharacterLibraryFromProjects();
+      renderProjectList();
+      initCountControls();
+      if (state.currentProjectId && !state.projects[state.currentProjectId]) {
+        state.currentProjectId = Object.keys(state.projects || {})[0] || null;
+      }
+      if (state.currentProjectId && state.projects[state.currentProjectId]) {
+        document.getElementById('projectTitle').innerText = state.projects[state.currentProjectId].title || '';
+        renderCharSelector();
+        renderTimeline();
+        updateMetaStats();
+        applyProjectWallpaper(true);
+      }
+    }
+
     function applyEditorBackupPayload(payload) {
       const data = payload?.data || {};
       if (!data.state || typeof data.state !== 'object') return false;
@@ -362,21 +475,13 @@ let state = {
       try {
         state = data.state;
         if (!state.editorUpdatedAt) state.editorUpdatedAt = payload.updatedAt || new Date().toISOString();
+        ensureEditorSyncMetadata();
         const auxiliary = data.auxiliary || {};
         if (auxiliary.characterLibrary != null) localStorage.setItem(SCRIPTMAKER_CHARACTER_LIBRARY_KEY, String(auxiliary.characterLibrary));
         if (auxiliary.countSettings != null) localStorage.setItem(SCRIPTMAKER_EDITOR_COUNT_SETTING_KEY, String(auxiliary.countSettings));
         applyScriptColorSettingsFromSync(auxiliary.scriptColorSettings);
         localStorage.setItem('script_assistant_data_v21', JSON.stringify(cloneStateForLocalStorage()));
-        normalizeProjectData();
-        syncCharacterLibraryFromProjects();
-        renderProjectList();
-        initCountControls();
-        if (state.currentProjectId && state.projects[state.currentProjectId]) {
-          renderCharSelector();
-          renderTimeline();
-          updateMetaStats();
-          applyProjectWallpaper(true);
-        }
+        renderEditorAfterCloudApply();
         return true;
       } finally {
         editorApplyingCloudState = false;
@@ -458,7 +563,104 @@ let state = {
       return { projects: Object.keys(projects).length, folders: Object.keys(folders).length, updatedAt: payload?.updatedAt || nextState.editorUpdatedAt || '', bytes };
     }
 
-    function scheduleEditorBackupSync(delay = 3000) {
+    function mergeEditorBackupPayload(payload, options = {}) {
+      const remoteState = payload?.data?.state;
+      if (!remoteState || typeof remoteState !== 'object') return { applied: false, localNewer: false, remoteNewer: false };
+
+      const localState = JSON.parse(JSON.stringify(state || {}));
+      const remote = JSON.parse(JSON.stringify(remoteState));
+      localState.projects = localState.projects || {};
+      remote.projects = remote.projects || {};
+      localState.folders = localState.folders || {};
+      remote.folders = remote.folders || {};
+      localState.deletedProjects = localState.deletedProjects || {};
+      remote.deletedProjects = remote.deletedProjects || {};
+
+      const merged = JSON.parse(JSON.stringify(localState));
+      merged.projects = { ...(localState.projects || {}) };
+      merged.folders = { ...(remote.folders || {}), ...(localState.folders || {}) };
+      merged.deletedProjects = { ...(localState.deletedProjects || {}) };
+
+      let applied = false;
+      let localNewer = false;
+      let remoteNewer = false;
+
+      Object.entries(remote.deletedProjects || {}).forEach(([id, tombstone]) => {
+        const current = merged.deletedProjects[id];
+        merged.deletedProjects[id] = newerDeletedProject(current, tombstone);
+      });
+
+      Object.entries(remote.projects || {}).forEach(([id, remoteProject]) => {
+        const tombstone = merged.deletedProjects[id];
+        if (tombstone && syncRecordTime(tombstone) >= syncRecordTime(remoteProject)) return;
+        const localProject = merged.projects[id];
+        if (!localProject) {
+          merged.projects[id] = remoteProject;
+          applied = true;
+          remoteNewer = true;
+          return;
+        }
+        const comparison = compareSyncRecords(remoteProject, localProject);
+        if (comparison > 0) {
+          merged.projects[id] = remoteProject;
+          applied = true;
+          remoteNewer = true;
+        } else if (comparison < 0) {
+          localNewer = true;
+        }
+      });
+
+      Object.entries(merged.projects || {}).forEach(([id, localProject]) => {
+        const remoteProject = remote.projects[id];
+        const remoteDeletion = remote.deletedProjects?.[id];
+        if (remoteDeletion && syncRecordTime(remoteDeletion) >= syncRecordTime(localProject)) {
+          delete merged.projects[id];
+          applied = true;
+          remoteNewer = true;
+          return;
+        }
+        if (!remoteProject) localNewer = true;
+      });
+
+      const remoteGlobal = { revision: Number(remote.editorRevision) || 0, updatedAt: remote.editorUpdatedAt || payload.updatedAt || '' };
+      const localGlobal = { revision: Number(localState.editorRevision) || 0, updatedAt: localState.editorUpdatedAt || '' };
+      const globalComparison = compareSyncRecords(remoteGlobal, localGlobal);
+      if (globalComparison > 0) {
+        merged.settings = remote.settings || merged.settings;
+        merged.currentFolderId = remote.currentFolderId || merged.currentFolderId;
+        if (!merged.currentProjectId || !merged.projects[merged.currentProjectId]) {
+          merged.currentProjectId = remote.currentProjectId || Object.keys(merged.projects || {})[0] || null;
+        }
+        remoteNewer = true;
+      } else if (globalComparison < 0) {
+        localNewer = true;
+      }
+
+      const localTime = syncRecordTime(localGlobal);
+      const remoteTime = syncRecordTime(remoteGlobal);
+      merged.editorRevision = Math.max(Number(localState.editorRevision) || 0, Number(remote.editorRevision) || 0);
+      merged.editorUpdatedAt = remoteTime > localTime ? (remote.editorUpdatedAt || payload.updatedAt || localState.editorUpdatedAt) : (localState.editorUpdatedAt || remote.editorUpdatedAt || payload.updatedAt || new Date().toISOString());
+      merged.updatedByDeviceId = remoteTime > localTime ? (remote.updatedByDeviceId || payload.updatedByDeviceId || '') : (localState.updatedByDeviceId || '');
+
+      if (!applied && !remoteNewer) return { applied: false, localNewer, remoteNewer };
+
+      editorApplyingCloudState = true;
+      try {
+        state = merged;
+        const auxiliary = payload?.data?.auxiliary || {};
+        if (auxiliary.characterLibrary != null) localStorage.setItem(SCRIPTMAKER_CHARACTER_LIBRARY_KEY, String(auxiliary.characterLibrary));
+        if (auxiliary.countSettings != null) localStorage.setItem(SCRIPTMAKER_EDITOR_COUNT_SETTING_KEY, String(auxiliary.countSettings));
+        applyScriptColorSettingsFromSync(auxiliary.scriptColorSettings);
+        localStorage.setItem('script_assistant_data_v21', JSON.stringify(cloneStateForLocalStorage()));
+        renderEditorAfterCloudApply();
+      } finally {
+        editorApplyingCloudState = false;
+      }
+
+      return { applied: true, localNewer, remoteNewer };
+    }
+
+    function scheduleEditorBackupSync(delay = SCRIPTMAKER_EDITOR_SYNC_DEBOUNCE_MS) {
       if (editorApplyingCloudState || !editorBackupMeta().syncSpaceId) return;
       saveEditorBackupMeta({ pending: true });
       setEditorSyncStatus('\u672a\u540c\u671f\u306e\u5909\u66f4\u3042\u308a', 'offline');
@@ -496,10 +698,25 @@ let state = {
       try {
         const helper = window.ScriptMakerFirebaseShare;
         const config = await editorBackupFirebaseConfig();
-        const payload = buildEditorBackupPayload();
+        let payload = buildEditorBackupPayload();
+        if (!options.skipRemoteCheck) {
+          const remotePayload = await helper.loadEditorBackupState(meta.syncSpaceId, config).catch(error => {
+            console.warn('Pre-upload cloud check failed:', error);
+            return null;
+          });
+          const merge = mergeEditorBackupPayload(remotePayload);
+          if (merge.applied && !merge.localNewer && !meta.pending && !options.forceUpload) {
+            editorLastSyncAt = new Date().toISOString();
+            saveEditorBackupMeta({ lastSyncAt: editorLastSyncAt, pending: false, lastCloudUpdatedAt: remotePayload?.updatedAt || '' });
+            setEditorSyncStatus('\u540c\u671f\u6e08\u307f ' + formatSyncTime(editorLastSyncAt), 'synced');
+            updateEditorBackupModal();
+            return true;
+          }
+          payload = buildEditorBackupPayload();
+        }
         await helper.saveEditorBackupState(meta.syncSpaceId, payload, config);
         try {
-          await helper.saveEditorSyncSpaceMeta(meta.syncSpaceId, { schemaVersion: 1, recoveryCodeHash: meta.recoveryCodeHash, updatedAt: payload.updatedAt }, config);
+          await helper.saveEditorSyncSpaceMeta(meta.syncSpaceId, { schemaVersion: 1, recoveryCodeHash: meta.recoveryCodeHash, updatedAt: payload.updatedAt, revision: payload.revision, updatedByDeviceId: payload.updatedByDeviceId }, config);
         } catch (metaError) {
           console.warn('Backup metadata save failed.', metaError);
         }
@@ -523,33 +740,87 @@ let state = {
       }
     }
 
+    function scheduleEditorBackupCloudCheck(delay = 0, force = false) {
+      if (!editorBackupMeta().syncSpaceId || editorApplyingCloudState) return;
+      clearTimeout(editorCloudPullTimer);
+      editorCloudPullTimer = setTimeout(() => loadEditorBackupCloudState(force), delay);
+    }
+
     async function loadEditorBackupCloudState(force = false) {
       const meta = editorBackupMeta();
       if (!meta.syncSpaceId || !window.ScriptMakerFirebaseShare || !navigator.onLine) return false;
       if (!editorAppReady) { setTimeout(() => loadEditorBackupCloudState(force), 250); return false; }
+      if (editorCloudPullInFlight) return false;
+      editorCloudPullInFlight = true;
       setEditorSyncStatus('\u540c\u671f\u78ba\u8a8d\u4e2d\u2026', 'syncing');
       try {
         const helper = window.ScriptMakerFirebaseShare;
         const config = await editorBackupFirebaseConfig();
         const payload = await helper.loadEditorBackupState(meta.syncSpaceId, config);
-        const remoteUpdated = Date.parse(payload?.updatedAt || payload?.data?.state?.editorUpdatedAt || '');
-        const localUpdated = Date.parse(state.editorUpdatedAt || '');
-        if (payload && (force || (remoteUpdated && (!localUpdated || remoteUpdated > localUpdated)))) {
-          if (!force && localUpdated && remoteUpdated && localUpdated > remoteUpdated) { setEditorSyncStatus('\u5225\u7aef\u672b\u306e\u66f4\u65b0\u3042\u308a', 'error'); return false; }
-          applyEditorBackupPayload(payload);
+        if (payload) {
+          const merge = force ? (applyEditorBackupPayload(payload), { applied: true, localNewer: false }) : mergeEditorBackupPayload(payload);
           editorLastSyncAt = new Date().toISOString();
           saveEditorBackupMeta({ lastSyncAt: editorLastSyncAt, pending: false, lastCloudUpdatedAt: payload.updatedAt || '' });
           setEditorSyncStatus('\u540c\u671f\u6e08\u307f ' + formatSyncTime(editorLastSyncAt), 'synced');
           updateEditorBackupModal();
+          if (merge.localNewer) scheduleEditorBackupSync(SCRIPTMAKER_EDITOR_SYNC_DEBOUNCE_MS);
           return true;
         }
-        await saveEditorBackupNow({ skipReschedule: true });
+        if (localEditorHasExistingData()) {
+          saveEditorBackupMeta({ pending: true });
+          await saveEditorBackupNow({ skipReschedule: true, skipRemoteCheck: true, forceUpload: true });
+        }
         return true;
       } catch (error) {
         console.error('Editor backup load failed:', error);
         setEditorSyncStatus('\u540c\u671f\u5931\u6557', 'error', error.message || String(error));
         return false;
+      } finally {
+        editorCloudPullInFlight = false;
       }
+    }
+
+    function stopEditorBackupRealtimeListener() {
+      if (typeof editorBackupRealtimeUnsubscribe === 'function') {
+        try { editorBackupRealtimeUnsubscribe(); } catch (_) {}
+      }
+      editorBackupRealtimeUnsubscribe = null;
+    }
+
+    async function startEditorBackupRealtimeListener() {
+      const meta = editorBackupMeta();
+      if (!meta.syncSpaceId || !navigator.onLine || !window.ScriptMakerFirebaseShare?.listenEditorBackupStateMeta) return;
+      stopEditorBackupRealtimeListener();
+      try {
+        const config = await editorBackupFirebaseConfig();
+        const deviceId = getEditorBackupDevice().id;
+        editorBackupRealtimeUnsubscribe = await window.ScriptMakerFirebaseShare.listenEditorBackupStateMeta(meta.syncSpaceId, (cloudMeta, error) => {
+          if (error) {
+            console.warn('Editor realtime sync listener failed:', error);
+            return;
+          }
+          if (!cloudMeta) return;
+          if (cloudMeta.updatedByDeviceId && cloudMeta.updatedByDeviceId === deviceId) return;
+          const cloudUpdated = syncRecordTime(cloudMeta);
+          const knownUpdated = Date.parse(editorBackupMeta().lastCloudUpdatedAt || '') || 0;
+          const localUpdated = Date.parse(state.editorUpdatedAt || '') || 0;
+          if (cloudUpdated > Math.max(knownUpdated, localUpdated - 1)) {
+            setEditorSyncStatus('\u5225\u7aef\u672b\u306e\u66f4\u65b0\u3092\u78ba\u8a8d\u4e2d\u2026', 'syncing');
+            scheduleEditorBackupCloudCheck(600);
+          }
+        }, config);
+      } catch (error) {
+        console.warn('Editor realtime sync setup failed:', error);
+      }
+    }
+
+    function restartEditorBackupPolling() {
+      if (editorCloudPollTimer) clearInterval(editorCloudPollTimer);
+      if (!editorBackupMeta().syncSpaceId) return;
+      editorCloudPollTimer = setInterval(() => {
+        if (document.hidden || !navigator.onLine) return;
+        scheduleEditorBackupCloudCheck(0);
+      }, SCRIPTMAKER_EDITOR_SYNC_POLL_MS);
     }
 
     function initEditorBackupSync() {
@@ -557,12 +828,30 @@ let state = {
       const meta = editorBackupMeta();
       if (meta.syncSpaceId) {
         setEditorSyncStatus(meta.pending ? '\u672a\u540c\u671f\u306e\u5909\u66f4\u3042\u308a' : '\u540c\u671f\u6e96\u5099OK', meta.pending ? 'offline' : 'synced');
-        if (navigator.onLine) setTimeout(() => loadEditorBackupCloudState(), 800);
+        if (navigator.onLine) {
+          setTimeout(() => loadEditorBackupCloudState(), 800);
+          startEditorBackupRealtimeListener();
+          restartEditorBackupPolling();
+        }
       } else {
         setEditorSyncStatus('\u672a\u8a2d\u5b9a', 'offline');
       }
-      window.addEventListener('online', () => saveEditorBackupNow());
-      window.addEventListener('offline', () => setEditorSyncStatus('\u30aa\u30d5\u30e9\u30a4\u30f3\u30fb\u7aef\u672b\u306b\u4fdd\u5b58\u6e08\u307f', 'offline'));
+      if (editorBackupSyncEventsBound) return;
+      editorBackupSyncEventsBound = true;
+      window.addEventListener('online', () => {
+        startEditorBackupRealtimeListener();
+        restartEditorBackupPolling();
+        scheduleEditorBackupCloudCheck(200);
+        saveEditorBackupNow();
+      });
+      window.addEventListener('offline', () => {
+        stopEditorBackupRealtimeListener();
+        setEditorSyncStatus('\u30aa\u30d5\u30e9\u30a4\u30f3\u30fb\u7aef\u672b\u306b\u4fdd\u5b58\u6e08\u307f', 'offline');
+      });
+      window.addEventListener('focus', () => scheduleEditorBackupCloudCheck(150));
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) scheduleEditorBackupCloudCheck(150);
+      });
     }
 
     async function issueEditorBackupCode() {
@@ -579,7 +868,7 @@ let state = {
         await helper.saveEditorBackupState(syncSpaceId, payload, config);
         try {
           await helper.saveEditorRecoveryCode(codeHash, syncSpaceId, { createdAt: new Date().toISOString() }, config);
-          await helper.saveEditorSyncSpaceMeta(syncSpaceId, { schemaVersion: 1, recoveryCodeHash: codeHash, updatedAt: payload.updatedAt }, config);
+          await helper.saveEditorSyncSpaceMeta(syncSpaceId, { schemaVersion: 1, recoveryCodeHash: codeHash, updatedAt: payload.updatedAt, revision: payload.revision, updatedByDeviceId: payload.updatedByDeviceId }, config);
         } catch (metaError) {
           console.warn('Backup metadata save failed; deterministic code id will be used.', metaError);
         }
@@ -592,6 +881,8 @@ let state = {
         saveEditorBackupMeta({ syncSpaceId, recoveryCodeHash: codeHash, codeSavedAt: new Date().toISOString(), pending: false, lastSyncAt: new Date().toISOString() });
         setEditorBackupCodeOutput(code);
         setEditorBackupStatus('\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30b3\u30fc\u30c9\u3092\u767a\u884c\u3057\u307e\u3057\u305f\u3002\u7b2c\u4e09\u8005\u306b\u5171\u6709\u3057\u306a\u3044\u3067\u304f\u3060\u3055\u3044\u3002', 'success');
+        startEditorBackupRealtimeListener();
+        restartEditorBackupPolling();
         updateEditorBackupModal();
       } catch (error) {
         console.error('Backup issue failed:', error);
@@ -720,6 +1011,8 @@ let state = {
         localStorage.setItem('scriptmaker_editor_backup_code_plain_v1', code);
         saveEditorBackupMeta({ syncSpaceId, recoveryCodeHash: codeHash, pending: false, lastSyncAt: new Date().toISOString() });
         saveState();
+        startEditorBackupRealtimeListener();
+        restartEditorBackupPolling();
         closeModal('editorBackupModal');
         document.getElementById('editorAuthGate')?.classList.add('hidden');
         document.body.classList.remove('auth-locked');
@@ -770,6 +1063,9 @@ let state = {
 
     function unlinkEditorBackupDevice() {
       if (!confirm('\u3053\u306e\u7aef\u672b\u306e\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u9023\u643a\u3092\u89e3\u9664\u3057\u307e\u3059\u304b\uff1f\u7aef\u672b\u5185\u306e\u53f0\u672c\u30c7\u30fc\u30bf\u306f\u524a\u9664\u3055\u308c\u307e\u305b\u3093\u3002')) return;
+      stopEditorBackupRealtimeListener();
+      if (editorCloudPollTimer) clearInterval(editorCloudPollTimer);
+      editorCloudPollTimer = null;
       clearEditorBackupMeta();
       localStorage.removeItem('scriptmaker_editor_backup_code_plain_v1');
       setEditorSyncStatus('\u672a\u8a2d\u5b9a', 'offline');
@@ -824,8 +1120,12 @@ let state = {
       if (!state.settings || typeof state.settings !== 'object') state.settings = {};
       if (state.settings.showTalkNumbers === undefined) state.settings.showTalkNumbers = true;
       if (state.settings.outputTalkNumbers === undefined) state.settings.outputTalkNumbers = false;
+      ensureEditorSyncMetadata();
 
-      Object.values(state.projects || {}).forEach(project => {
+      Object.entries(state.projects || {}).forEach(([projectId, project]) => {
+        if (!project.id) project.id = projectId;
+        if (!project.updatedAt) project.updatedAt = state.editorUpdatedAt || SCRIPTMAKER_EDITOR_LEGACY_SYNC_TIME;
+        if (!Number.isFinite(Number(project.revision))) project.revision = 0;
         if (!Array.isArray(project.characters)) project.characters = [];
         project.characters.forEach((char, index) => {
           if (char.isProtagonist === undefined) char.isProtagonist = index === 0;
@@ -1520,7 +1820,7 @@ let state = {
     function saveState() {
       try {
         setSaveStatus('saving');
-        if (!editorApplyingCloudState) state.editorUpdatedAt = new Date().toISOString();
+        touchEditorSyncMetadata();
         localStorage.setItem('script_assistant_data_v21', JSON.stringify(cloneStateForLocalStorage()));
         scheduleEditorBackupSync();
         markSaveCompleteSoon();
@@ -1682,11 +1982,17 @@ let state = {
       const name = document.getElementById('newProjectName').value.trim();
       if (!name) return;
       const id = "p_" + Date.now();
+      const now = new Date().toISOString();
+      const device = getEditorBackupDevice();
       state.projects[id] = {
+        id,
         title: name,
         characters: [],
         talks: [],
-        folderId: state.currentFolderId || UNCLASSIFIED_FOLDER_ID
+        folderId: state.currentFolderId || UNCLASSIFIED_FOLDER_ID,
+        revision: 1,
+        updatedAt: now,
+        updatedByDeviceId: device.id
       };
       syncCharacterLibraryFromProjects();
       saveState();
@@ -1698,7 +2004,9 @@ let state = {
     function deleteProject(event, id) {
       event.stopPropagation();
       if (confirm("このプロジェクトを削除しますか？")) {
+        recordProjectDeletion(id, state.projects[id]);
         delete state.projects[id];
+        if (state.currentProjectId === id) state.currentProjectId = Object.keys(state.projects || {})[0] || null;
         saveState();
         renderProjectList();
       }
@@ -1711,8 +2019,14 @@ let state = {
       if (!source) return;
       const newId = 'p_' + Date.now();
       const copy = cloneProject(source);
+      const now = new Date().toISOString();
+      const device = getEditorBackupDevice();
+      copy.id = newId;
       copy.title = (source.title || '\u30d7\u30ed\u30b8\u30a7\u30af\u30c8') + ' \u306e\u30b3\u30d4\u30fc';
       copy.folderId = source.folderId || UNCLASSIFIED_FOLDER_ID;
+      copy.revision = 1;
+      copy.updatedAt = now;
+      copy.updatedByDeviceId = device.id;
       if (Array.isArray(copy.talks)) {
         const idMap = new Map();
         copy.talks.forEach(talk => {

@@ -134,6 +134,8 @@
       title: payload.title || "",
       chunkCount: chunks.length,
       schemaVersion: payload.schemaVersion || 1,
+      revision: Number(payload.revision) || 0,
+      updatedByDeviceId: payload.updatedByDeviceId || "",
       createdAt: payload.createdAt || serverTimestamp(),
       updatedAt: payload.updatedAt || serverTimestamp()
     };
@@ -268,6 +270,8 @@
       id: syncSpaceId,
       schemaVersion: meta?.schemaVersion || 1,
       recoveryCodeHash: meta?.recoveryCodeHash || "",
+      revision: Number(meta?.revision) || 0,
+      updatedByDeviceId: meta?.updatedByDeviceId || "",
       updatedAt: meta?.updatedAt || serverTimestamp(),
       createdAt: meta?.createdAt || serverTimestamp()
     }, { merge: true });
@@ -297,6 +301,17 @@
     return snap.docs.map(item => item.data());
   }
 
+  async function listenEditorBackupStateMeta(syncSpaceId, callback, config) {
+    if (!syncSpaceId || typeof callback !== "function") return function() {};
+    const db = await dbForConfig(config || configuredConfig(""));
+    const { doc, onSnapshot } = (await modules()).firestore;
+    return onSnapshot(
+      doc(db, editorSyncStateCollection(syncSpaceId), FIREBASE_EDITOR_SYNC_STATE_ID),
+      snap => callback(snap.exists() ? snap.data() : null),
+      error => callback(null, error)
+    );
+  }
+
   window.ScriptMakerFirebaseShare = {
     FIREBASE_CONFIG_STORAGE_KEY,
     parseFirebaseConfigText,
@@ -316,6 +331,7 @@
     saveEditorSyncSpaceMeta,
     saveEditorDevice,
     listEditorDevices,
+    listenEditorBackupStateMeta,
     isConfigured
   };
 })();
