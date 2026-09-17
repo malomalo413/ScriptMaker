@@ -86,6 +86,7 @@ let state = {
     let preserveViewportAfterEdit = false;
     let viewportPreserveReleaseTimer = null;
     let lastViewportLayoutHeight = 0;
+    let talkDoubleTapState = null;
 
     let originalViewportHeight = window.innerHeight;
     async function hashPasswordText(value) {
@@ -3720,21 +3721,18 @@ let state = {
       return !!target?.closest?.('button, input, textarea, select, label, .stage-direction-display, .talk-edit-tools, .talk-edit-tools *, .talk-select');
     }
 
-    function initTalkEditLongPress(element, talkId) {
+    function initTalkDoubleTapEdit(element, talkId) {
       if (!element || !talkId) return;
-      const longPressMs = 600;
+      const doubleTapMs = 360;
       const moveCancelThreshold = 10;
-      let timer = null;
+      const tapDistanceThreshold = 28;
       let pointerId = null;
       let startX = 0;
       let startY = 0;
       let startScrollTop = 0;
-      let didLongPress = false;
       let cancelled = false;
 
       const cancel = () => {
-        if (timer) clearTimeout(timer);
-        timer = null;
         pointerId = null;
         cancelled = true;
       };
@@ -3744,19 +3742,10 @@ let state = {
         if (isEditMode || isSortingTalks || isInteractiveTalkTarget(event.target)) return;
         const timeline = document.getElementById('talkTimeline');
         cancelled = false;
-        didLongPress = false;
         pointerId = event.pointerId;
         startX = event.clientX;
         startY = event.clientY;
         startScrollTop = timeline ? timeline.scrollTop : 0;
-        timer = setTimeout(() => {
-          timer = null;
-          if (cancelled || isSortingTalks) return;
-          didLongPress = true;
-          suppressTalkClickUntil = Date.now() + 700;
-          if (navigator.vibrate) navigator.vibrate(20);
-          startInlineTalkEditById(talkId);
-        }, longPressMs);
       });
 
       element.addEventListener('pointermove', event => {
@@ -3767,13 +3756,34 @@ let state = {
         if (moved > moveCancelThreshold || scrolled > 2) cancel();
       });
 
-      ['pointerup', 'pointercancel', 'pointerleave'].forEach(type => {
-        element.addEventListener(type, event => {
-          if (pointerId !== null && event.pointerId != null && pointerId !== event.pointerId) return;
-          if (didLongPress) {
+      element.addEventListener('pointerup', event => {
+        if (pointerId !== null && event.pointerId != null && pointerId !== event.pointerId) return;
+        const moved = Math.hypot(event.clientX - startX, event.clientY - startY);
+        const timeline = document.getElementById('talkTimeline');
+        const scrolled = timeline ? Math.abs(timeline.scrollTop - startScrollTop) : 0;
+        if (!cancelled && moved <= moveCancelThreshold && scrolled <= 2 && !isSortingTalks && Date.now() >= suppressTalkClickUntil) {
+          const now = Date.now();
+          const previous = talkDoubleTapState;
+          const isDoubleTap = previous &&
+            previous.talkId === talkId &&
+            now - previous.time <= doubleTapMs &&
+            Math.hypot(event.clientX - previous.x, event.clientY - previous.y) <= tapDistanceThreshold;
+          if (isDoubleTap) {
             event.preventDefault();
             event.stopPropagation();
+            talkDoubleTapState = null;
+            suppressTalkClickUntil = Date.now() + 500;
+            startInlineTalkEditById(talkId);
+          } else {
+            talkDoubleTapState = { talkId, time: now, x: event.clientX, y: event.clientY };
           }
+        }
+        cancel();
+      });
+
+      ['pointercancel', 'pointerleave'].forEach(type => {
+        element.addEventListener(type, event => {
+          if (pointerId !== null && event.pointerId != null && pointerId !== event.pointerId) return;
           cancel();
         });
       });
@@ -3782,9 +3792,20 @@ let state = {
         if (Date.now() < suppressTalkClickUntil) {
           event.preventDefault();
           event.stopPropagation();
+        }
+      });
+
+      element.addEventListener('dblclick', event => {
+        if (Date.now() < suppressTalkClickUntil || isEditMode || isSortingTalks || isInteractiveTalkTarget(event.target)) {
+          event.preventDefault();
+          event.stopPropagation();
           return;
         }
-        if (window.matchMedia?.('(pointer: fine)').matches && !isEditMode && !isSortingTalks && !isInteractiveTalkTarget(event.target)) {
+        event.preventDefault();
+        event.stopPropagation();
+        suppressTalkClickUntil = Date.now() + 500;
+        talkDoubleTapState = null;
+        if (!isEditMode && !isSortingTalks && !isInteractiveTalkTarget(event.target)) {
           startInlineTalkEditById(talkId);
         }
       });
@@ -3800,7 +3821,7 @@ let state = {
         row.className = 'script-row' + scriptColorClassForCharacter(talk.charName) + (editingTalkId === talk.id ? ' inline-edit-target' : '');
         row.dataset.index = index;
         row.dataset.talkId = talk.id;
-        initTalkEditLongPress(row, talk.id);
+        initTalkDoubleTapEdit(row, talk.id);
         row.innerHTML =
           '<div class="script-col script-dialogue">' +
             '<div class="script-meta"><span>' + formatTalkNumber(index) + '</span><strong>' + escapeHtml(talk.charName || '') + '</strong></div>' +
@@ -3843,7 +3864,7 @@ let state = {
         bubble.dataset.index = index;
         bubble.dataset.talkId = talk.id;
 
-        initTalkEditLongPress(bubble, talk.id);
+        initTalkDoubleTapEdit(bubble, talk.id);
 
         let avatarHtml = '';
         if (!isScene) avatarHtml = avatarHtmlForCharacterInfo(talkCharacterInfo(project, talk), talk.charName);
