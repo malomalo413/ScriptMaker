@@ -82,6 +82,10 @@ let state = {
     let characterSaveInProgress = false;
     let saveStatusTimer = null;
     let stageDirectionViewportAnchor = null;
+    let activeViewportAnchor = null;
+    let preserveViewportAfterEdit = false;
+    let viewportPreserveReleaseTimer = null;
+    let lastViewportLayoutHeight = 0;
 
     let originalViewportHeight = window.innerHeight;
     async function hashPasswordText(value) {
@@ -3980,6 +3984,7 @@ let state = {
       const talk = resolved.talk;
       const timeline = document.getElementById('talkTimeline');
       const previousScrollTop = timeline ? timeline.scrollTop : 0;
+      const anchor = captureTalkViewportAnchor(talk.id) || { talkId: talk.id, scrollTop: previousScrollTop };
       insertTalkTarget = null;
       inputStageDirectionDraft = '';
       currentCharacter = talk.charName;
@@ -3990,7 +3995,7 @@ let state = {
       updateInlineEditState();
       renderCharSelector();
       renderTimeline();
-      restoreEditingTalkScrollPosition(previousScrollTop);
+      restoreTimelineViewport(anchor);
       input.focus({ preventScroll: true });
       const end = input.value.length;
       input.setSelectionRange(end, end);
@@ -4023,12 +4028,6 @@ let state = {
       restoreTalkViewportAnchor(anchor || { talkId, scrollTop: timeline ? timeline.scrollTop : 0 });
       const input = document.getElementById('inputSpeech');
       setTimeout(() => input?.focus({ preventScroll: true }), 0);
-    }
-
-    function restoreEditingTalkScrollPosition(previousScrollTop) {
-      const timeline = document.getElementById('talkTimeline');
-      if (!timeline) return;
-      restoreTimelineViewport({ talkId: editingTalkId, scrollTop: previousScrollTop });
     }
 
     function talkViewportItems(excludeTalkIds = null) {
@@ -4087,6 +4086,9 @@ let state = {
     function restoreTimelineViewport(anchor) {
       const timeline = document.getElementById('talkTimeline');
       if (!timeline || !anchor) return;
+      activeViewportAnchor = anchor;
+      preserveViewportAfterEdit = true;
+      scheduleViewportPreserveRelease();
       const restore = () => {
         const target = Array.from(timeline.querySelectorAll('[data-talk-id]')).find(item => item.dataset.talkId === anchor.talkId);
         if (target && Number.isFinite(anchor.top)) {
@@ -4104,6 +4106,38 @@ let state = {
 
     function restoreTalkViewportAnchor(anchor) {
       restoreTimelineViewport(anchor);
+    }
+
+    function restoreActiveViewportAnchor() {
+      if (!preserveViewportAfterEdit || !activeViewportAnchor) return;
+      const anchor = activeViewportAnchor;
+      const timeline = document.getElementById('talkTimeline');
+      if (!timeline) return;
+      requestAnimationFrame(() => {
+        const target = Array.from(timeline.querySelectorAll('[data-talk-id]')).find(item => item.dataset.talkId === anchor.talkId);
+        if (target && Number.isFinite(anchor.top)) {
+          timeline.scrollTop += target.getBoundingClientRect().top - anchor.top;
+        } else if (Number.isFinite(anchor.scrollTop)) {
+          timeline.scrollTop = anchor.scrollTop;
+        }
+      });
+    }
+
+    function scheduleViewportPreserveRelease() {
+      if (viewportPreserveReleaseTimer) clearTimeout(viewportPreserveReleaseTimer);
+      viewportPreserveReleaseTimer = setTimeout(() => {
+        const viewport = window.visualViewport;
+        const currentHeight = Math.floor(viewport ? viewport.height : window.innerHeight);
+        const heightStable = Math.abs(currentHeight - lastViewportLayoutHeight) <= 2;
+        const keyboardActive = document.body.classList.contains('keyboard-focused') || document.body.classList.contains('keyboard-open');
+        if (!keyboardActive && heightStable) {
+          preserveViewportAfterEdit = false;
+          activeViewportAnchor = null;
+          return;
+        }
+        lastViewportLayoutHeight = currentHeight;
+        scheduleViewportPreserveRelease();
+      }, 180);
     }
 
     function finishInlineTalkEdit() {
@@ -5557,6 +5591,7 @@ unlock();
 
       const viewport = window.visualViewport;
       const vh = Math.max(1, Math.floor(viewport ? viewport.height : window.innerHeight));
+      lastViewportLayoutHeight = vh;
       const viewportWidth = Math.floor(viewport ? viewport.width : window.innerWidth);
       const isTouchPhone = window.matchMedia && window.matchMedia('(pointer: coarse)').matches && Math.min(viewportWidth, window.innerWidth) <= 900;
       const referenceHeight = Math.max(originalViewportHeight || 0, window.innerHeight || 0, document.documentElement.clientHeight || 0);
@@ -5573,7 +5608,8 @@ unlock();
       editorView.style.maxHeight = vh + 'px';
       editorView.style.transform = '';
       updateEditorDesktopChatWallpaperFrame();
-      scrollTimelineForKeyboard();
+      restoreActiveViewportAnchor();
+      if (preserveViewportAfterEdit) scheduleViewportPreserveRelease();
     }
 
     function initWallpaperPan() {
