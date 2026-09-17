@@ -3048,6 +3048,12 @@ let state = {
       return String(talk?.stageDirection || talk?.note || '').trim();
     }
 
+    function stageDirectionDisplayHtml(talk) {
+      const stageDirection = getStageDirection(talk);
+      if (!stageDirection) return '';
+      return '<div class="stage-direction-display">' + escapeHtml(stageDirection) + '</div>';
+    }
+
     function scriptColorStorageKey() {
       return SCRIPTMAKER_SCRIPT_COLOR_PREFIX + (state.currentProjectId || 'default');
     }
@@ -3373,7 +3379,7 @@ let state = {
     }
 
     function isInteractiveTalkTarget(target) {
-      return !!target?.closest?.('button, input, textarea, select, label, .talk-edit-tools, .talk-edit-tools *, .talk-select');
+      return !!target?.closest?.('button, input, textarea, select, label, .stage-direction-display, .talk-edit-tools, .talk-edit-tools *, .talk-select');
     }
 
     function initTalkEditLongPress(element, talkId) {
@@ -3511,6 +3517,7 @@ let state = {
           <div class="bubble-content">
             <span class="char-name">${escapeHtml(talk.charName)}</span>
             <div class="message-text">${escapeHtml(talk.text || '')}</div>
+            ${stageDirectionDisplayHtml(talk)}
             <div class="talk-edit-tools" onclick="event.stopPropagation()">
               <button onclick="moveTalk(event, ${index}, -1)">↑</button>
               <button onclick="moveTalk(event, ${index}, 1)">↓</button>

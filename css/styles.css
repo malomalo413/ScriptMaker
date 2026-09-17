@@ -965,6 +965,31 @@
       outline-offset: 2px;
     }
 
+    .stage-direction-display {
+      width: fit-content;
+      max-width: min(100%, 34em);
+      margin-top: 5px;
+      padding: 6px 10px;
+      border-radius: 9px;
+      background: rgba(191, 219, 254, 0.78);
+      color: #1e3a8a;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      border: 1px solid rgba(147, 197, 253, 0.9);
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+    }
+    .chat-bubble.right .stage-direction-display {
+      align-self: flex-end;
+      text-align: left;
+    }
+    .chat-bubble.scene .stage-direction-display {
+      align-self: center;
+      text-align: center;
+    }
+
     .stage-direction {
       margin-top: 6px;
       padding: 7px 10px;
