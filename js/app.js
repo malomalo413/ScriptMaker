@@ -34,6 +34,8 @@ let state = {
     let avatarOffsetY = 50;
     let editingTalkIndex = null;
     let editingTalkId = null;
+    let insertTalkTarget = null;
+    let inputStageDirectionDraft = '';
     let selectedTalkIndexes = new Set();
     let selectedWallpaperBase64 = "";
     let selectedWallpaperImageId = "";
@@ -45,6 +47,7 @@ let state = {
     let isSortingTalks = false;
     let pendingTimelineRender = false;
     let suppressTalkClickUntil = 0;
+    let suppressKeyboardScrollBottomUntil = 0;
     let editingSceneWallpapers = [];
     let activeSceneWallpaperId = "";
     let currentWallpaperKey = "";
@@ -70,6 +73,7 @@ let state = {
     let renamingProjectId = null;
     let pendingScriptImport = { parsed: [], rejected: [] };
     let characterSaveInProgress = false;
+    let saveStatusTimer = null;
 
     let originalViewportHeight = window.innerHeight;
     async function hashPasswordText(value) {
@@ -1515,15 +1519,45 @@ let state = {
 
     function saveState() {
       try {
+        setSaveStatus('saving');
         if (!editorApplyingCloudState) state.editorUpdatedAt = new Date().toISOString();
         localStorage.setItem('script_assistant_data_v21', JSON.stringify(cloneStateForLocalStorage()));
         scheduleEditorBackupSync();
+        markSaveCompleteSoon();
         return true;
       } catch (e) {
         console.error("保存エラー:", e);
+        setSaveStatus('error');
         alert("画像データが大きすぎるため保存できませんでした。別の画像を選ぶか、画像サイズを小さくしてください。");
         return false;
       }
+    }
+
+    function setSaveStatus(status) {
+      const el = document.getElementById('saveStatus');
+      if (!el) return;
+      if (saveStatusTimer) {
+        clearTimeout(saveStatusTimer);
+        saveStatusTimer = null;
+      }
+      el.classList.remove('save-status-saving', 'save-status-saved', 'save-status-error');
+      if (status === 'saving') {
+        el.textContent = '保存中… ↻';
+        el.classList.add('save-status-saving');
+      } else if (status === 'error') {
+        el.textContent = '保存エラー !';
+        el.classList.add('save-status-error');
+      } else {
+        el.textContent = '保存済み ✓';
+        el.classList.add('save-status-saved');
+      }
+    }
+
+    function markSaveCompleteSoon() {
+      if (saveStatusTimer) clearTimeout(saveStatusTimer);
+      saveStatusTimer = setTimeout(() => {
+        setSaveStatus('saved');
+      }, 180);
     }
 
     function renderProjectList() {
@@ -3014,28 +3048,6 @@ let state = {
       return String(talk?.stageDirection || talk?.note || '').trim();
     }
 
-    function normalizeStageDirectionForDisplay(value) {
-      const text = String(value || '').trim();
-      if (!text) return '';
-      const fullWidth = text.match(/^（([\s\S]*)）$/);
-      if (fullWidth) return fullWidth[1].trim();
-      const halfWidth = text.match(/^\(([\s\S]*)\)$/);
-      if (halfWidth) return halfWidth[1].trim();
-      return text;
-    }
-
-    function talkTextWithStageDirection(talk) {
-      const text = String(talk?.text || '');
-      const stageDirection = normalizeStageDirectionForDisplay(getStageDirection(talk));
-      return stageDirection ? text + '（' + stageDirection + '）' : text;
-    }
-
-    function stageDirectionHtml(talk) {
-      const stageDirection = getStageDirection(talk);
-      if (!stageDirection) return '';
-      return '<div class="stage-direction">' + escapeHtml(stageDirection) + '</div>';
-    }
-
     function scriptColorStorageKey() {
       return SCRIPTMAKER_SCRIPT_COLOR_PREFIX + (state.currentProjectId || 'default');
     }
@@ -3448,7 +3460,7 @@ let state = {
         row.innerHTML =
           '<div class="script-col script-dialogue">' +
             '<div class="script-meta"><span>' + formatTalkNumber(index) + '</span><strong>' + escapeHtml(talk.charName || '') + '</strong></div>' +
-            '<div class="script-text">' + escapeHtml(talkTextWithStageDirection(talk)) + '</div>' +
+            '<div class="script-text">' + escapeHtml(talk.text || '') + '</div>' +
           '</div>' +
           '<div class="script-col script-stage">' + (getStageDirection(talk) ? escapeHtml(getStageDirection(talk)) : '') + '</div>' +
           '<div class="script-col script-art">' +
@@ -3498,7 +3510,7 @@ let state = {
           ${avatarHtml}
           <div class="bubble-content">
             <span class="char-name">${escapeHtml(talk.charName)}</span>
-            <div class="message-text">${escapeHtml(talkTextWithStageDirection(talk))}</div>
+            <div class="message-text">${escapeHtml(talk.text || '')}</div>
             <div class="talk-edit-tools" onclick="event.stopPropagation()">
               <button onclick="moveTalk(event, ${index}, -1)">↑</button>
               <button onclick="moveTalk(event, ${index}, 1)">↓</button>
@@ -3547,8 +3559,28 @@ let state = {
         return;
       }
 
+      if (insertTalkTarget?.talkId) {
+        const target = talkById(insertTalkTarget.talkId);
+        if (!target) {
+          cancelInlineTalkEdit();
+          return;
+        }
+        const anchor = captureTalkViewportAnchor(insertTalkTarget.talkId);
+        pushUndoSnapshot();
+        const prepared = prepareTalkInputForSave(currentCharacter, text, inputStageDirectionDraft);
+        const insertedTalk = createTalkRecord(currentCharacter, prepared.text, prepared.stageDirection);
+        const insertIndex = insertTalkTarget.position === 'before' ? target.index : target.index + 1;
+        project.talks.splice(insertIndex, 0, insertedTalk);
+        saveState();
+        finishInlineTalkEdit();
+        renderTimeline();
+        updateMetaStats();
+        restoreTalkViewportAnchor({ ...anchor, talkId: insertedTalk.id });
+        return;
+      }
+
       pushUndoSnapshot();
-      const prepared = prepareTalkInputForSave(currentCharacter, text);
+      const prepared = prepareTalkInputForSave(currentCharacter, text, inputStageDirectionDraft);
       project.talks.push(createTalkRecord(currentCharacter, prepared.text, prepared.stageDirection));
 
       saveState();
@@ -3607,6 +3639,8 @@ let state = {
       const talk = resolved.talk;
       const timeline = document.getElementById('talkTimeline');
       const previousScrollTop = timeline ? timeline.scrollTop : 0;
+      insertTalkTarget = null;
+      inputStageDirectionDraft = '';
       currentCharacter = talk.charName;
       const input = document.getElementById('inputSpeech');
       input.value = talk.text;
@@ -3621,9 +3655,39 @@ let state = {
       input.setSelectionRange(end, end);
     }
 
+    function startInsertBeforeEditingTalk() {
+      if (!editingTalkId) return;
+      startInsertTalkById(editingTalkId, 'before');
+    }
+
+    function startInsertAfterEditingTalk() {
+      if (!editingTalkId) return;
+      startInsertTalkById(editingTalkId, 'after');
+    }
+
+    function startInsertTalkById(talkId, position) {
+      const resolved = talkById(talkId);
+      if (!resolved) return;
+      const timeline = document.getElementById('talkTimeline');
+      const anchor = captureTalkViewportAnchor(talkId);
+      insertTalkTarget = { talkId, position: position === 'before' ? 'before' : 'after' };
+      editingTalkId = null;
+      editingTalkIndex = null;
+      inputStageDirectionDraft = '';
+      currentCharacter = resolved.talk.charName || currentCharacter;
+      clearInputSpeech();
+      updateInlineEditState();
+      renderCharSelector();
+      renderTimeline();
+      restoreTalkViewportAnchor(anchor || { talkId, scrollTop: timeline ? timeline.scrollTop : 0 });
+      const input = document.getElementById('inputSpeech');
+      setTimeout(() => input?.focus({ preventScroll: true }), 0);
+    }
+
     function restoreEditingTalkScrollPosition(previousScrollTop) {
       const timeline = document.getElementById('talkTimeline');
       if (!timeline) return;
+      suppressKeyboardScrollBottomUntil = Date.now() + 900;
       timeline.scrollTop = previousScrollTop;
       setTimeout(() => {
         timeline.scrollTop = previousScrollTop;
@@ -3652,6 +3716,7 @@ let state = {
     function restoreTalkViewportAnchor(anchor) {
       const timeline = document.getElementById('talkTimeline');
       if (!timeline || !anchor) return;
+      suppressKeyboardScrollBottomUntil = Date.now() + 900;
       const restore = () => {
         const target = Array.from(timeline.querySelectorAll('[data-talk-id]')).find(item => item.dataset.talkId === anchor.talkId);
         if (target && Number.isFinite(anchor.top)) {
@@ -3670,6 +3735,7 @@ let state = {
     function finishInlineTalkEdit() {
       editingTalkIndex = null;
       editingTalkId = null;
+      insertTalkTarget = null;
       clearInputSpeech();
       updateInlineEditState();
     }
@@ -3677,6 +3743,7 @@ let state = {
     function cancelInlineTalkEdit() {
       editingTalkIndex = null;
       editingTalkId = null;
+      insertTalkTarget = null;
       clearInputSpeech();
       updateInlineEditState();
       renderTimeline();
@@ -3686,6 +3753,7 @@ let state = {
       const input = document.getElementById('inputSpeech');
       input.value = '';
       input.style.height = '42px';
+      inputStageDirectionDraft = '';
       renderInputStageDirectionHighlight();
     }
 
@@ -3734,12 +3802,30 @@ let state = {
     function updateInlineEditState() {
       const status = document.getElementById('inlineEditStatus');
       const sendButton = document.getElementById('sendButton');
+      const label = document.getElementById('inlineEditLabel');
+      const insertBeforeButton = document.getElementById('insertBeforeButton');
+      const insertAfterButton = document.getElementById('insertAfterButton');
+      const cancelButton = document.getElementById('inlineCancelButton');
       if (!status || !sendButton) return;
       const isEditing = editingTalkId !== null && talkIndexById(editingTalkId) >= 0;
+      const isInserting = !!(insertTalkTarget?.talkId && talkIndexById(insertTalkTarget.talkId) >= 0);
       if (isEditing) editingTalkIndex = talkIndexById(editingTalkId);
-      status.classList.toggle('hidden', !isEditing);
-      document.body.classList.toggle('inline-talk-editing', isEditing);
-      sendButton.innerText = isEditing ? '\u66f4\u65b0' : '\u9001\u4fe1';
+      status.classList.toggle('hidden', !isEditing && !isInserting);
+      document.body.classList.toggle('inline-talk-editing', isEditing || isInserting);
+      sendButton.innerText = isEditing ? '\u66f4\u65b0' : (isInserting ? '\u633f\u5165' : '\u9001\u4fe1');
+      if (label) {
+        if (isEditing) {
+          label.textContent = formatTalkNumber(editingTalkIndex) + '\u756a\u3092\u7de8\u96c6\u4e2d';
+        } else if (isInserting) {
+          const index = talkIndexById(insertTalkTarget.talkId);
+          label.textContent = formatTalkNumber(index) + '\u756a\u306e' + (insertTalkTarget.position === 'before' ? '\u524d' : '\u5f8c') + '\u3078\u633f\u5165\u4e2d';
+        } else {
+          label.textContent = '';
+        }
+      }
+      if (insertBeforeButton) insertBeforeButton.classList.toggle('hidden', !isEditing);
+      if (insertAfterButton) insertAfterButton.classList.toggle('hidden', !isEditing);
+      if (cancelButton) cancelButton.textContent = isInserting ? '\u633f\u5165\u3092\u30ad\u30e3\u30f3\u30bb\u30eb' : '\u30ad\u30e3\u30f3\u30bb\u30eb';
     }
 
     function confirmEditTalk() {
@@ -3842,14 +3928,42 @@ let state = {
     }
 
     function openCurrentStageDirectionEditor() {
+      if (insertTalkTarget?.talkId) {
+        openInputStageDirectionEditor();
+        return;
+      }
       const index = talkIndexById(editingTalkId);
       if (index < 0) return;
       openStageDirectionEditor({ stopPropagation() {} }, index);
     }
 
+    function openInputStageDirectionEditor() {
+      const textarea = document.getElementById('stageDirectionText');
+      const target = document.getElementById('stageDirectionTarget');
+      const label = document.getElementById('stageDirectionTalkLabel');
+      if (target) target.value = '__inputDraft';
+      if (textarea) {
+        textarea.value = inputStageDirectionDraft;
+        setTimeout(() => {
+          textarea.focus({ preventScroll: true });
+          const end = textarea.value.length;
+          textarea.setSelectionRange(end, end);
+        }, 50);
+      }
+      if (label) label.textContent = '挿入するセリフのト書き';
+      openModal('stageDirectionModal');
+    }
+
     function saveStageDirection() {
       const project = state.projects[state.currentProjectId];
-      const index = parseInt(document.getElementById('stageDirectionTarget')?.value, 10);
+      const targetValue = document.getElementById('stageDirectionTarget')?.value || '';
+      if (targetValue === '__inputDraft') {
+        inputStageDirectionDraft = (document.getElementById('stageDirectionText')?.value || '').trim();
+        closeModal('stageDirectionModal');
+        updateInlineEditState();
+        return;
+      }
+      const index = parseInt(targetValue, 10);
       const talk = project?.talks?.[index];
       if (!talk) return;
       const value = (document.getElementById('stageDirectionText')?.value || '').trim();
@@ -4036,7 +4150,9 @@ let state = {
     }
 
     function scrollTimelineForKeyboard() {
-      if (!keepEditingTalkVisible()) scrollToBottom();
+      if (keepEditingTalkVisible()) return;
+      if (Date.now() < suppressKeyboardScrollBottomUntil) return;
+      scrollToBottom();
     }
 
     async function saveDataAlert() {

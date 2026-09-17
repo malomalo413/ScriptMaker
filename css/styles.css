@@ -278,6 +278,27 @@
       text-overflow: ellipsis;
       flex: 1;
     }
+    .save-status {
+      max-width: 92px;
+      min-height: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 4px 8px;
+      background: #ecfdf5;
+      color: #047857;
+      font-size: 11px;
+      font-weight: 900;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 0 0 auto;
+    }
+    .save-status-saving { background: #eff6ff; color: #1d4ed8; }
+    .save-status-saved { background: #ecfdf5; color: #047857; }
+    .save-status-error { background: #fef2f2; color: #b91c1c; }
     .nav-actions {
       display: flex;
       gap: 6px;
@@ -1166,8 +1187,18 @@
     .inline-edit-status {
       display: flex;
       justify-content: flex-end;
+      align-items: center;
+      gap: 6px;
       padding: 0;
       background: transparent;
+      flex-wrap: wrap;
+    }
+    .inline-edit-label {
+      margin-right: auto;
+      color: #475569;
+      font-size: 12px;
+      font-weight: 900;
+      overflow-wrap: anywhere;
     }
     .inline-edit-status button {
       border: none;
