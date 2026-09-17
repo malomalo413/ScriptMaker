@@ -50,7 +50,6 @@ let state = {
     let isSortingTalks = false;
     let pendingTimelineRender = false;
     let suppressTalkClickUntil = 0;
-    let suppressKeyboardScrollBottomUntil = 0;
     let editingSceneWallpapers = [];
     let activeSceneWallpaperId = "";
     let currentWallpaperKey = "";
@@ -82,6 +81,7 @@ let state = {
     let pendingScriptImport = { parsed: [], rejected: [] };
     let characterSaveInProgress = false;
     let saveStatusTimer = null;
+    let stageDirectionViewportAnchor = null;
 
     let originalViewportHeight = window.innerHeight;
     async function hashPasswordText(value) {
@@ -452,6 +452,7 @@ let state = {
     }
 
     function renderEditorAfterCloudApply() {
+      const anchor = captureTimelineViewport(editingTalkId || insertTalkTarget?.talkId || '');
       normalizeProjectData();
       syncCharacterLibraryFromProjects();
       renderProjectList();
@@ -463,6 +464,7 @@ let state = {
         document.getElementById('projectTitle').innerText = state.projects[state.currentProjectId].title || '';
         renderCharSelector();
         renderTimeline();
+        restoreTimelineViewport(anchor);
         updateMetaStats();
         applyProjectWallpaper(true);
       }
@@ -1721,6 +1723,7 @@ let state = {
     }
     function restoreProjectSnapshot(snapshot) {
       if (!snapshot || !state.currentProjectId) return;
+      const anchor = captureTimelineViewport(editingTalkId || '');
       isApplyingHistory = true;
       state.projects[state.currentProjectId] = cloneProject(snapshot);
       normalizeProjectData();
@@ -1742,6 +1745,7 @@ let state = {
       applyProjectWallpaper(true);
       renderCharSelector();
       renderTimeline();
+      restoreTimelineViewport(anchor);
       updateMetaStats();
       saveState();
       isApplyingHistory = false;
@@ -1943,6 +1947,10 @@ let state = {
     function closeModal(id) {
       document.getElementById(id).classList.add('hidden');
       if (!document.querySelector('.custom-modal:not(.hidden)')) document.body.classList.remove('modal-open');
+      if (id === 'stageDirectionModal' && stageDirectionViewportAnchor) {
+        restoreTimelineViewport(stageDirectionViewportAnchor);
+        stageDirectionViewportAnchor = null;
+      }
     }
 
     function initCharacterModalActions() {
@@ -3047,6 +3055,7 @@ let state = {
 
       const removed = project.characters[index];
       const snapshot = characterSnapshot(removed);
+      const anchor = captureTimelineViewport();
       pushUndoSnapshot();
 
       project.talks.forEach(talk => {
@@ -3061,6 +3070,7 @@ let state = {
 
       renderCharSelector();
       renderTimeline();
+      restoreTimelineViewport(anchor);
       updateMetaStats();
       saveState();
     }
@@ -3308,8 +3318,10 @@ let state = {
         }
       }
 
+      const anchor = captureTimelineViewport();
       renderCharSelector();
       renderTimeline();
+      restoreTimelineViewport(anchor);
       updateMetaStats();
       closeModal('charModal');
       saveState();
@@ -3460,8 +3472,10 @@ let state = {
           const color = sanitizeScriptColor(select.value);
           if (color) editorScriptColorSettings[name] = color;
           else delete editorScriptColorSettings[name];
+          const anchor = captureTimelineViewport();
           saveEditorScriptColorSettings();
           renderTimeline();
+          restoreTimelineViewport(anchor);
         });
       });
     }
@@ -3473,9 +3487,11 @@ let state = {
 
     function resetScriptColorSettings() {
       editorScriptColorSettings = {};
+      const anchor = captureTimelineViewport();
       saveEditorScriptColorSettings();
       renderScriptColorSettings();
       renderTimeline();
+      restoreTimelineViewport(anchor);
     }
 
     function initEditorDisplayModeControls() {
@@ -3488,8 +3504,10 @@ let state = {
 
     function setEditorDisplayMode(mode) {
       editorDisplayMode = mode === 'script' ? 'script' : 'chat';
+      const anchor = captureTimelineViewport();
       initEditorDisplayModeControls();
       renderTimeline();
+      restoreTimelineViewport(anchor);
       updateEditorDesktopChatWallpaperFrame();
       applyProjectWallpaper(true);
       syncEditorOrientationForDisplayMode(true);
@@ -3586,9 +3604,11 @@ let state = {
       if (isProtagonist) project.characters.forEach(item => item.isProtagonist = false);
       project.characters.push(cloneLibraryCharacterForProject(character, isProtagonist));
       currentCharacter = character.name;
+      const anchor = captureTimelineViewport();
       saveState();
       renderCharSelector();
       renderTimeline();
+      restoreTimelineViewport(anchor);
       closeModal('charLibraryModal');
     }
 
@@ -4008,36 +4028,65 @@ let state = {
     function restoreEditingTalkScrollPosition(previousScrollTop) {
       const timeline = document.getElementById('talkTimeline');
       if (!timeline) return;
-      suppressKeyboardScrollBottomUntil = Date.now() + 900;
-      timeline.scrollTop = previousScrollTop;
-      setTimeout(() => {
-        timeline.scrollTop = previousScrollTop;
-        const target = Array.from(timeline.querySelectorAll('[data-talk-id]')).find(item => item.dataset.talkId === editingTalkId);
-        if (!target) return;
-        const timelineRect = timeline.getBoundingClientRect();
-        const targetRect = target.getBoundingClientRect();
-        if (targetRect.top < timelineRect.top || targetRect.bottom > timelineRect.bottom) {
-          target.scrollIntoView({ block: 'nearest' });
-        }
-      }, 0);
+      restoreTimelineViewport({ talkId: editingTalkId, scrollTop: previousScrollTop });
     }
 
-    function captureTalkViewportAnchor(talkId) {
+    function talkViewportItems(excludeTalkIds = null) {
       const timeline = document.getElementById('talkTimeline');
-      if (!timeline || !talkId) return null;
-      const target = Array.from(timeline.querySelectorAll('[data-talk-id]')).find(item => item.dataset.talkId === talkId);
-      if (!target) return { talkId, scrollTop: timeline.scrollTop };
+      if (!timeline) return [];
+      const excludes = excludeTalkIds instanceof Set ? excludeTalkIds : new Set(excludeTalkIds || []);
+      return Array.from(timeline.querySelectorAll('[data-talk-id]')).filter(item => item.dataset.talkId && !excludes.has(item.dataset.talkId));
+    }
+
+    function captureTimelineViewport(preferredTalkId = '', options = {}) {
+      const timeline = document.getElementById('talkTimeline');
+      if (!timeline) return null;
+      const items = talkViewportItems(options.excludeTalkIds);
+      let target = preferredTalkId ? items.find(item => item.dataset.talkId === preferredTalkId) : null;
+      if (!target) {
+        const timelineRect = timeline.getBoundingClientRect();
+        const anchorY = timelineRect.top + 8;
+        target = items
+          .filter(item => {
+            const rect = item.getBoundingClientRect();
+            return rect.bottom >= timelineRect.top && rect.top <= timelineRect.bottom;
+          })
+          .sort((a, b) => Math.abs(a.getBoundingClientRect().top - anchorY) - Math.abs(b.getBoundingClientRect().top - anchorY))[0];
+      }
+      if (!target) return { scrollTop: timeline.scrollTop };
       return {
-        talkId,
+        talkId: target.dataset.talkId,
         scrollTop: timeline.scrollTop,
         top: target.getBoundingClientRect().top
       };
     }
 
-    function restoreTalkViewportAnchor(anchor) {
+    function captureTalkViewportAnchor(talkId) {
+      return captureTimelineViewport(talkId);
+    }
+
+    function captureMutationViewportAnchor(indexesToRemove = []) {
+      const project = state.projects[state.currentProjectId];
+      const removeIndexes = new Set(indexesToRemove.filter(index => Number.isInteger(index)));
+      const removeIds = new Set((project?.talks || []).filter((_, index) => removeIndexes.has(index)).map(talk => talk.id).filter(Boolean));
+      const visibleAnchor = captureTimelineViewport('', { excludeTalkIds: removeIds });
+      if (visibleAnchor?.talkId) return visibleAnchor;
+      if (!project) return visibleAnchor;
+      const sorted = [...removeIndexes].sort((a, b) => a - b);
+      const first = sorted[0] ?? 0;
+      const last = sorted[sorted.length - 1] ?? first;
+      const nextTalk = project.talks.slice(last + 1).find(talk => talk?.id && !removeIds.has(talk.id));
+      if (nextTalk) return captureTalkViewportAnchor(nextTalk.id) || { talkId: nextTalk.id, scrollTop: visibleAnchor?.scrollTop };
+      for (let i = first - 1; i >= 0; i--) {
+        const talk = project.talks[i];
+        if (talk?.id && !removeIds.has(talk.id)) return captureTalkViewportAnchor(talk.id) || { talkId: talk.id, scrollTop: visibleAnchor?.scrollTop };
+      }
+      return visibleAnchor;
+    }
+
+    function restoreTimelineViewport(anchor) {
       const timeline = document.getElementById('talkTimeline');
       if (!timeline || !anchor) return;
-      suppressKeyboardScrollBottomUntil = Date.now() + 900;
       const restore = () => {
         const target = Array.from(timeline.querySelectorAll('[data-talk-id]')).find(item => item.dataset.talkId === anchor.talkId);
         if (target && Number.isFinite(anchor.top)) {
@@ -4053,6 +4102,10 @@ let state = {
       });
     }
 
+    function restoreTalkViewportAnchor(anchor) {
+      restoreTimelineViewport(anchor);
+    }
+
     function finishInlineTalkEdit() {
       editingTalkIndex = null;
       editingTalkId = null;
@@ -4062,12 +4115,14 @@ let state = {
     }
 
     function cancelInlineTalkEdit() {
+      const anchor = captureTimelineViewport(editingTalkId || insertTalkTarget?.talkId || '');
       editingTalkIndex = null;
       editingTalkId = null;
       insertTalkTarget = null;
       clearInputSpeech();
       updateInlineEditState();
       renderTimeline();
+      restoreTimelineViewport(anchor);
     }
 
     function clearInputSpeech() {
@@ -4154,6 +4209,7 @@ let state = {
     }
 
     function toggleEditMode() {
+      const anchor = captureTimelineViewport();
       isEditMode = !isEditMode;
       const btn = document.getElementById('modeToggleBtn');
       if (isEditMode) {
@@ -4167,6 +4223,7 @@ let state = {
         selectedTalkIndexes.clear();
       }
       renderTimeline();
+      restoreTimelineViewport(anchor);
       updateSelectedTalkCount();
     }
 
@@ -4187,13 +4244,16 @@ let state = {
     }
 
     function clearTalkSelection() {
+      const anchor = captureTimelineViewport();
       selectedTalkIndexes.clear();
       renderTimeline();
+      restoreTimelineViewport(anchor);
     }
 
     function deleteSelectedTalks() {
       if (selectedTalkIndexes.size === 0) return;
       const project = state.projects[state.currentProjectId];
+      const anchor = captureMutationViewportAnchor([...selectedTalkIndexes]);
       const removedIds = project.talks.filter((_, index) => selectedTalkIndexes.has(index)).map(talk => talk.id).filter(Boolean);
       pushUndoSnapshot();
       project.talks = project.talks.filter((_, index) => !selectedTalkIndexes.has(index));
@@ -4206,12 +4266,14 @@ let state = {
       selectedTalkIndexes.clear();
       saveState();
       renderTimeline();
+      restoreTimelineViewport(anchor);
       updateMetaStats();
     }
 
     function deleteTalk(event, index) {
       event.stopPropagation();
       const project = state.projects[state.currentProjectId];
+      const anchor = captureMutationViewportAnchor([index]);
       pushUndoSnapshot();
       const removed = project.talks[index];
       project.talks.splice(index, 1);
@@ -4224,6 +4286,7 @@ let state = {
       normalizeSelectedTalksAfterMutation();
       saveState();
       renderTimeline();
+      restoreTimelineViewport(anchor);
       updateMetaStats();
     }
 
@@ -4235,6 +4298,7 @@ let state = {
       const textarea = document.getElementById('stageDirectionText');
       const target = document.getElementById('stageDirectionTarget');
       const label = document.getElementById('stageDirectionTalkLabel');
+      stageDirectionViewportAnchor = captureTalkViewportAnchor(talk.id);
       if (target) target.value = String(index);
       if (textarea) {
         textarea.value = getStageDirection(talk);
@@ -4262,6 +4326,7 @@ let state = {
       const textarea = document.getElementById('stageDirectionText');
       const target = document.getElementById('stageDirectionTarget');
       const label = document.getElementById('stageDirectionTalkLabel');
+      stageDirectionViewportAnchor = captureTimelineViewport(insertTalkTarget?.talkId || editingTalkId || '');
       if (target) target.value = '__inputDraft';
       if (textarea) {
         textarea.value = inputStageDirectionDraft;
@@ -4287,6 +4352,7 @@ let state = {
       const index = parseInt(targetValue, 10);
       const talk = project?.talks?.[index];
       if (!talk) return;
+      const anchor = captureTalkViewportAnchor(talk.id) || stageDirectionViewportAnchor;
       const value = (document.getElementById('stageDirectionText')?.value || '').trim();
       pushUndoSnapshot();
       if (value) {
@@ -4298,6 +4364,7 @@ let state = {
       saveState();
       closeModal('stageDirectionModal');
       renderTimeline();
+      restoreTimelineViewport(anchor);
     }
 
     function duplicateTalk(event, index) {
@@ -4305,11 +4372,13 @@ let state = {
       const project = state.projects[state.currentProjectId];
       const original = project.talks[index];
       if (!original) return;
+      const anchor = captureTalkViewportAnchor(original.id) || captureTimelineViewport();
       pushUndoSnapshot();
       project.talks.splice(index + 1, 0, createTalkRecord(original.charName, original.text, getStageDirection(original)));
       selectedTalkIndexes.clear();
       saveState();
       renderTimeline();
+      restoreTimelineViewport(anchor);
       updateMetaStats();
     }
 
@@ -4318,6 +4387,7 @@ let state = {
       const project = state.projects[state.currentProjectId];
       const targetIndex = index + direction;
       if (targetIndex < 0 || targetIndex >= project.talks.length) return;
+      const anchor = captureTimelineViewport(project.talks[index]?.id || '');
 
       pushUndoSnapshot();
       const [talk] = project.talks.splice(index, 1);
@@ -4326,6 +4396,7 @@ let state = {
       selectedTalkIndexes.add(targetIndex);
       saveState();
       renderTimeline();
+      restoreTimelineViewport(anchor);
       updateMetaStats();
     }
 
@@ -4363,7 +4434,7 @@ let state = {
     function initNumberSettingsControls() {
       const showNumbers = document.getElementById('showTalkNumbersCheck');
       const outputNumbers = document.getElementById('outputTalkNumbersCheck');
-      if (showNumbers) showNumbers.addEventListener('change', function() { state.settings.showTalkNumbers = this.checked; saveState(); renderTimeline(); });
+      if (showNumbers) showNumbers.addEventListener('change', function() { const anchor = captureTimelineViewport(); state.settings.showTalkNumbers = this.checked; saveState(); renderTimeline(); restoreTimelineViewport(anchor); });
       if (outputNumbers) outputNumbers.addEventListener('change', function() { state.settings.outputTalkNumbers = this.checked; saveState(); });
     }
 
@@ -4472,8 +4543,6 @@ let state = {
 
     function scrollTimelineForKeyboard() {
       if (keepEditingTalkVisible()) return;
-      if (Date.now() < suppressKeyboardScrollBottomUntil) return;
-      scrollToBottom();
     }
 
     async function saveDataAlert() {
@@ -5293,9 +5362,11 @@ unlock();
 
           const oldIndex = getTalkIndexFromItem(item);
           const newIndex = getSortableTalkIndex(evt);
+          const anchor = captureTimelineViewport(project.talks?.[oldIndex]?.id || '');
           if (!Number.isInteger(oldIndex) || !Number.isInteger(newIndex) || oldIndex < 0 || oldIndex >= project.talks.length) {
             pendingTimelineRender = false;
             renderTimeline();
+            restoreTimelineViewport(anchor);
             return;
           }
 
@@ -5310,6 +5381,7 @@ unlock();
 
           pendingTimelineRender = false;
           renderTimeline();
+          restoreTimelineViewport(anchor);
         }
       });
     }
@@ -5342,12 +5414,14 @@ unlock();
       if (!project || idx >= project.talks.length) return false;
 
       item.dataset.deletedByTrash = 'true';
+      const anchor = captureMutationViewportAnchor([idx]);
       pushUndoSnapshot();
       const removed = project.talks[idx];
       project.talks.splice(idx, 1);
       removeTalkIdsFromSceneSettings(project, removed?.id ? [removed.id] : []);
       saveState();
       renderTimeline();
+      restoreTimelineViewport(anchor);
       updateMetaStats();
       return true;
     }
