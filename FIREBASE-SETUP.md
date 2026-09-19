@@ -41,6 +41,8 @@ service cloud.firestore {
         'data',
         'chunkCount',
         'schemaVersion',
+        'revision',
+        'updatedByDeviceId',
         'createdAt',
         'updatedAt'
       ]);
@@ -63,6 +65,8 @@ service cloud.firestore {
         'data',
         'chunkCount',
         'schemaVersion',
+        'revision',
+        'updatedByDeviceId',
         'createdAt',
         'updatedAt'
       ])
@@ -98,6 +102,8 @@ service cloud.firestore {
         'id',
         'schemaVersion',
         'recoveryCodeHash',
+        'revision',
+        'updatedByDeviceId',
         'createdAt',
         'updatedAt'
       ])
@@ -112,6 +118,8 @@ service cloud.firestore {
           'data',
           'chunkCount',
           'schemaVersion',
+          'revision',
+          'updatedByDeviceId',
           'createdAt',
           'updatedAt'
         ]);

@@ -5141,7 +5141,7 @@ unlock();
       }
       const viewerPassword = passwordInput?.value || '';
       const viewerPasswordHash = viewerPassword ? await hashPasswordText(viewerPassword) : '';
-      const isPublished = !!project.shareId;
+      const isPublished = !!(project.shareId && project.sharePublishedAt);
       pendingSharePayload = await buildViewerSharePayload(project, viewerPasswordHash, project.shareId);
       pendingSharePublished = isPublished;
       const output = document.getElementById('shareUrlText');
@@ -5150,14 +5150,12 @@ unlock();
       if (firebaseInput && window.ScriptMakerFirebaseShare) {
         firebaseInput.value = window.ScriptMakerFirebaseShare.configTextForInput();
       }
-      if (output) {
-        output.value = isPublished ? buildViewerShareUrl(pendingSharePayload) : '';
-      }
+      if (output) output.value = isPublished ? buildViewerShareUrl(pendingSharePayload) : '';
       if (meta) meta.innerText = (pendingSharePayload.title || '\u53f0\u672c') + ' / ' + pendingSharePayload.project.talks.length + '\u4ef6 / id: ' + pendingSharePayload.shareId;
       updateShareModalMode(isPublished);
       setShareStatus(isPublished
         ? '\u516c\u958b\u6e08\u307f\u3067\u3059\u3002\u53f0\u672c\u3092\u5909\u66f4\u3057\u305f\u5834\u5408\u306f\u300c\u5171\u6709\u30c7\u30fc\u30bf\u3092\u66f4\u65b0\u300d\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002'
-        : '\u521d\u56de\u306f\u300c\u516c\u958bURL\u3092\u4f5c\u6210\u300d\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002', '');
+        : '\u521d\u56de\u306f\u300c\u516c\u958bURL\u3092\u4f5c\u6210\u300d\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002Firestore\u4fdd\u5b58\u304c\u6210\u529f\u3059\u308b\u307e\u3067URL\u306f\u6709\u52b9\u5316\u3055\u308c\u307e\u305b\u3093\u3002', '');
       openModal('shareModal');
     }
 
@@ -5223,6 +5221,7 @@ unlock();
       const output = document.getElementById('shareUrlText');
       const meta = document.getElementById('shareMetaText');
       const configText = document.getElementById('shareFirebaseConfig')?.value || '';
+      const previouslyPublished = !!(project.shareId && project.sharePublishedAt);
       try {
         setShareStatus('Firestore\u3078\u5171\u6709\u30c7\u30fc\u30bf\u3092\u4fdd\u5b58\u4e2d...', '');
         const viewerPassword = document.getElementById('shareViewerPassword')?.value || '';
@@ -5231,15 +5230,17 @@ unlock();
         } else {
           localStorage.removeItem(SCRIPTMAKER_SHARE_VIEWER_PASSWORD_KEY);
         }
-        const wasPublished = !!project.shareId;
-        if (!project.shareId) {
-          project.shareId = pendingSharePayload.shareId || generateShareId();
-          project.shareCreatedAt = new Date().toISOString();
-        }
-        pendingSharePayload = await buildViewerSharePayload(project, viewerPassword ? await hashPasswordText(viewerPassword) : '', project.shareId);
+        const wasPublished = previouslyPublished;
+        const shareId = project.shareId || pendingSharePayload.shareId || generateShareId();
+        const shareCreatedAt = project.shareCreatedAt || new Date().toISOString();
+        const projectForShare = { ...project, shareId, shareCreatedAt };
+        pendingSharePayload = await buildViewerSharePayload(projectForShare, viewerPassword ? await hashPasswordText(viewerPassword) : '', shareId);
         const config = helper.configuredConfig(configText);
         helper.saveConfig(config);
         await helper.saveShare(pendingSharePayload, config);
+        project.shareId = shareId;
+        project.shareCreatedAt = shareCreatedAt;
+        project.sharePublishedAt = new Date().toISOString();
         saveState();
         const url = buildViewerShareUrl(pendingSharePayload);
         if (output) {
@@ -5254,7 +5255,20 @@ unlock();
           : '\u516c\u958bURL\u3092\u4f5c\u6210\u3057\u307e\u3057\u305f\u3002\u6b21\u306b\u300c\u516c\u958bURL\u3092\u30b3\u30d4\u30fc\u300d\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002', 'success');
       } catch (error) {
         console.error('Firebase share failed:', error);
-        setShareStatus((error.message || 'Firebase\u3078\u306e\u4fdd\u5b58\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002') + ' JSON\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u65b9\u5f0f\u306f\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3068\u3057\u3066\u5229\u7528\u3067\u304d\u307e\u3059\u3002', 'error');
+        pendingSharePublished = previouslyPublished;
+        if (previouslyPublished && output && project.shareId) {
+          output.value = buildViewerShareUrl(await buildViewerSharePayload(project, '', project.shareId));
+          output.classList.remove('hidden');
+          updateShareModalMode(true);
+          setShareStatus('\u5171\u6709\u30c7\u30fc\u30bf\u306e\u66f4\u65b0\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002\u65e2\u5b58URL\u306f\u524d\u56de\u4fdd\u5b58\u6e08\u307f\u306e\u5185\u5bb9\u306e\u307e\u307e\u958b\u3051\u307e\u3059\u3002Firestore Rules\u3092\u78ba\u8a8d\u3057\u3066\u304b\u3089\u518d\u5ea6\u300c\u5171\u6709\u30c7\u30fc\u30bf\u3092\u66f4\u65b0\u300d\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002' + (error.message ? ' ' + error.message : ''), 'error');
+        } else {
+          if (output) {
+            output.value = '';
+            output.classList.add('hidden');
+          }
+          updateShareModalMode(false);
+          setShareStatus('\u5171\u6709\u30c7\u30fc\u30bf\u306e\u4fdd\u5b58\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002Firestore Rules\u3092\u78ba\u8a8d\u3057\u3066\u304b\u3089\u518d\u5ea6\u300c\u516c\u958bURL\u3092\u4f5c\u6210\u300d\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002' + (error.message ? ' ' + error.message : ''), 'error');
+        }
       }
     }
 
@@ -5307,6 +5321,7 @@ unlock();
       if (!confirm('\u65b0\u3057\u3044\u516c\u958bURL\u3092\u4f5c\u308a\u76f4\u3057\u307e\u3059\u304b\uff1f\u65e7URL\u306f\u305d\u306e\u307e\u307e\u6b8b\u308a\u307e\u3059\u304c\u3001\u4eca\u5f8c\u306e\u66f4\u65b0\u306f\u65b0URL\u5074\u306b\u53cd\u6620\u3055\u308c\u307e\u3059\u3002')) return;
       project.shareId = generateShareId();
       project.shareCreatedAt = new Date().toISOString();
+      delete project.sharePublishedAt;
       saveState();
       const viewerPassword = document.getElementById('shareViewerPassword')?.value || '';
       pendingSharePayload = await buildViewerSharePayload(project, viewerPassword ? await hashPasswordText(viewerPassword) : '', project.shareId);
