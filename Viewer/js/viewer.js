@@ -619,6 +619,7 @@ function renderViewer(project) {
   document.getElementById('viewerTitle').innerText = viewerProject.title || '\u53f0\u672c';
   document.getElementById('viewerPdfButton')?.classList.remove('hidden');
   document.getElementById('viewerSpreadsheetButton')?.classList.remove('hidden');
+  document.getElementById('viewerExcelButton')?.classList.remove('hidden');
   renderSettingsOptions();
   renderViewerScriptColorOptions();
   renderTimeline();
@@ -1749,7 +1750,7 @@ function viewerSpreadsheetRows() {
   if (!viewerProject) return [];
   return (viewerProject.talks || [])
     .filter(talk => String(talk?.text || '').trim())
-    .map(talk => [talk.charName || '', talk.text || '']);
+    .map(talk => [talk.charName || '', talk.text || '', stageDirectionText(talk)]);
 }
 
 function downloadViewerSpreadsheetCsv(rows) {
@@ -1767,12 +1768,188 @@ function downloadViewerSpreadsheetCsv(rows) {
 
 function exportViewerSpreadsheet() {
   if (!viewerProject) return;
-  const rows = [['\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u540d', '\u30bb\u30ea\u30d5'], ...viewerSpreadsheetRows()];
+  const rows = [['\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u540d', '\u30bb\u30ea\u30d5', '\u30c8\u66f8\u304d'], ...viewerSpreadsheetRows()];
   if (rows.length <= 1) {
     alert('\u66f8\u304d\u51fa\u305b\u308b\u30bb\u30ea\u30d5\u304c\u3042\u308a\u307e\u305b\u3093\u3002');
     return;
   }
   downloadViewerSpreadsheetCsv(rows);
+}
+
+function xmlEscape(value) {
+  return String(value ?? '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function columnName(index) {
+  let name = '';
+  let value = index + 1;
+  while (value > 0) {
+    const mod = (value - 1) % 26;
+    name = String.fromCharCode(65 + mod) + name;
+    value = Math.floor((value - mod) / 26);
+  }
+  return name;
+}
+
+function estimateWrappedLines(value, width) {
+  const lines = String(value ?? '').split(/\r\n|\r|\n/);
+  return Math.max(1, ...lines.map(line => Math.max(1, Math.ceil([...line].length / Math.max(8, width - 2)))));
+}
+
+function buildViewerWorksheetXml(rows) {
+  const sheetRows = rows.map((row, rowIndex) => {
+    const rowNumber = rowIndex + 1;
+    const lineCount = Math.max(
+      estimateWrappedLines(row[1], 45),
+      estimateWrappedLines(row[2], 25)
+    );
+    const height = Math.max(rowIndex === 0 ? 22 : 18, Math.min(120, lineCount * 18));
+    const cells = row.map((value, colIndex) => {
+      const ref = columnName(colIndex) + rowNumber;
+      const style = rowIndex === 0 ? 1 : 2;
+      return '<c r="' + ref + '" t="inlineStr" s="' + style + '"><is><t xml:space="preserve">' + xmlEscape(value) + '</t></is></c>';
+    }).join('');
+    return '<row r="' + rowNumber + '" ht="' + height + '" customHeight="1">' + cells + '</row>';
+  }).join('');
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+    '<sheetViews><sheetView workbookViewId="0"/></sheetViews>' +
+    '<sheetFormatPr defaultRowHeight="18"/>' +
+    '<cols><col min="1" max="1" width="15" customWidth="1"/><col min="2" max="2" width="45" customWidth="1"/><col min="3" max="3" width="25" customWidth="1"/></cols>' +
+    '<sheetData>' + sheetRows + '</sheetData>' +
+    '</worksheet>';
+}
+
+function viewerWorkbookFiles(rows) {
+  const now = new Date().toISOString();
+  return {
+    '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
+    '_rels/.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>',
+    'docProps/app.xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>ScriptMaker Viewer</Application></Properties>',
+    'docProps/core.xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>' + xmlEscape(viewerProject?.title || '台本') + '</dc:title><dc:creator>ScriptMaker Viewer</dc:creator><cp:lastModifiedBy>ScriptMaker Viewer</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">' + now + '</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">' + now + '</dcterms:modified></cp:coreProperties>',
+    'xl/workbook.xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="台本" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    'xl/_rels/workbook.xml.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>',
+    'xl/styles.xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>',
+    'xl/worksheets/sheet1.xml': buildViewerWorksheetXml(rows)
+  };
+}
+
+function crc32(bytes) {
+  if (!crc32.table) {
+    crc32.table = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+      crc32.table[i] = c >>> 0;
+    }
+  }
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) crc = crc32.table[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function dosDateTime(date = new Date()) {
+  const year = Math.max(1980, date.getFullYear());
+  const time = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+  const day = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+  return { time, day };
+}
+
+function concatBytes(parts) {
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  const result = new Uint8Array(total);
+  let offset = 0;
+  parts.forEach(part => {
+    result.set(part, offset);
+    offset += part.length;
+  });
+  return result;
+}
+
+function uint16(value) {
+  const bytes = new Uint8Array(2);
+  new DataView(bytes.buffer).setUint16(0, value, true);
+  return bytes;
+}
+
+function uint32(value) {
+  const bytes = new Uint8Array(4);
+  new DataView(bytes.buffer).setUint32(0, value >>> 0, true);
+  return bytes;
+}
+
+function createStoredZip(files) {
+  const encoder = new TextEncoder();
+  const fileEntries = Object.entries(files).map(([name, content]) => ({
+    name,
+    nameBytes: encoder.encode(name),
+    data: encoder.encode(content),
+    crc: 0,
+    offset: 0
+  }));
+  const { time, day } = dosDateTime();
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  fileEntries.forEach(entry => {
+    entry.crc = crc32(entry.data);
+    entry.offset = offset;
+    const local = concatBytes([
+      uint32(0x04034b50), uint16(20), uint16(0), uint16(0), uint16(time), uint16(day),
+      uint32(entry.crc), uint32(entry.data.length), uint32(entry.data.length),
+      uint16(entry.nameBytes.length), uint16(0), entry.nameBytes, entry.data
+    ]);
+    localParts.push(local);
+    offset += local.length;
+    centralParts.push(concatBytes([
+      uint32(0x02014b50), uint16(20), uint16(20), uint16(0), uint16(0), uint16(time), uint16(day),
+      uint32(entry.crc), uint32(entry.data.length), uint32(entry.data.length),
+      uint16(entry.nameBytes.length), uint16(0), uint16(0), uint16(0), uint16(0), uint32(0), uint32(entry.offset),
+      entry.nameBytes
+    ]));
+  });
+  const central = concatBytes(centralParts);
+  const end = concatBytes([
+    uint32(0x06054b50), uint16(0), uint16(0), uint16(fileEntries.length), uint16(fileEntries.length),
+    uint32(central.length), uint32(offset), uint16(0)
+  ]);
+  return concatBytes([...localParts, central, end]);
+}
+
+function downloadViewerSpreadsheetExcel(rows) {
+  const zipBytes = createStoredZip(viewerWorkbookFiles(rows));
+  const blob = new Blob([zipBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = safeSpreadsheetFileName(viewerProject.title) + '.xlsx';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportViewerSpreadsheetExcel() {
+  if (!viewerProject) return;
+  const rows = [['\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u540d', '\u30bb\u30ea\u30d5', '\u30c8\u66f8\u304d'], ...viewerSpreadsheetRows()];
+  if (rows.length <= 1) {
+    alert('\u66f8\u304d\u51fa\u305b\u308b\u30bb\u30ea\u30d5\u304c\u3042\u308a\u307e\u305b\u3093\u3002');
+    return;
+  }
+  downloadViewerSpreadsheetExcel(rows);
+}
+
+function bindViewerDownloadButton(button, handler) {
+  button?.addEventListener('click', handler);
+  button?.addEventListener('touchend', event => {
+    event.preventDefault();
+    handler();
+  }, { passive: false });
 }
 
 window.addEventListener('load', async () => {
@@ -1783,11 +1960,9 @@ window.addEventListener('load', async () => {
     printViewerPdf();
   }, { passive: false });
   const spreadsheetButton = document.getElementById('viewerSpreadsheetButton');
-  spreadsheetButton?.addEventListener('click', exportViewerSpreadsheet);
-  spreadsheetButton?.addEventListener('touchend', event => {
-    event.preventDefault();
-    exportViewerSpreadsheet();
-  }, { passive: false });
+  bindViewerDownloadButton(spreadsheetButton, exportViewerSpreadsheet);
+  const excelButton = document.getElementById('viewerExcelButton');
+  bindViewerDownloadButton(excelButton, exportViewerSpreadsheetExcel);
   document.querySelectorAll('input[name="viewerDisplayMode"]').forEach(input => {
     input.addEventListener('change', event => setViewerDisplayMode(event.target.value));
   });
