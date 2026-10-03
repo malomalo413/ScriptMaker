@@ -2425,3 +2425,89 @@
     }
     .share-status.is-error { color: #dc2626; }
     .share-status.is-success { color: #059669; }
+
+    /* 範囲を選んで壁紙を設定 */
+    .btn-batch-wallpaper {
+      background: #4f46e5;
+      color: white;
+    }
+    .btn-batch-wallpaper:disabled {
+      background: #c7d2fe;
+      cursor: default;
+    }
+    body.edit-mode-active .chat-bubble.in-wallpaper-range {
+      outline: 2px dashed #6366f1;
+      outline-offset: 2px;
+      border-radius: 10px;
+    }
+    .range-wallpaper-label {
+      margin: 0 0 12px;
+      font-size: 13px;
+      font-weight: bold;
+      color: #4338ca;
+    }
+    .range-wallpaper-scene-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+      max-height: 40vh;
+      overflow-y: auto;
+    }
+    .range-wallpaper-choice {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #fff;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .range-wallpaper-choice:hover {
+      border-color: #6366f1;
+    }
+    .range-wallpaper-thumb {
+      display: block;
+      width: 100%;
+      aspect-ratio: 3 / 4;
+      border-radius: 6px;
+      background: #e2e8f0 center / cover no-repeat;
+    }
+    .range-wallpaper-empty {
+      grid-column: 1 / -1;
+      margin: 0;
+      font-size: 12px;
+      color: #64748b;
+    }
+    .range-wallpaper-new,
+    .range-wallpaper-reset {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      margin-bottom: 8px;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: bold;
+      text-align: center;
+      cursor: pointer;
+    }
+    .range-wallpaper-new {
+      background: #4f46e5;
+      color: white;
+    }
+    .range-wallpaper-reset {
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+      color: #475569;
+    }
+    .scene-wallpaper-tip {
+      margin: 0 0 8px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #eef2ff;
+      color: #4338ca;
+      font-size: 12px;
+    }

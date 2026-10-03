@@ -2761,6 +2761,107 @@ let state = {
       });
     }
 
+    // 編集モードで選んだ最初〜最後のトークに、まとめて壁紙を設定する
+    function getSelectedTalkRange() {
+      const project = state.projects[state.currentProjectId];
+      if (!project || selectedTalkIndexes.size === 0) return null;
+      const indexes = [...selectedTalkIndexes].filter(index => index >= 0 && index < project.talks.length);
+      if (!indexes.length) return null;
+      const start = Math.min(...indexes);
+      const end = Math.max(...indexes);
+      return { start, end, talkIds: project.talks.slice(start, end + 1).map(talk => talk.id).filter(Boolean) };
+    }
+
+    function updateSelectedTalkRangeHighlight() {
+      const range = getSelectedTalkRange();
+      document.querySelectorAll('#talkTimeline .chat-bubble').forEach(bubble => {
+        const index = Number(bubble.dataset.index);
+        bubble.classList.toggle('in-wallpaper-range', !!range && isEditMode && index >= range.start && index <= range.end);
+      });
+      const button = document.getElementById('rangeWallpaperButton');
+      if (button) {
+        button.disabled = !range;
+        button.textContent = range ? '壁紙 ' + formatTalkNumber(range.start) + '〜' + formatTalkNumber(range.end) : '壁紙';
+      }
+    }
+
+    function openRangeWallpaperModal() {
+      const project = state.projects[state.currentProjectId];
+      const range = getSelectedTalkRange();
+      if (!project || !range) {
+        alert('壁紙を変えたい範囲の最初と最後のトークにチェックを入れてください。');
+        return;
+      }
+      const startTalk = project.talks[range.start];
+      const endTalk = project.talks[range.end];
+      document.getElementById('rangeWallpaperLabel').textContent =
+        formatTalkNumber(range.start) + ' ' + (startTalk?.charName || '') + ' 〜 ' +
+        formatTalkNumber(range.end) + ' ' + (endTalk?.charName || '') + '（' + range.talkIds.length + '件）';
+      const list = document.getElementById('rangeWallpaperSceneList');
+      const scenes = getSceneWallpaperSettings(project).scenes.filter(scene => wallpaperHasImage(scene));
+      list.innerHTML = scenes.length
+        ? scenes.map(scene => '<button type="button" class="range-wallpaper-choice" onclick="applyRangeWallpaper(\'' + scene.id + '\')">' +
+            '<span class="range-wallpaper-thumb" data-range-wallpaper-thumb="' + scene.id + '"></span>' +
+            '<span>' + escapeHtml(scene.name || 'シーン') + '</span></button>').join('')
+        : '<p class="range-wallpaper-empty">まだシーン壁紙はありません。下のボタンから画像を選んでください。</p>';
+      scenes.forEach(scene => {
+        resolveWallpaperUrl(scene).then(url => {
+          const thumb = document.querySelector('[data-range-wallpaper-thumb="' + scene.id + '"]');
+          if (thumb && url) thumb.style.backgroundImage = 'url(' + url + ')';
+        });
+      });
+      openModal('rangeWallpaperModal');
+    }
+
+    async function chooseRangeWallpaperImage(input) {
+      const file = input.files[0];
+      input.value = '';
+      if (!file) return;
+      const project = state.projects[state.currentProjectId];
+      if (!project) return;
+      try {
+        const stored = await storeWallpaperFile(file);
+        const settings = getSceneWallpaperSettings(project);
+        const nextIndex = settings.scenes.length + 1;
+        const scene = {
+          id: 'scene_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+          name: 'シーン' + nextIndex,
+          talkIds: [], imageId: stored.id, image: '', imageUrl: stored.url,
+          order: nextIndex - 1, size: 100, offsetX: 50, offsetY: 50
+        };
+        applyRangeWallpaper(null, scene);
+      } catch (error) {
+        console.error('Range wallpaper image save failed:', error);
+        alert('壁紙画像を保存できませんでした。別の画像を選んでください。');
+      }
+    }
+
+    // sceneId: 既存シーン / newScene: 新しく作るシーン / どちらも無し: 範囲のシーン壁紙を解除
+    function applyRangeWallpaper(sceneId, newScene = null) {
+      const project = state.projects[state.currentProjectId];
+      const range = getSelectedTalkRange();
+      if (!project || !range) return;
+      pushUndoSnapshot();
+      const settings = getSceneWallpaperSettings(project);
+      settings.scenes.forEach(scene => {
+        scene.talkIds = (scene.talkIds || []).filter(id => !range.talkIds.includes(id));
+      });
+      if (newScene) settings.scenes.push(newScene);
+      const target = newScene || settings.scenes.find(scene => scene.id === sceneId);
+      if (target) {
+        target.talkIds = [...(target.talkIds || []), ...range.talkIds];
+        settings.enabled = true;
+      }
+      enforceUniqueSceneTalkSelections(settings.scenes);
+      closeModal('rangeWallpaperModal');
+      const anchor = captureTimelineViewport();
+      selectedTalkIndexes.clear();
+      saveState();
+      renderTimeline();
+      restoreTimelineViewport(anchor);
+      applyProjectWallpaper(true);
+    }
+
     function openProject(id) {
       state.currentProjectId = id;
       const project = state.projects[id];
@@ -4296,6 +4397,7 @@ let state = {
       const countEl = document.getElementById('selectedTalkCount');
       if (!countEl) return;
       countEl.innerText = `${selectedTalkIndexes.size}件選択中`;
+      updateSelectedTalkRangeHighlight();
     }
 
     function clearTalkSelection() {

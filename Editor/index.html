@@ -14,11 +14,11 @@
   <link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="../assets/icons/icon-512.png">
-  <link rel="stylesheet" href="../css/styles.css?v=56">
+  <link rel="stylesheet" href="../css/styles.css?v=62">
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
   <script src="../js/firebase-config.js?v=30" defer></script>
   <script src="../js/firebase-share.js?v=38" defer></script>
-  <script src="../js/app.js?v=70" defer></script>
+  <script src="../js/app.js?v=76" defer></script>
 </head>
 <body class="auth-locked">
 
@@ -107,6 +107,7 @@
         <span id="selectedTalkCount">0件選択中</span>
         <div class="batch-edit-actions">
           <button class="btn-batch-clear" onclick="clearTalkSelection()">選択解除</button>
+          <button class="btn-batch-wallpaper" id="rangeWallpaperButton" onclick="openRangeWallpaperModal()" disabled>壁紙</button>
           <button class="btn-batch-delete" onclick="deleteSelectedTalks()">削除</button>
         </div>
       </div>
@@ -218,6 +219,7 @@
           <label for="sceneWallpaperToggle">&#12471;&#12540;&#12531;&#20999;&#12426;&#26367;&#12360;&#12434;&#26377;&#21177;&#21270;</label>
         </div>
         <div id="sceneWallpaperControls" class="scene-wallpaper-controls hidden">
+          <p class="scene-wallpaper-tip">かんたん設定：「編集」で範囲の最初と最後のトークにチェック → 「壁紙」ボタンで画像を選ぶだけでも設定できます。</p>
           <div class="scene-wallpaper-head">
             <div>
               <strong>&#12471;&#12540;&#12531;&#20999;&#12426;&#26367;&#12360;</strong>
@@ -236,6 +238,19 @@
     </div>
   </div>
 
+  <div id="rangeWallpaperModal" class="custom-modal hidden">
+    <div class="modal-content range-wallpaper-modal">
+      <h4>選んだ範囲に壁紙を設定</h4>
+      <p id="rangeWallpaperLabel" class="range-wallpaper-label"></p>
+      <div id="rangeWallpaperSceneList" class="range-wallpaper-scene-list"></div>
+      <label class="range-wallpaper-new" for="rangeWallpaperInput">＋ 新しい画像を選ぶ</label>
+      <input type="file" id="rangeWallpaperInput" accept="image/*" style="display:none;" onchange="chooseRangeWallpaperImage(this)">
+      <button type="button" class="range-wallpaper-reset" onclick="applyRangeWallpaper(null)">この範囲は通常の壁紙に戻す</button>
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" type="button" onclick="closeModal('rangeWallpaperModal')">キャンセル</button>
+      </div>
+    </div>
+  </div>
   <div id="stageDirectionModal" class="custom-modal hidden">
     <div class="modal-content">
       <h4>&#12488;&#26360;&#12365;</h4>
