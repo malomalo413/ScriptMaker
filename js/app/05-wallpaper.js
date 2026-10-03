@@ -30,6 +30,9 @@
       updateWallpaperPreviewStyle();
       renderSceneWallpaperList();
       toggleSceneWallpaperControls();
+      sceneRangeAnchor = null;
+      setWallpaperSaveStatus('');
+      savedWallpaperEditorSnapshot = wallpaperEditorSnapshot();
       openModal('wallpaperModal');
       initWallpaperDropArea();
     }
@@ -109,9 +112,47 @@
       preview.classList.toggle('has-image', !!selectedWallpaperBase64);
     }
 
+    // 壁紙画面の「保存していない変更」を判定するための状態の写し
+    let savedWallpaperEditorSnapshot = '';
+    let lastWallpaperSaveAt = 0;
+
+    function wallpaperEditorSnapshot() {
+      return JSON.stringify({
+        imageId: selectedWallpaperImageId,
+        image: selectedWallpaperImageId ? '' : String(selectedWallpaperBase64 || '').slice(0, 120),
+        size: wallpaperSize,
+        offsetX: wallpaperOffsetX,
+        offsetY: wallpaperOffsetY,
+        sceneEnabled: !!document.getElementById('sceneWallpaperToggle')?.checked,
+        scenes: editingSceneWallpapers.map(scene => ({
+          id: scene.id, name: scene.name, talkIds: scene.talkIds, imageId: scene.imageId,
+          image: String(scene.image || '').slice(0, 120), size: scene.size, offsetX: scene.offsetX, offsetY: scene.offsetY
+        }))
+      });
+    }
+
+    function setWallpaperSaveStatus(text) {
+      const status = document.getElementById('wallpaperSaveStatus');
+      if (!status) return;
+      status.textContent = text || '';
+      clearTimeout(setWallpaperSaveStatus.timer);
+      if (text) setWallpaperSaveStatus.timer = setTimeout(() => { status.textContent = ''; }, 2500);
+    }
+
+    // 「閉じる」：保存していない変更があれば確認してから閉じる
+    function closeWallpaperModal() {
+      if (wallpaperEditorSnapshot() !== savedWallpaperEditorSnapshot &&
+          !confirm('保存していない変更があります。保存せずに閉じますか？')) return;
+      closeModal('wallpaperModal');
+    }
+
+    // 「保存」：設定を反映するが、画面は閉じない（続けて別のシーンを設定できる）
     function confirmWallpaper() {
       const project = state.projects[state.currentProjectId];
       if (!project) return;
+      // ボタンはタッチ・ポインター・クリックの各イベントで呼ばれるので、連続呼び出しは1回にまとめる
+      if (Date.now() - lastWallpaperSaveAt < 600) return;
+      lastWallpaperSaveAt = Date.now();
 
       pushUndoSnapshot();
       project.wallpaper = (selectedWallpaperImageId || selectedWallpaperBase64) ? {
@@ -128,21 +169,26 @@
       enforceUniqueSceneTalkSelections(project.sceneWallpaperSettings.scenes);
 
       applyProjectWallpaper(true);
-      closeModal('wallpaperModal');
+      if (editorDisplayMode === 'script') renderTimeline();
       saveState();
+      savedWallpaperEditorSnapshot = wallpaperEditorSnapshot();
+      setWallpaperSaveStatus('保存しました ✓');
     }
 
     function clearWallpaper() {
       const project = state.projects[state.currentProjectId];
       if (!project) return;
+      if (!confirm('通常壁紙を削除しますか？')) return;
+      const hadOtherChanges = wallpaperEditorSnapshot() !== savedWallpaperEditorSnapshot;
 
       pushUndoSnapshot();
       project.wallpaper = null;
-      selectedWallpaperBase64 = "";
-      selectedWallpaperImageId = "";
+      removeMainWallpaperImage();
       saveState();
-      applyProjectWallpaper();
-      closeModal('wallpaperModal');
+      applyProjectWallpaper(true);
+      // シーンの編集中の変更はまだ保存していないので、その場合は「未保存」のままにする
+      if (!hadOtherChanges) savedWallpaperEditorSnapshot = wallpaperEditorSnapshot();
+      setWallpaperSaveStatus('通常壁紙を削除しました');
     }
 
     function applyProjectWallpaper(forceUpdate = false) {
@@ -365,17 +411,20 @@
         '</div>' +
         '<div class="scene-talk-tools">' +
           '<span id="sceneTalkCount_' + scene.id + '">' + getSceneTalkCountLabel(scene) + '</span>' +
-          '<span class="scene-talk-hint">行全体をタップして選択できます</span>' +
+          '<label class="scene-range-mode"><input type="checkbox" ' + (sceneRangeSelectMode ? 'checked' : '') + ' onchange="setSceneRangeSelectMode(this.checked)">開始→終了でまとめて選択</label>' +
         '</div>' +
+        '<p class="scene-range-status" id="sceneRangeStatus"></p>' +
         '<div class="scene-talk-filters">' +
           '<input type="search" id="sceneTalkSearch_' + scene.id + '" placeholder="検索" oninput="filterSceneTalkOptions(\'' + scene.id + '\')">' +
           '<select id="sceneTalkChar_' + scene.id + '" onchange="filterSceneTalkOptions(\'' + scene.id + '\')">' + charOptions + '</select>' +
         '</div>' +
         '<div class="scene-talk-list" id="sceneTalkList_' + scene.id + '">' + renderSceneTalkOptions(scene, project) + '</div>';
       list.appendChild(card);
+      if (sceneRangeAnchor && sceneRangeAnchor.sceneId !== scene.id) sceneRangeAnchor = null;
       resolveSceneWallpaperThumbs();
       initSceneWallpaperDropzones();
       syncSceneTalkSelectionDom();
+      updateSceneRangeAnchorUi();
     }
 
     function selectSceneWallpaperTab(id) {
@@ -561,15 +610,66 @@
       }
     }
 
+    // 「開始→終了」をタップして間をまとめて選択するモード（オフにすると1件ずつ選択）
+    let sceneRangeSelectMode = true;
+    let sceneRangeAnchor = null; // { sceneId, talkId }：開始としてタップしたセリフ
+
+    function setSceneRangeSelectMode(enabled) {
+      sceneRangeSelectMode = !!enabled;
+      sceneRangeAnchor = null;
+      updateSceneRangeAnchorUi();
+    }
+
+    function talkLabelById(talkId) {
+      const project = state.projects[state.currentProjectId];
+      const index = (project?.talks || []).findIndex(talk => talk.id === talkId);
+      return index < 0 ? '' : formatTalkNumber(index) + ' ' + (project.talks[index].charName || '');
+    }
+
+    function updateSceneRangeAnchorUi(message) {
+      document.querySelectorAll('.scene-talk-option').forEach(row => {
+        row.classList.toggle('is-range-anchor', !!sceneRangeAnchor && row.dataset.talkId === sceneRangeAnchor.talkId);
+      });
+      const status = document.getElementById('sceneRangeStatus');
+      if (!status) return;
+      if (message) status.textContent = message;
+      else if (!sceneRangeSelectMode) status.textContent = '1件ずつ選択します。';
+      else if (sceneRangeAnchor) status.textContent = '開始：' + talkLabelById(sceneRangeAnchor.talkId) + '　→ 次に「終了」のセリフをタップしてください';
+      else status.textContent = '「開始」のセリフ → 「終了」のセリフの順にタップすると、間のセリフもまとめて選択されます';
+    }
+
+    function assignTalksToScene(scene, talkIds) {
+      editingSceneWallpapers.forEach(item => {
+        if (item.id !== scene.id) item.talkIds = (item.talkIds || []).filter(id => !talkIds.includes(id));
+      });
+      scene.talkIds = [...new Set([...(scene.talkIds || []), ...talkIds])];
+    }
+
     function toggleSceneTalkSelection(sceneId, talkId, checked) {
       const scene = editingSceneWallpapers.find(item => item.id === sceneId);
-      if (!scene) return;
-      editingSceneWallpapers.forEach(item => {
-        item.talkIds = (item.talkIds || []).filter(id => id !== talkId);
-      });
-      if (checked) scene.talkIds = [...(scene.talkIds || []), talkId];
+      const project = state.projects[state.currentProjectId];
+      if (!scene || !project) return;
+      let message = '';
+      if (checked && sceneRangeSelectMode && sceneRangeAnchor?.sceneId === sceneId && sceneRangeAnchor.talkId !== talkId) {
+        // 2回目のタップ：開始〜終了の間をすべてこのシーンにする
+        const indexes = [sceneRangeAnchor.talkId, talkId].map(id => project.talks.findIndex(talk => talk.id === id)).filter(index => index >= 0);
+        const start = Math.min(...indexes);
+        const end = Math.max(...indexes);
+        const ids = project.talks.slice(start, end + 1).map(talk => talk.id).filter(Boolean);
+        assignTalksToScene(scene, ids);
+        message = formatTalkNumber(start) + '〜' + formatTalkNumber(end) + '（' + ids.length + '件）を「' + (scene.name || 'シーン') + '」に設定しました';
+        sceneRangeAnchor = null;
+      } else {
+        editingSceneWallpapers.forEach(item => {
+          item.talkIds = (item.talkIds || []).filter(id => id !== talkId);
+        });
+        if (checked) scene.talkIds = [...(scene.talkIds || []), talkId];
+        if (checked && sceneRangeSelectMode) sceneRangeAnchor = { sceneId, talkId };
+        else if (sceneRangeAnchor?.talkId === talkId) sceneRangeAnchor = null;
+      }
       enforceUniqueSceneTalkSelections(editingSceneWallpapers);
-      syncSceneTalkSelectionDom(talkId);
+      syncSceneTalkSelectionDom();
+      updateSceneRangeAnchorUi(message);
     }
 
     function sceneRangeTalkIds(sceneId) {

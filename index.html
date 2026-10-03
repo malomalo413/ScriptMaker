@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="./assets/icons/icon-512.png">
-  <link rel="stylesheet" href="./css/styles.css?v=63">
+  <link rel="stylesheet" href="./css/styles.css?v=64">
   <script src="./js/vendor/Sortable.min.js?v=1.15.0" defer></script>
   <script src="./js/firebase-config.js?v=30" defer></script>
   <script src="./js/firebase-share.js?v=39" defer></script>
@@ -23,7 +23,7 @@
   <script src="./js/app/02-backup-sync.js?v=77" defer></script>
   <script src="./js/app/03-data-import.js?v=77" defer></script>
   <script src="./js/app/04-storage-projects.js?v=77" defer></script>
-  <script src="./js/app/05-wallpaper.js?v=77" defer></script>
+  <script src="./js/app/05-wallpaper.js?v=78" defer></script>
   <script src="./js/app/06-characters-display.js?v=77" defer></script>
   <script src="./js/app/07-timeline-editing.js?v=77" defer></script>
   <script src="./js/app/08-share-cloud.js?v=77" defer></script>
@@ -252,9 +252,10 @@
         </div>
       </div>
       <div class="modal-actions wallpaper-modal-actions">
-        <button class="btn-modal-cancel" onclick="clearWallpaper()">削除</button>
-        <button class="btn-modal-cancel" onclick="closeModal('wallpaperModal')">キャンセル</button>
-        <button class="btn-modal-confirm" id="wallpaperConfirmBtn" type="button" ontouchstart="confirmWallpaper(); return false;" onpointerdown="confirmWallpaper(); return false;" onclick="confirmWallpaper(); return false;">決定</button>
+        <span id="wallpaperSaveStatus" class="wallpaper-save-status" aria-live="polite"></span>
+        <button class="btn-modal-cancel" type="button" onclick="clearWallpaper()">通常壁紙を削除</button>
+        <button class="btn-modal-cancel" type="button" onclick="closeWallpaperModal()">閉じる</button>
+        <button class="btn-modal-confirm" id="wallpaperConfirmBtn" type="button" ontouchstart="confirmWallpaper(); return false;" onpointerdown="confirmWallpaper(); return false;" onclick="confirmWallpaper(); return false;">保存</button>
       </div>
     </div>
   </div>
