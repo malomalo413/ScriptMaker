@@ -13,7 +13,8 @@
   <link rel="stylesheet" href="./css/viewer.css?v=28">
   <script src="./js/firebase-config.js?v=30" defer></script>
   <script src="./js/firebase-share.js?v=32" defer></script>
-  <script src="./js/viewer.js?v=39" defer></script>
+  <script src="./js/share-crypto.js?v=1" defer></script>
+  <script src="./js/viewer.js?v=40" defer></script>
 </head>
 <body>
   <div id="viewerApp" class="viewer-app">
@@ -22,23 +23,23 @@
     <header class="viewer-header">
       <div class="viewer-title-block">
         <p class="viewer-label">ScriptMaker Viewer</p>
-        <h1 id="viewerTitle">&#21488;&#26412;</h1>
+        <h1 id="viewerTitle">台本</h1>
       </div>
-      <div class="viewer-header-actions"><button id="viewerPdfButton" class="viewer-settings-button viewer-pdf-button hidden" type="button">PDF&#12391;&#20445;&#23384;</button><button id="viewerSpreadsheetButton" class="viewer-settings-button viewer-spreadsheet-button hidden" type="button">CSV&#12480;&#12454;&#12531;&#12525;&#12540;&#12489;</button><button id="viewerExcelButton" class="viewer-settings-button viewer-spreadsheet-button hidden" type="button">Excel&#12480;&#12454;&#12531;&#12525;&#12540;&#12489;</button><button id="viewerSettingsButton" class="viewer-settings-button" type="button" aria-haspopup="dialog">&#34920;&#31034;&#35373;&#23450;</button><button id="viewerLogoutButton" class="viewer-settings-button viewer-logout-button hidden" type="button">&#12525;&#12464;&#12450;&#12454;&#12488;</button></div>
+      <div class="viewer-header-actions"><button id="viewerPdfButton" class="viewer-settings-button viewer-pdf-button hidden" type="button">PDFで保存</button><button id="viewerSpreadsheetButton" class="viewer-settings-button viewer-spreadsheet-button hidden" type="button">CSVダウンロード</button><button id="viewerExcelButton" class="viewer-settings-button viewer-spreadsheet-button hidden" type="button">Excelダウンロード</button><button id="viewerSettingsButton" class="viewer-settings-button" type="button" aria-haspopup="dialog">表示設定</button><button id="viewerLogoutButton" class="viewer-settings-button viewer-logout-button hidden" type="button">ログアウト</button></div>
     </header>
     <section class="viewer-display-mode-bar">
-      <span>&#34920;&#31034;&#12514;&#12540;&#12489;</span>
-      <label><input type="radio" name="viewerDisplayMode" value="chat"> &#12481;&#12515;&#12483;&#12488;&#22411;</label>
-      <label><input type="radio" name="viewerDisplayMode" value="script"> &#21488;&#26412;&#22411;</label>
-      <span id="viewerOrientationHint" class="viewer-orientation-hint hidden">&#27178;&#30011;&#38754;&#12391;&#38322;&#35239;&#12375;&#12390;&#12367;&#12384;&#12373;&#12356;</span>
+      <span>表示モード</span>
+      <label><input type="radio" name="viewerDisplayMode" value="chat"> チャット型</label>
+      <label><input type="radio" name="viewerDisplayMode" value="script"> 台本型</label>
+      <span id="viewerOrientationHint" class="viewer-orientation-hint hidden">横画面で閲覧してください</span>
     </section>
     <section id="viewerCountPanel" class="viewer-count-panel hidden">
       <details id="viewerCountDetails">
-        <summary><span>&#25991;&#23383;&#25968;</span><strong id="viewerCountTotal">&#21512;&#35336;&#25991;&#23383;&#25968;&#65306;0&#25991;&#23383;</strong></summary>
+        <summary><span>文字数</span><strong id="viewerCountTotal">合計文字数：0文字</strong></summary>
         <div class="viewer-count-options">
-          <label class="viewer-count-check"><input id="viewerShowNumbers" type="checkbox" checked> <span>&#30058;&#21495;&#34920;&#31034;</span></label>
-          <label class="viewer-count-check"><input id="viewerExcludeEmoji" type="checkbox"> <span>&#38996;&#25991;&#23383;</span></label>
-          <label class="viewer-count-field viewer-exclude-field"><span><input id="viewerUseExcludeChars" type="checkbox"> &#38500;&#22806;&#12377;&#12427;&#25991;&#23383;</span><input id="viewerExcludeChars" type="text" placeholder="&#20363;&#65306;&#12289;&#12290;&#65281;&#65311;"></label>
+          <label class="viewer-count-check"><input id="viewerShowNumbers" type="checkbox" checked> <span>番号表示</span></label>
+          <label class="viewer-count-check"><input id="viewerExcludeEmoji" type="checkbox"> <span>顔文字</span></label>
+          <label class="viewer-count-field viewer-exclude-field"><span><input id="viewerUseExcludeChars" type="checkbox"> 除外する文字</span><input id="viewerExcludeChars" type="text" placeholder="例：、。！？"></label>
         </div>
         <div id="viewerCountBreakdown" class="viewer-count-breakdown"></div>
       </details>
@@ -46,25 +47,25 @@
     <main id="viewerTimeline" class="viewer-timeline"></main>
     <div id="viewerPrintPages" class="viewer-print-pages" aria-hidden="true"></div>
     <div id="viewerEmpty" class="viewer-empty hidden">
-      <h2>&#20849;&#26377;&#12487;&#12540;&#12479;&#12364;&#12354;&#12426;&#12414;&#12379;&#12435;</h2>
-      <p>Share&#12391;&#20316;&#25104;&#12375;&#12383;URL&#12363;&#12425;&#38283;&#12356;&#12390;&#12367;&#12384;&#12373;&#12356;&#12290;</p>
+      <h2>共有データがありません</h2>
+      <p>Shareで作成したURLから開いてください。</p>
     </div>
     <div id="viewerSettingsPanel" class="viewer-settings-panel hidden" role="dialog" aria-modal="true" aria-labelledby="viewerSettingsTitle">
       <div class="viewer-settings-sheet">
         <div class="viewer-settings-head">
-          <h2 id="viewerSettingsTitle">&#21491;&#20596;&#34920;&#31034;&#12461;&#12515;&#12521;&#12463;&#12479;&#12540;</h2>
+          <h2 id="viewerSettingsTitle">右側表示キャラクター</h2>
           <button id="viewerSettingsClose" class="viewer-icon-button" type="button" aria-label="close">&#215; </button>
         </div>
-        <p class="viewer-settings-help">&#12481;&#12455;&#12483;&#12463;&#12375;&#12383;&#12461;&#12515;&#12521;&#12463;&#12479;&#12540;&#12398;&#12475;&#12522;&#12501;&#12434;&#21491;&#20596;&#12395;&#34920;&#31034;&#12375;&#12414;&#12377;&#12290;</p>
+        <p class="viewer-settings-help">チェックしたキャラクターのセリフを右側に表示します。</p>
         <div class="viewer-settings-actions">
-          <button id="viewerAllLeft" type="button">&#20840;&#21729;&#24038;&#20596;</button>
-          <button id="viewerAllRight" type="button">&#20840;&#21729;&#21491;&#20596;</button>
-          <button id="viewerUseEditor" type="button">&#32232;&#38598;&#20596;&#35373;&#23450;&#12395;&#25147;&#12377;</button>
+          <button id="viewerAllLeft" type="button">全員左側</button>
+          <button id="viewerAllRight" type="button">全員右側</button>
+          <button id="viewerUseEditor" type="button">編集側設定に戻す</button>
         </div>
         <div id="viewerCharacterOptions" class="viewer-character-options"></div>
         <div class="viewer-script-color-section">
-          <h3>&#21488;&#26412;&#22411;&#12398;&#12475;&#12522;&#12501;&#33394;</h3>
-          <p>&#21488;&#26412;&#22411;&#12391;&#34920;&#31034;&#12377;&#12427;&#12461;&#12515;&#12521;&#12463;&#12479;&#12540;&#12372;&#12392;&#12398;&#33394;&#12434;&#36984;&#12409;&#12414;&#12377;&#12290;</p>
+          <h3>台本型のセリフ色</h3>
+          <p>台本型で表示するキャラクターごとの色を選べます。</p>
           <div id="viewerScriptColorOptions" class="viewer-script-color-options"></div>
         </div>
       </div>
@@ -73,13 +74,13 @@
     <div id="viewerAuthPanel" class="viewer-auth-panel hidden">
       <div class="viewer-auth-card">
         <p class="viewer-label">ScriptMaker Viewer</p>
-        <h2>&#38322;&#35239;&#12497;&#12473;&#12527;&#12540;&#12489;</h2>
-        <p>&#12371;&#12398;&#21488;&#26412;&#12399;&#12497;&#12473;&#12527;&#12540;&#12489;&#12391;&#20445;&#35703;&#12373;&#12428;&#12390;&#12356;&#12414;&#12377;&#12290;</p>
-        <input id="viewerPasswordInput" type="password" autocomplete="current-password" placeholder="&#12497;&#12473;&#12527;&#12540;&#12489;">
-        <button id="viewerPasswordSubmit" type="button">&#38283;&#12367;</button>
-        <button id="viewerClearSavedPassword" class="viewer-secondary-button" type="button">&#20445;&#23384;&#12375;&#12383;&#12497;&#12473;&#12527;&#12540;&#12489;&#12434;&#21066;&#38500;</button>
+        <h2>閲覧パスワード</h2>
+        <p>この台本はパスワードで保護されています。</p>
+        <input id="viewerPasswordInput" type="password" autocomplete="current-password" placeholder="パスワード">
+        <button id="viewerPasswordSubmit" type="button">開く</button>
+        <button id="viewerClearSavedPassword" class="viewer-secondary-button" type="button">保存したパスワードを削除</button>
         <div id="viewerPasswordMessage" class="viewer-auth-message"></div>
-        <small>&#8251;GitHub Pages&#19978;&#12398;&#31777;&#26131;&#20445;&#35703;&#12391;&#12377;&#12290;</small>
+        <small>&#8251;GitHub Pages上の簡易保護です。</small>
       </div>
     </div>
 

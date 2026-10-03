@@ -1,13 +1,13 @@
 rules_version = '2';
 
-// ScriptMaker Firestore rules — 段階1（いますぐ反映して安全な版）
+// ScriptMaker Firestore rules — 段階2（共有データの上書き防止つき）
 //
-// 以前のルールは read: if true だったため、コレクションの「一覧取得」も誰でもできました。
-// その場合、他人の共有データやEditorバックアップをIDを知らなくても全件取得できてしまいます。
-// このルールでは「IDを知っているドキュメントの取得(get)」だけを許可し、一覧取得(list)を禁止します。
-// アプリ側の読み込みはすべてIDを指定した取得なので、既存の動作には影響しません。
+// 前提: Firebaseコンソールで Authentication > Sign-in method > 「匿名」を有効にしてあること。
+// Editorは共有するときに自動で匿名ログインし、共有データに作成者ID(ownerUid)を記録します。
+// このルールでは、作成者本人のブラウザ以外から共有データを上書きできなくなります。
+// （共有URLを知っている閲覧者が中身を書き換える、といった荒らしを防ぎます）
 //
-// 共有データの「上書き防止」は firestore.rules.auth（段階2）で行います。手順は SECURITY-SETUP.md を参照。
+// 反映手順は SECURITY-SETUP.md を参照してください。
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -30,15 +30,32 @@ service cloud.firestore {
         && request.resource.data.data.size() <= 700000;
     }
 
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // 新しく書き込む内容の作成者が自分であること
+    function writesOwnUid() {
+      return signedIn() && request.resource.data.ownerUid == request.auth.uid;
+    }
+
+    // 既存データの作成者が自分であること（作成者が記録されていない古い共有は、最初に更新した人が作成者になる）
+    function ownsExisting() {
+      return !('ownerUid' in resource.data) || resource.data.ownerUid == request.auth.uid;
+    }
+
     match /scriptShares/{shareId} {
       allow get: if true;
       allow list: if false;
-      allow create, update: if validRootMeta();
+      allow create: if validRootMeta() && writesOwnUid();
+      allow update: if validRootMeta() && writesOwnUid() && ownsExisting();
       allow delete: if false;
 
       match /chunks/{chunkId} {
         allow read: if true;
-        allow create, update: if validChunk();
+        // 同じ書き込み（バッチ）で親ドキュメントの作成者が自分になっていること
+        allow create, update: if validChunk() && signedIn()
+          && getAfter(/databases/$(database)/documents/scriptShares/$(shareId)).data.ownerUid == request.auth.uid;
         allow delete: if false;
       }
     }

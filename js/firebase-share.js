@@ -114,6 +114,34 @@
     return (await appContextForConfig(config)).db;
   }
 
+  // 共有データの作成者を記録するための匿名ログイン。
+  // Firebaseコンソールで匿名ログインが無効な場合は空文字を返し、従来どおりの保存を続ける。
+  async function anonymousUidForConfig(config) {
+    const context = await appContextForConfig(config);
+    if (context.uidPromise) return context.uidPromise;
+    context.uidPromise = (async () => {
+      try {
+        const auth = await import("https://www.gstatic.com/firebasejs/" + FIREBASE_SDK_VERSION + "/firebase-auth.js");
+        const instance = auth.getAuth(context.app);
+        if (instance.currentUser) return instance.currentUser.uid;
+        await new Promise(resolve => {
+          const stop = auth.onAuthStateChanged(instance, () => { stop(); resolve(); });
+        });
+        if (instance.currentUser) return instance.currentUser.uid;
+        const credential = await auth.signInAnonymously(instance);
+        return credential?.user?.uid || "";
+      } catch (error) {
+        console.warn("Anonymous sign-in unavailable; sharing without owner check.", error);
+        return "";
+      }
+    })();
+    return context.uidPromise;
+  }
+
+  function isPermissionError(error) {
+    return /permission|insufficient/i.test(String(error?.code || "") + " " + String(error?.message || ""));
+  }
+
   function chunksForPayload(payload) {
     const json = JSON.stringify(payload);
     const chunks = [];
@@ -123,7 +151,7 @@
     return chunks;
   }
 
-  async function saveChunkedPayload(collectionName, documentId, payload, config) {
+  async function saveChunkedPayload(collectionName, documentId, payload, config, extraMeta) {
     if (!collectionName || !documentId || !payload) throw new Error("保存するデータがありません。");
     const db = await dbForConfig(config);
     const { doc, collection, setDoc, writeBatch, serverTimestamp } = (await modules()).firestore;
@@ -137,7 +165,8 @@
       revision: Number(payload.revision) || 0,
       updatedByDeviceId: payload.updatedByDeviceId || "",
       createdAt: payload.createdAt || serverTimestamp(),
-      updatedAt: payload.updatedAt || serverTimestamp()
+      updatedAt: payload.updatedAt || serverTimestamp(),
+      ...(extraMeta || {})
     };
     if (chunks.length === 1 && chunks[0].length <= FIREBASE_CHUNK_SIZE) {
       meta.data = chunks[0];
@@ -182,7 +211,21 @@
 
   async function saveShare(payload, config) {
     if (!payload || !payload.shareId) throw new Error("共有データがありません。");
-    return saveChunkedPayload(FIREBASE_SHARE_COLLECTION, payload.shareId, payload, config);
+    const ownerUid = await anonymousUidForConfig(config);
+    if (!ownerUid) return saveChunkedPayload(FIREBASE_SHARE_COLLECTION, payload.shareId, payload, config);
+    try {
+      return await saveChunkedPayload(FIREBASE_SHARE_COLLECTION, payload.shareId, payload, config, { ownerUid });
+    } catch (error) {
+      // 古いルールのままだと ownerUid 項目が拒否されるので、その場合は記録なしで保存し直す
+      if (!isPermissionError(error)) throw error;
+      try {
+        return await saveChunkedPayload(FIREBASE_SHARE_COLLECTION, payload.shareId, payload, config);
+      } catch (_) {
+        const denied = new Error("この共有URLは別の端末（またはブラウザ）で作成されたため、ここからは更新できません。「公開URLを作り直す」で新しいURLを作成してください。");
+        denied.code = "share-owner-mismatch";
+        throw denied;
+      }
+    }
   }
 
   async function loadShare(shareId, config) {

@@ -1,10 +1,10 @@
-const VIEWER_SCENE_NAME = '\u60c5\u666f\u63cf\u5199';
-const VIEWER_SYSTEM_NAME = '\u30b7\u30b9\u30c6\u30e0';
+const VIEWER_SCENE_NAME = '情景描写';
+const VIEWER_SYSTEM_NAME = 'システム';
 const VIEWER_RIGHT_SIDE_PREFIX = 'scriptmaker_viewer_right_side_v1:';
 const VIEWER_PASSWORD_HASH_PREFIX = 'scriptmaker_viewer_password_hash_v1:';
 const VIEWER_COUNT_SETTING_PREFIX = 'scriptmaker_viewer_count_settings_v1:';
 const VIEWER_SCRIPT_COLOR_PREFIX = 'scriptmaker_viewer_script_colors_v1:';
-const VIEWER_DEFAULT_EXCLUDE_CHARS = '\u3001\u3002\u300c\u300d\uff08\uff09\u30fc\u301c\uff1f\uff01.';
+const VIEWER_DEFAULT_EXCLUDE_CHARS = '、。「」（）ー〜？！.';
 const SCRIPTMAKER_SHARE_DATA_BASE_URL = '../Share/data/';
 const SCRIPTMAKER_SHARE_WORKER_URL = '';
 
@@ -12,6 +12,8 @@ let viewerProject = null;
 let viewerShareKey = 'default';
 let viewerPasswordHash = '';
 let pendingViewerProject = null;
+let viewerEncryptedEnvelope = null;
+const VIEWER_SHARE_KEY_PREFIX = 'scriptmaker_viewer_share_key_v1:';
 let rightSideSetting = { mode: 'editor', names: [] };
 let countSetting = { useExcludeChars: false, excludeChars: VIEWER_DEFAULT_EXCLUDE_CHARS, showNumbers: true, excludeEmoji: false };
 let viewerScriptColorSettings = {};
@@ -257,6 +259,12 @@ async function loadSharedProject() {
         if (!response.ok) throw new Error('Share not found: ' + response.status);
         share = await response.json();
       }
+      if (share?.encrypted && window.ScriptMakerShareCrypto?.isEnvelope(share.encrypted)) {
+        // パスワード付き共有は暗号化されている。中身はパスワード入力後に復号する
+        viewerEncryptedEnvelope = share.encrypted;
+        viewerPasswordHash = 'encrypted';
+        return { title: '', talks: [], characters: [] };
+      }
       viewerPasswordHash = share?.viewerPasswordHash || share?.passwordHash || '';
       return share?.project || null;
     } catch (error) {
@@ -347,11 +355,11 @@ function saveViewerScriptColorSettings() {
 
 function scriptColorSelectHtml(name, value) {
   const options = [
-    ['', '\u306a\u3057'],
+    ['', 'なし'],
     ['red', '\u8d64'],
     ['blue', '\u9752'],
     ['green', '\u7dd1'],
-    ['yellow', '\u9ec4\u8272']
+    ['yellow', '黄色']
   ];
   return '<select data-name="' + escapeHtml(name) + '">' + options.map(([color, label]) =>
     '<option value="' + color + '"' + (value === color ? ' selected' : '') + '>' + label + '</option>'
@@ -364,7 +372,7 @@ function renderViewerScriptColorOptions() {
   loadViewerScriptColorSettings();
   const characters = viewerCharacters(viewerProject).filter(character => !isSpecialTalk({ charName: character.name }));
   if (!characters.length) {
-    list.innerHTML = '<p class="viewer-settings-empty">\u8a2d\u5b9a\u3067\u304d\u308b\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u304c\u3042\u308a\u307e\u305b\u3093\u3002</p>';
+    list.innerHTML = '<p class="viewer-settings-empty">設定できるキャラクターがありません。</p>';
     return;
   }
   list.innerHTML = characters.map(character => {
@@ -542,7 +550,7 @@ function calculateTextCounts(project) {
   (project?.talks || []).filter(isCountableTalk).forEach(talk => {
     const count = [...countedText(talk.text)].length;
     total += count;
-    const name = talk.charName || '\u672a\u8a2d\u5b9a';
+    const name = talk.charName || '未設定';
     counts[name] = (counts[name] || 0) + count;
   });
   return { total, counts };
@@ -565,11 +573,11 @@ function renderCountPanel() {
   if (showNumbers) showNumbers.checked = countSetting.showNumbers !== false;
 
   const result = calculateTextCounts(viewerProject);
-  total.textContent = '\u5408\u8a08\u6587\u5b57\u6570\uff1a' + result.total + '\u6587\u5b57';
+  total.textContent = '合計文字数：' + result.total + '文字';
   const entries = Object.entries(result.counts);
   breakdown.innerHTML = entries.length
-    ? entries.map(([name, count]) => '<span>' + escapeHtml(name) + '\uff1a' + count + '\u6587\u5b57</span>').join('')
-    : '<span>\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u5225\uff1a0\u6587\u5b57</span>';
+    ? entries.map(([name, count]) => '<span>' + escapeHtml(name) + '\uff1a' + count + '文字</span>').join('')
+    : '<span>キャラクター別：0文字</span>';
 }
 
 function updateNumberVisibility() {
@@ -616,7 +624,7 @@ function renderViewer(project) {
   loadViewerDisplayMode();
   applyViewerDisplayModeClass();
   syncViewerOrientationForDisplayMode(false);
-  document.getElementById('viewerTitle').innerText = viewerProject.title || '\u53f0\u672c';
+  document.getElementById('viewerTitle').innerText = viewerProject.title || '台本';
   document.getElementById('viewerPdfButton')?.classList.remove('hidden');
   document.getElementById('viewerSpreadsheetButton')?.classList.remove('hidden');
   document.getElementById('viewerExcelButton')?.classList.remove('hidden');
@@ -664,7 +672,7 @@ function renderSettingsOptions() {
   if (!list || !viewerProject) return;
   const characters = viewerCharacters(viewerProject);
   if (!characters.length) {
-    list.innerHTML = '<p class="viewer-settings-empty">\u8868\u793a\u3067\u304d\u308b\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u304c\u3042\u308a\u307e\u305b\u3093\u3002</p>';
+    list.innerHTML = '<p class="viewer-settings-empty">表示できるキャラクターがありません。</p>';
     return;
   }
   list.innerHTML = characters.map(character => {
@@ -806,12 +814,44 @@ function finishViewerAuth(project) {
   renderViewer(project);
 }
 
+function viewerShareKeyStorageKey() {
+  return VIEWER_SHARE_KEY_PREFIX + viewerShareKey;
+}
+
+// 以前に正しいパスワードを入れた端末では、保存しておいた鍵で自動的に復号する
+async function decryptViewerShareWithSavedKey() {
+  if (!viewerEncryptedEnvelope) return null;
+  const rawKey = localStorage.getItem(viewerShareKeyStorageKey()) || '';
+  if (!rawKey) return null;
+  const payload = await window.ScriptMakerShareCrypto.decryptJsonWithRawKey(viewerEncryptedEnvelope, rawKey);
+  if (!payload) localStorage.removeItem(viewerShareKeyStorageKey());
+  return payload?.project || null;
+}
+
+async function submitEncryptedViewerPassword(input, message) {
+  if (message) message.textContent = '確認中...';
+  const result = await window.ScriptMakerShareCrypto.decryptJson(viewerEncryptedEnvelope, input?.value || '');
+  if (!result?.value?.project) {
+    if (message) message.textContent = 'パスワードが違います。';
+    return;
+  }
+  localStorage.setItem(viewerShareKeyStorageKey(), result.rawKey);
+  sessionStorage.setItem(viewerAuthSessionKey(), viewerPasswordHash);
+  if (input) input.value = '';
+  if (message) message.textContent = '';
+  finishViewerAuth(result.value.project);
+}
+
 async function submitViewerPassword() {
   const input = document.getElementById('viewerPasswordInput');
   const message = document.getElementById('viewerPasswordMessage');
+  if (viewerEncryptedEnvelope) {
+    await submitEncryptedViewerPassword(input, message);
+    return;
+  }
   const hash = await hashPasswordText(input?.value || '');
   if (hash !== viewerPasswordHash) {
-    if (message) message.textContent = '\u30d1\u30b9\u30ef\u30fc\u30c9\u304c\u9055\u3044\u307e\u3059\u3002';
+    if (message) message.textContent = 'パスワードが違います。';
     return;
   }
   sessionStorage.setItem(viewerAuthSessionKey(), viewerPasswordHash);
@@ -823,9 +863,10 @@ async function submitViewerPassword() {
 
 function clearSavedViewerPassword() {
   localStorage.removeItem(viewerPasswordStorageKey());
+  localStorage.removeItem(viewerShareKeyStorageKey());
   sessionStorage.removeItem(viewerAuthSessionKey());
   const message = document.getElementById('viewerPasswordMessage');
-  if (message) message.textContent = '\u4fdd\u5b58\u3057\u305f\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u524a\u9664\u3057\u307e\u3057\u305f\u3002';
+  if (message) message.textContent = '保存したパスワードを削除しました。';
   document.getElementById('viewerPasswordInput')?.focus();
 }
 
@@ -924,12 +965,12 @@ function buildPrintGroups() {
 
 function buildScriptPageHtml(group) {
   const wallpaper = group.wallpaper;
-  const title = escapeHtml(viewerProject.title || '\u53f0\u672c');
-  const baseSceneTitle = group.sceneName || (wallpaper?.image ? '\u58c1\u7d19\u30b7\u30fc\u30f3' : '\u58c1\u7d19\u306a\u3057');
+  const title = escapeHtml(viewerProject.title || '台本');
+  const baseSceneTitle = group.sceneName || (wallpaper?.image ? '壁紙シーン' : '壁紙なし');
   const sceneTitle = escapeHtml(baseSceneTitle + (group.partCount > 1 ? ' ' + group.partIndex + '/' + group.partCount : ''));
   const imageHtml = wallpaper?.image
     ? '<img class="viewer-print-wallpaper-image" src="' + escapeHtml(wallpaper.image) + '" alt="' + sceneTitle + '">'
-    : '<div class="viewer-print-no-wallpaper">\u58c1\u7d19\u306a\u3057</div>';
+    : '<div class="viewer-print-no-wallpaper">壁紙なし</div>';
   const talkHtml = group.talks.map(({ talk, index }) => {
     const isSpecial = isSpecialTalk(talk);
     const sideClass = isSpecial ? 'scene' : isRightSideCharacter(talk.charName) ? 'right' : 'left';
@@ -965,7 +1006,7 @@ function waitForPrintImages(images) {
         image.classList.add('viewer-print-image-error');
         image.replaceWith(Object.assign(document.createElement('div'), {
           className: 'viewer-print-no-wallpaper',
-          textContent: '\u58c1\u7d19\u3092\u8aad\u307f\u8fbc\u3081\u307e\u305b\u3093\u3067\u3057\u305f'
+          textContent: '壁紙を読み込めませんでした'
         }));
         resolve();
       };
@@ -1523,12 +1564,12 @@ function printableDocumentScript() {
 
 function buildPrintableHtml() {
   const pages = document.getElementById('viewerPrintPages')?.innerHTML || '';
-  const title = escapeHtml(viewerProject?.title || '\u53f0\u672c');
+  const title = escapeHtml(viewerProject?.title || '台本');
   return '<!doctype html><html lang="ja"><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width, initial-scale=1">' +
     '<title>' + title + ' PDF</title><style>' + printDocumentStyles() + '</style></head>' +
     '<body><div class="viewer-print-toolbar"><strong>' + title + '</strong><span id="viewerPrintStatus"></span>' +
-    '<button id="viewerDownloadPdfButton" type="button" onclick="downloadViewerPdf()">PDF&#12434;&#12480;&#12454;&#12531;&#12525;&#12540;&#12489;</button><button class="secondary" type="button" onclick="window.print()">&#21360;&#21047;</button></div>' +
+    '<button id="viewerDownloadPdfButton" type="button" onclick="downloadViewerPdf()">PDFをダウンロード</button><button class="secondary" type="button" onclick="window.print()">印刷</button></div>' +
     '<main class="viewer-print-pages">' + pages + '</main>' +
     '<script>' + printableDocumentScript() + '<\/script>' +
     '</body></html>';
@@ -1678,17 +1719,17 @@ function showViewerEmptyMessage() {
   const title = empty.querySelector('h2');
   const text = empty.querySelector('p');
   if (viewerShareIdMissing) {
-    if (title) title.textContent = '\u5171\u6709URL\u306eID\u3092\u8aad\u307f\u53d6\u308c\u307e\u305b\u3093\u3067\u3057\u305f';
-    if (text) text.textContent = '\u5171\u6709URL\u306eID\u3092\u8aad\u307f\u53d6\u308c\u307e\u305b\u3093\u3067\u3057\u305f\u3002LINE\u3084Discord\u3067\u958b\u3051\u306a\u3044\u5834\u5408\u306f\u3001\u5916\u90e8\u30d6\u30e9\u30a6\u30b6\u3067\u958b\u3044\u3066\u304f\u3060\u3055\u3044\u3002';
+    if (title) title.textContent = '共有URL\u306eIDを読み取れませんでした';
+    if (text) text.textContent = '共有URL\u306eIDを読み取れませんでした。LINE\u3084Discordで開けない場合は、外部ブラウザで開いてください。';
   } else if (viewerLoadErrorType === 'missing-firebase-config') {
-    if (title) title.textContent = 'Firebase\u8a2d\u5b9a\u3092\u8aad\u307f\u8fbc\u3081\u307e\u305b\u3093\u3067\u3057\u305f';
-    if (text) text.textContent = 'Viewer\u304cFirebase\u306b\u63a5\u7d9a\u3067\u304d\u308b\u8a2d\u5b9a\u3092\u8aad\u307f\u8fbc\u3081\u3066\u3044\u307e\u305b\u3093\u3002\u30da\u30fc\u30b8\u3092\u518d\u8aad\u307f\u8fbc\u307f\u3057\u3066\u3082\u6539\u5584\u3057\u306a\u3044\u5834\u5408\u306f\u4f5c\u6210\u8005\u306b\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002';
+    if (title) title.textContent = 'Firebase設定を読み込めませんでした';
+    if (text) text.textContent = 'Viewer\u304cFirebaseに接続できる設定を読み込めていません。ページを再読み込みしても改善しない場合は作成者に確認してください。';
   } else if (viewerLoadErrorType === 'firebase-connect-failed') {
-    if (title) title.textContent = 'Firebase\u306b\u63a5\u7d9a\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f';
-    if (text) text.textContent = '\u901a\u4fe1\u74b0\u5883\u3084\u30d6\u30e9\u30a6\u30b6\u5236\u9650\u306b\u3088\u308a\u5171\u6709\u30c7\u30fc\u30bf\u3092\u53d6\u5f97\u3067\u304d\u307e\u305b\u3093\u3002LINE\u5185\u30d6\u30e9\u30a6\u30b6\u306e\u5834\u5408\u306f\u5916\u90e8\u30d6\u30e9\u30a6\u30b6\u3067\u958b\u3044\u3066\u304f\u3060\u3055\u3044\u3002';
+    if (title) title.textContent = 'Firebaseに接続できませんでした';
+    if (text) text.textContent = '通信環境やブラウザ制限により共有データを取得できません。LINE内ブラウザの場合は外部ブラウザで開いてください。';
   } else if (viewerLoadErrorType === 'share-not-found') {
-    if (title) title.textContent = '\u5171\u6709\u30c7\u30fc\u30bf\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093';
-    if (text) text.textContent = '\u3053\u306e\u5171\u6709URL\u306e\u30c7\u30fc\u30bf\u304cFirestore\u306b\u898b\u3064\u304b\u308a\u307e\u305b\u3093\u3002URL\u304c\u6b63\u3057\u3044\u304b\u3001\u4f5c\u6210\u8005\u304c\u5171\u6709\u30c7\u30fc\u30bf\u3092\u66f4\u65b0\u6e08\u307f\u304b\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002';
+    if (title) title.textContent = '共有データが見つかりません';
+    if (text) text.textContent = 'この共有URLのデータがFirestoreに見つかりません。URLが正しいか、作成者が共有データを更新済みか確認してください。';
   }
   empty.classList.remove('hidden');
 }
@@ -1739,11 +1780,11 @@ function spreadsheetCell(value) {
 }
 
 function safeSpreadsheetFileName(value) {
-  const base = String(value || '\u53f0\u672c')
+  const base = String(value || '台本')
     .replace(/[\\/:*?"<>|]/g, '_')
     .trim()
     .replace(/^_+|_+$/g, '');
-  return base || '\u53f0\u672c';
+  return base || '台本';
 }
 
 function viewerSpreadsheetRows() {
@@ -1768,9 +1809,9 @@ function downloadViewerSpreadsheetCsv(rows) {
 
 function exportViewerSpreadsheet() {
   if (!viewerProject) return;
-  const rows = [['\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u540d', '\u30bb\u30ea\u30d5', '\u30c8\u66f8\u304d'], ...viewerSpreadsheetRows()];
+  const rows = [['キャラクター名', 'セリフ', 'ト書き'], ...viewerSpreadsheetRows()];
   if (rows.length <= 1) {
-    alert('\u66f8\u304d\u51fa\u305b\u308b\u30bb\u30ea\u30d5\u304c\u3042\u308a\u307e\u305b\u3093\u3002');
+    alert('書き出せるセリフがありません。');
     return;
   }
   downloadViewerSpreadsheetCsv(rows);
@@ -1936,9 +1977,9 @@ function downloadViewerSpreadsheetExcel(rows) {
 
 function exportViewerSpreadsheetExcel() {
   if (!viewerProject) return;
-  const rows = [['\u30ad\u30e3\u30e9\u30af\u30bf\u30fc\u540d', '\u30bb\u30ea\u30d5', '\u30c8\u66f8\u304d'], ...viewerSpreadsheetRows()];
+  const rows = [['キャラクター名', 'セリフ', 'ト書き'], ...viewerSpreadsheetRows()];
   if (rows.length <= 1) {
-    alert('\u66f8\u304d\u51fa\u305b\u308b\u30bb\u30ea\u30d5\u304c\u3042\u308a\u307e\u305b\u3093\u3002');
+    alert('書き出せるセリフがありません。');
     return;
   }
   downloadViewerSpreadsheetExcel(rows);
@@ -1995,7 +2036,11 @@ window.addEventListener('load', async () => {
     showViewerEmptyMessage();
     return;
   }
-  if (!isViewerAuthorized()) {
+  if (viewerEncryptedEnvelope) {
+    const decrypted = await decryptViewerShareWithSavedKey();
+    if (decrypted) finishViewerAuth(decrypted);
+    else showViewerAuth(null);
+  } else if (!isViewerAuthorized()) {
     showViewerAuth(project);
   } else {
     finishViewerAuth(project);

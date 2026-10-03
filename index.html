@@ -14,32 +14,41 @@
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="./assets/icons/icon-512.png">
-  <link rel="stylesheet" href="./css/styles.css?v=62">
-  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
+  <link rel="stylesheet" href="./css/styles.css?v=63">
+  <script src="./js/vendor/Sortable.min.js?v=1.15.0" defer></script>
   <script src="./js/firebase-config.js?v=30" defer></script>
-  <script src="./js/firebase-share.js?v=38" defer></script>
-  <script src="./js/app.js?v=76" defer></script>
+  <script src="./js/firebase-share.js?v=39" defer></script>
+  <script src="./js/share-crypto.js?v=1" defer></script>
+  <script src="./js/app/01-core-auth.js?v=77" defer></script>
+  <script src="./js/app/02-backup-sync.js?v=77" defer></script>
+  <script src="./js/app/03-data-import.js?v=77" defer></script>
+  <script src="./js/app/04-storage-projects.js?v=77" defer></script>
+  <script src="./js/app/05-wallpaper.js?v=77" defer></script>
+  <script src="./js/app/06-characters-display.js?v=77" defer></script>
+  <script src="./js/app/07-timeline-editing.js?v=77" defer></script>
+  <script src="./js/app/08-share-cloud.js?v=77" defer></script>
+  <script src="./js/app/09-ui-startup.js?v=77" defer></script>
 </head>
 <body class="auth-locked">
 
   <div id="editorAuthGate" class="editor-auth-gate">
     <div class="editor-auth-card">
       <p class="auth-label">ScriptMaker</p>
-      <h1 id="editorAuthTitle">&#12497;&#12473;&#12527;&#12540;&#12489;</h1>
+      <h1 id="editorAuthTitle">パスワード</h1>
       <p id="editorAuthHelp" class="auth-help"></p>
-      <input id="editorAuthPassword" type="password" autocomplete="current-password" placeholder="&#12497;&#12473;&#12527;&#12540;&#12489;">
-      <input id="editorAuthConfirm" class="hidden" type="password" autocomplete="new-password" placeholder="&#12497;&#12473;&#12527;&#12540;&#12489;&#30906;&#35469;">
-      <label class="auth-remember-row"><input id="editorAuthRemember" type="checkbox" checked> <span>&#12371;&#12398;&#31471;&#26411;&#12395;&#20445;&#23384;&#12377;&#12427;</span></label>
+      <input id="editorAuthPassword" type="password" autocomplete="current-password" placeholder="パスワード">
+      <input id="editorAuthConfirm" class="hidden" type="password" autocomplete="new-password" placeholder="パスワード確認">
+      <label class="auth-remember-row"><input id="editorAuthRemember" type="checkbox" checked> <span>この端末に保存する</span></label>
       <details class="auth-settings">
         <summary>設定</summary>
         <label class="auth-remember-row"><input id="editorAuthAutoLogin" type="checkbox"> <span>起動時に自動ログインする</span></label>
       </details>
-      <button id="editorAuthPasswordButton" type="button" onclick="submitEditorPassword()">&#38283;&#12367;</button>
-      <button id="editorBackupCodeLoginButton" class="auth-secondary-button" type="button" onclick="openBackupCodeImportFromAuth()">&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;&#12434;&#20837;&#21147;</button>
+      <button id="editorAuthPasswordButton" type="button" onclick="submitEditorPassword()">開く</button>
+      <button id="editorBackupCodeLoginButton" class="auth-secondary-button" type="button" onclick="openBackupCodeImportFromAuth()">バックアップコードを入力</button>
       <button class="auth-secondary-button" type="button" onclick="continueEditorOffline()">オフラインで続ける</button>
-      <button id="editorClearSavedPasswordButton" class="auth-secondary-button" type="button" onclick="clearSavedEditorPassword()">&#20445;&#23384;&#12375;&#12383;&#12497;&#12473;&#12527;&#12540;&#12489;&#12434;&#21066;&#38500;</button>
+      <button id="editorClearSavedPasswordButton" class="auth-secondary-button" type="button" onclick="clearSavedEditorPassword()">保存したパスワードを削除</button>
       <div id="editorAuthMessage" class="auth-message"></div>
-      <small>&#8251;GitHub Pages&#19978;&#12398;&#31777;&#26131;&#20445;&#35703;&#12391;&#12354;&#12426;&#12289;&#23436;&#20840;&#12394;&#12469;&#12540;&#12496;&#12540;&#35469;&#35388;&#12391;&#12399;&#12354;&#12426;&#12414;&#12379;&#12435;&#12290;</small>
+      <small>&#8251;GitHub Pages上の簡易保護であり、完全なサーバー認証ではありません。</small>
     </div>
   </div>
 
@@ -52,7 +61,7 @@
       </div>
       <div class="folder-toolbar">
         <div class="folder-list" id="folderList"></div>
-        <button class="folder-create-btn" onclick="createFolder()">+ &#12501;&#12457;&#12523;&#12480;</button>
+        <button class="folder-create-btn" onclick="createFolder()">+ フォルダ</button>
       </div>
       <div class="project-list" id="projectList"></div>
       <button class="create-btn" onclick="openCreateProjectModal()">+ 新規プロジェクト作成</button>
@@ -68,14 +77,22 @@
       <div class="project-title" id="projectTitle">プロジェクト名</div>
       <div class="save-status save-status-saved" id="saveStatus" aria-live="polite">保存済み ✓</div>
       <div class="nav-actions">
-        <button class="nav-btn nav-icon-btn" id="undoBtn" onclick="undoProjectAction()" title="Undo">&#8630;</button>
-        <button class="nav-btn nav-icon-btn" id="redoBtn" onclick="redoProjectAction()" title="Redo">&#8631;</button>
-        <button class="nav-btn btn-nav-save" onclick="saveDataAlert()">保存</button>
-        <button class="nav-btn btn-nav-share" onclick="openShareModal()">&#20849;&#26377;</button>
-        <button class="nav-btn btn-nav-cloud" onclick="openCloudSyncModal()">&#21516;&#26399;</button>
-        <button class="nav-btn btn-nav-wallpaper" onclick="openWallpaperModal()">壁紙</button>
+        <button class="nav-btn nav-icon-btn" id="undoBtn" onclick="undoProjectAction()" title="元に戻す" aria-label="元に戻す">&#8630;</button>
+        <button class="nav-btn nav-icon-btn" id="redoBtn" onclick="redoProjectAction()" title="やり直す" aria-label="やり直す">&#8631;</button>
+        <button class="nav-btn btn-nav-share nav-wide-only" onclick="openShareModal()">共有</button>
+        <button class="nav-btn btn-nav-wallpaper nav-wide-only" onclick="openWallpaperModal()">壁紙</button>
         <button class="nav-btn btn-nav-mode" id="modeToggleBtn" onclick="toggleEditMode()">編集</button>
-        <button class="nav-btn btn-nav-logout" onclick="logoutEditorAuth()">&#12525;&#12464;&#12450;&#12454;&#12488;</button>
+        <div class="nav-menu-wrap">
+          <button class="nav-btn nav-menu-btn" id="navMenuButton" type="button" onclick="toggleNavMenu(event)" title="その他のメニュー" aria-label="その他のメニュー" aria-haspopup="true" aria-expanded="false">&#8943;</button>
+          <div class="nav-menu hidden" id="navMenu" role="menu">
+            <button type="button" role="menuitem" class="nav-narrow-only" onclick="runNavMenuAction(openShareModal)">共有</button>
+            <button type="button" role="menuitem" class="nav-narrow-only" onclick="runNavMenuAction(openWallpaperModal)">壁紙</button>
+            <button type="button" role="menuitem" onclick="runNavMenuAction(openCloudSyncModal)">同期・バックアップ</button>
+            <button type="button" role="menuitem" onclick="runNavMenuAction(saveDataAlert)">今すぐ保存</button>
+            <button type="button" role="menuitem" onclick="runNavMenuAction(openDisplaySettingsModal)">表示設定（文字サイズ）</button>
+            <button type="button" role="menuitem" class="nav-menu-danger" onclick="runNavMenuAction(logoutEditorAuth)">ログアウト</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -84,21 +101,21 @@
       <label><input type="radio" name="editorDisplayMode" value="chat" onchange="setEditorDisplayMode(this.value)"> チャット型</label>
       <label><input type="radio" name="editorDisplayMode" value="script" onchange="setEditorDisplayMode(this.value)"> 台本型</label>
       <button class="script-import-button" type="button" onclick="openScriptImportModal()">台本読み込み</button>
-      <button class="script-color-settings-button" type="button" onclick="openScriptColorModal()">&#33394;&#35373;&#23450;</button>
+      <button class="script-color-settings-button" type="button" onclick="openScriptColorModal()">色設定</button>
       <span id="editorOrientationHint" class="orientation-hint hidden">横画面で閲覧してください</span>
     </div>
 
     <div class="header-scroll-area">
       <div class="meta-stats" id="metaStats">
         <details class="count-options" id="countOptionsDetails">
-          <summary><span>&#25991;&#23383;&#25968;&#25511;&#38500;&#12539;&#34920;&#31034;&#35373;&#23450;</span></summary>
+          <summary><span>文字数控除・表示設定</span></summary>
           <div class="count-controls">
-            <label><input type="checkbox" id="excludePunctuationCheck">&#21477;&#35501;&#28857;&#12434;&#38500;&#12367;</label>
-            <label><input type="checkbox" id="excludeCustomCheck">&#12459;&#12473;&#12479;&#12512;</label>
-            <label><input type="checkbox" id="excludeEmojiCheck">&#38996;&#25991;&#23383;</label>
-            <label><input type="checkbox" id="showTalkNumbersCheck" checked>&#30058;&#21495;&#34920;&#31034;</label>
-            <label><input type="checkbox" id="outputTalkNumbersCheck">&#20986;&#21147;&#12395;&#30058;&#21495;</label>
-            <input type="text" id="customExcludeChars" placeholder="&#38500;&#22806;&#12377;&#12427;&#25991;&#23383;">
+            <label><input type="checkbox" id="excludePunctuationCheck">句読点を除く</label>
+            <label><input type="checkbox" id="excludeCustomCheck">カスタム</label>
+            <label><input type="checkbox" id="excludeEmojiCheck">顔文字</label>
+            <label><input type="checkbox" id="showTalkNumbersCheck" checked>番号表示</label>
+            <label><input type="checkbox" id="outputTalkNumbersCheck">出力に番号</label>
+            <input type="text" id="customExcludeChars" placeholder="除外する文字">
           </div>
         </details>
         <div class="count-output" id="countOutput"></div>
@@ -121,7 +138,7 @@
         <span class="inline-edit-label" id="inlineEditLabel"></span>
         <button type="button" id="insertBeforeButton" onclick="startInsertBeforeEditingTalk()">この前に追加</button>
         <button type="button" id="insertAfterButton" onclick="startInsertAfterEditingTalk()">この後に追加</button>
-        <button type="button" onclick="openCurrentStageDirectionEditor()">&#12488;&#26360;&#12365;</button>
+        <button type="button" onclick="openCurrentStageDirectionEditor()">ト書き</button>
         <button type="button" id="inlineCancelButton" onclick="cancelInlineTalkEdit()">キャンセル</button>
       </div>
       <div class="input-row">
@@ -225,7 +242,7 @@
         <div class="scene-wallpaper-head">
           <label class="scene-wallpaper-toggle-row" for="sceneWallpaperToggle">
             <input type="checkbox" id="sceneWallpaperToggle" onchange="toggleSceneWallpaperControls()">
-            <span>&#12471;&#12540;&#12531;&#20999;&#12426;&#26367;&#12360;&#12434;&#26377;&#21177;&#21270;</span>
+            <span>シーン切り替えを有効化</span>
           </label>
           <button type="button" class="btn-scene-add" onclick="addSceneWallpaper()">＋ シーン追加</button>
         </div>
@@ -255,17 +272,28 @@
       </div>
     </div>
   </div>
+  <div id="displaySettingsModal" class="custom-modal hidden">
+    <div class="modal-content display-settings-modal">
+      <h4>表示設定</h4>
+      <p class="display-settings-label">セリフの文字サイズ（この端末だけに保存されます）</p>
+      <div id="fontScaleOptions" class="font-scale-options"></div>
+      <p class="font-scale-preview">プレビュー：ここに台本のセリフが表示されます。</p>
+      <div class="modal-actions">
+        <button class="btn-modal-confirm" type="button" onclick="closeModal('displaySettingsModal')">閉じる</button>
+      </div>
+    </div>
+  </div>
   <div id="stageDirectionModal" class="custom-modal hidden">
     <div class="modal-content">
-      <h4>&#12488;&#26360;&#12365;</h4>
+      <h4>ト書き</h4>
       <p id="stageDirectionTalkLabel" class="stage-direction-target-label"></p>
       <input type="hidden" id="stageDirectionTarget">
       <div class="modal-row">
-        <textarea id="stageDirectionText" class="stage-direction-textarea" rows="5" placeholder="&#28436;&#25216;&#25351;&#31034;&#12420;&#35036;&#36275;&#35500;&#26126;&#12434;&#20837;&#21147;"></textarea>
+        <textarea id="stageDirectionText" class="stage-direction-textarea" rows="5" placeholder="演技指示や補足説明を入力"></textarea>
       </div>
       <div class="modal-actions">
-        <button class="btn-modal-cancel" type="button" onclick="closeModal('stageDirectionModal')">&#12461;&#12515;&#12531;&#12475;&#12523;</button>
-        <button class="btn-modal-confirm" type="button" onclick="saveStageDirection()">&#20445;&#23384;</button>
+        <button class="btn-modal-cancel" type="button" onclick="closeModal('stageDirectionModal')">キャンセル</button>
+        <button class="btn-modal-confirm" type="button" onclick="saveStageDirection()">保存</button>
       </div>
     </div>
   </div>
@@ -288,12 +316,12 @@
 
   <div id="scriptColorModal" class="custom-modal hidden">
     <div class="modal-content script-color-modal">
-      <h4>&#21488;&#26412;&#22411;&#12398;&#12475;&#12522;&#12501;&#33394;</h4>
-      <p class="script-color-help">&#21488;&#26412;&#22411;&#12391;&#34920;&#31034;&#12377;&#12427;&#12461;&#12515;&#12521;&#12463;&#12479;&#12540;&#12372;&#12392;&#12398;&#12475;&#12522;&#12501;&#33394;&#12434;&#36984;&#12409;&#12414;&#12377;&#12290;</p>
+      <h4>台本型のセリフ色</h4>
+      <p class="script-color-help">台本型で表示するキャラクターごとのセリフ色を選べます。</p>
       <div id="scriptColorList" class="script-color-list"></div>
       <div class="modal-actions">
-        <button class="btn-modal-cancel" type="button" onclick="resetScriptColorSettings()">&#12522;&#12475;&#12483;&#12488;</button>
-        <button class="btn-modal-confirm" type="button" onclick="closeModal('scriptColorModal')">&#38281;&#12376;&#12427;</button>
+        <button class="btn-modal-cancel" type="button" onclick="resetScriptColorSettings()">リセット</button>
+        <button class="btn-modal-confirm" type="button" onclick="closeModal('scriptColorModal')">閉じる</button>
       </div>
     </div>
   </div>
@@ -312,27 +340,27 @@
 
   <div id="shareModal" class="custom-modal hidden">
     <div class="modal-content share-modal-content">
-      <h4>&#20849;&#26377;URL&#12434;&#20316;&#25104;</h4>
-      <p class="share-help">&#21488;&#26412;&#12434;Viewer&#12391;&#38283;&#12369;&#12427;&#20844;&#38283;URL&#12434;&#31649;&#29702;&#12375;&#12414;&#12377;&#12290;&#19968;&#24230;&#20316;&#25104;&#12375;&#12383;URL&#12399;&#22266;&#23450;&#12373;&#12428;&#12289;&#21516;&#12376;URL&#12391;&#26368;&#26032;&#29256;&#12434;&#35211;&#12425;&#12428;&#12414;&#12377;&#12290;</p>
-      <div class="modal-row share-password-row"><label for="shareViewerPassword">Viewer&#38322;&#35239;&#12497;&#12473;&#12527;&#12540;&#12489;&#65288;&#20219;&#24847;&#65289;</label><input type="password" id="shareViewerPassword" autocomplete="new-password" placeholder="&#26410;&#35373;&#23450;&#12394;&#12425;&#12497;&#12473;&#12527;&#12540;&#12489;&#12394;&#12375;"><button class="share-clear-password" type="button" onclick="clearStoredSharePassword()">&#20445;&#23384;&#12375;&#12383;&#12497;&#12473;&#12527;&#12540;&#12489;&#12434;&#21066;&#38500;</button></div>
-      <textarea id="shareUrlText" class="share-url-textarea share-url-output hidden" readonly placeholder="&#20849;&#26377;URL&#12364;&#12371;&#12371;&#12395;&#34920;&#31034;&#12373;&#12428;&#12414;&#12377;"></textarea>
+      <h4>共有URLを作成</h4>
+      <p class="share-help">台本をViewerで開ける公開URLを管理します。一度作成したURLは固定され、同じURLで最新版を見られます。</p>
+      <div class="modal-row share-password-row"><label for="shareViewerPassword">Viewer閲覧パスワード（任意）</label><input type="password" id="shareViewerPassword" autocomplete="new-password" placeholder="未設定ならパスワードなし"><button class="share-clear-password" type="button" onclick="clearStoredSharePassword()">保存したパスワードを削除</button></div>
+      <textarea id="shareUrlText" class="share-url-textarea share-url-output hidden" readonly placeholder="共有URLがここに表示されます"></textarea>
       <div class="share-meta" id="shareMetaText"></div>
       <div class="share-meta share-status" id="shareStatusText"></div>
       <div class="modal-actions share-modal-actions share-main-actions">
-        <button id="shareCreateButton" class="btn-modal-confirm" type="button" onclick="publishFirebaseShareUrl()">&#20844;&#38283;URL&#12434;&#20316;&#25104;</button>
-        <button id="shareCopyButton" class="btn-modal-confirm hidden" type="button" onclick="copyShareUrl()">&#20844;&#38283;URL&#12434;&#12467;&#12500;&#12540;</button>
-        <button id="shareOpenButton" class="btn-modal-cancel hidden" type="button" onclick="openSharedViewer()">Viewer&#12391;&#38283;&#12367;</button>
-        <button id="shareUpdateButton" class="btn-modal-cancel hidden" type="button" onclick="publishFirebaseShareUrl()">&#20849;&#26377;&#12487;&#12540;&#12479;&#12434;&#26356;&#26032;</button>
-        <button class="btn-modal-cancel" type="button" onclick="closeModal('shareModal')">&#38281;&#12376;&#12427;</button>
+        <button id="shareCreateButton" class="btn-modal-confirm" type="button" onclick="publishFirebaseShareUrl()">公開URLを作成</button>
+        <button id="shareCopyButton" class="btn-modal-confirm hidden" type="button" onclick="copyShareUrl()">公開URLをコピー</button>
+        <button id="shareOpenButton" class="btn-modal-cancel hidden" type="button" onclick="openSharedViewer()">Viewerで開く</button>
+        <button id="shareUpdateButton" class="btn-modal-cancel hidden" type="button" onclick="publishFirebaseShareUrl()">共有データを更新</button>
+        <button class="btn-modal-cancel" type="button" onclick="closeModal('shareModal')">閉じる</button>
       </div>
       <details class="share-advanced">
-        <summary>&#35443;&#32048;&#35373;&#23450;&#12539;&#38283;&#30330;&#32773;&#21521;&#12369;</summary>
-        <div class="modal-row"><label for="shareFirebaseConfig">Firebase config</label><textarea id="shareFirebaseConfig" class="share-url-textarea share-config-textarea" placeholder="Firebase&#12398;&#35373;&#23450;&#12458;&#12502;&#12472;&#12455;&#12463;&#12488;&#12434;&#36028;&#12426;&#20184;&#12369;&#65288;js/firebase-config.js&#12395;&#35373;&#23450;&#28168;&#12415;&#12394;&#12425;&#31354;&#12391;OK&#65289;"></textarea></div>
+        <summary>詳細設定・開発者向け</summary>
+        <div class="modal-row"><label for="shareFirebaseConfig">Firebase config</label><textarea id="shareFirebaseConfig" class="share-url-textarea share-config-textarea" placeholder="Firebaseの設定オブジェクトを貼り付け（js/firebase-config.jsに設定済みなら空でOK）"></textarea></div>
         <div class="modal-actions share-modal-actions share-advanced-actions">
-          <button class="btn-modal-cancel" type="button" onclick="recreateProjectShareUrl()">&#26032;&#12375;&#12356;&#20844;&#38283;URL&#12434;&#20316;&#12426;&#30452;&#12377;</button>
-          <button class="btn-modal-cancel" type="button" onclick="downloadDriveViewerHtml()">HTML&#26360;&#12365;&#20986;&#12375;</button>
-          <button class="btn-modal-cancel" type="button" onclick="shareDriveViewerHtml()">Drive&#12408;&#20849;&#26377;</button>
-          <button class="btn-modal-cancel" type="button" onclick="selectShareUrl()">URL&#12434;&#36984;&#25246;</button>
+          <button class="btn-modal-cancel" type="button" onclick="recreateProjectShareUrl()">新しい公開URLを作り直す</button>
+          <button class="btn-modal-cancel" type="button" onclick="downloadDriveViewerHtml()">HTML書き出し</button>
+          <button class="btn-modal-cancel" type="button" onclick="shareDriveViewerHtml()">Driveへ共有</button>
+          <button class="btn-modal-cancel" type="button" onclick="selectShareUrl()">URLを選択</button>
         </div>
       </details>
     </div>
@@ -340,34 +368,34 @@
 
   <div id="cloudSyncModal" class="custom-modal hidden">
     <div class="modal-content cloud-sync-modal">
-      <h4>Editor&#12463;&#12521;&#12454;&#12489;&#21516;&#26399;</h4>
-      <p class="share-help">&#20316;&#32773;&#26412;&#20154;&#12364;&#12473;&#12510;&#12507;&#12392;PC&#12391;&#21516;&#12376;&#21488;&#26412;&#12434;&#32154;&#12365;&#12363;&#12425;&#32232;&#38598;&#12377;&#12427;&#12383;&#12417;&#12398;&#25163;&#21205;&#21516;&#26399;&#12391;&#12377;&#12290;Viewer&#20849;&#26377;&#12392;&#12399;&#21029;&#12398;&#27231;&#33021;&#12391;&#12377;&#12290;</p>
+      <h4>Editorクラウド同期</h4>
+      <p class="share-help">作者本人がスマホとPCで同じ台本を続きから編集するための手動同期です。Viewer共有とは別の機能です。</p>
       <div class="modal-row">
-        <label for="cloudProjectIdInput">&#12463;&#12521;&#12454;&#12489;&#12503;&#12525;&#12472;&#12455;&#12463;&#12488;ID / &#21516;&#26399;URL</label>
-        <input id="cloudProjectIdInput" type="text" placeholder="editor_xxxxx &#12414;&#12383;&#12399; &#21516;&#26399;URL">
+        <label for="cloudProjectIdInput">クラウドプロジェクトID / 同期URL</label>
+        <input id="cloudProjectIdInput" type="text" placeholder="editor_xxxxx または 同期URL">
       </div>
-      <textarea id="cloudSyncUrlText" class="share-url-textarea share-url-output hidden" readonly placeholder="&#21516;&#26399;URL&#12364;&#12371;&#12371;&#12395;&#34920;&#31034;&#12373;&#12428;&#12414;&#12377;"></textarea>
+      <textarea id="cloudSyncUrlText" class="share-url-textarea share-url-output hidden" readonly placeholder="同期URLがここに表示されます"></textarea>
       <div class="share-meta share-status" id="cloudSyncStatus"></div>
       <div class="modal-actions cloud-sync-actions">
-        <button class="btn-modal-confirm" type="button" onclick="saveCurrentProjectToCloud()">&#12463;&#12521;&#12454;&#12489;&#12395;&#20445;&#23384;</button>
-        <button class="btn-modal-cancel" type="button" onclick="openCloudProjectFromInput()">&#12463;&#12521;&#12454;&#12489;&#12363;&#12425;&#38283;&#12367;</button>
-        <button class="btn-modal-confirm" type="button" onclick="copyCloudSyncUrl()">&#21516;&#26399;URL&#12434;&#12467;&#12500;&#12540;</button>
-        <button class="btn-modal-cancel" type="button" onclick="loadLatestCloudProject()">&#26368;&#26032;&#12487;&#12540;&#12479;&#12434;&#35501;&#12415;&#36796;&#12416;</button>
-        <button class="btn-modal-cancel" type="button" onclick="overwriteCloudProject()">&#12371;&#12398;&#31471;&#26411;&#12398;&#20869;&#23481;&#12391;&#19978;&#26360;&#12365;&#20445;&#23384;</button>
-        <button class="btn-modal-cancel" type="button" onclick="closeModal('cloudSyncModal')">&#38281;&#12376;&#12427;</button>
+        <button class="btn-modal-confirm" type="button" onclick="saveCurrentProjectToCloud()">クラウドに保存</button>
+        <button class="btn-modal-cancel" type="button" onclick="openCloudProjectFromInput()">クラウドから開く</button>
+        <button class="btn-modal-confirm" type="button" onclick="copyCloudSyncUrl()">同期URLをコピー</button>
+        <button class="btn-modal-cancel" type="button" onclick="loadLatestCloudProject()">最新データを読み込む</button>
+        <button class="btn-modal-cancel" type="button" onclick="overwriteCloudProject()">この端末の内容で上書き保存</button>
+        <button class="btn-modal-cancel" type="button" onclick="closeModal('cloudSyncModal')">閉じる</button>
       </div>
     </div>
   </div>
 
   <div id="editorBackupModal" class="custom-modal hidden">
     <div class="modal-content cloud-sync-modal backup-sync-modal">
-      <h4>&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12539;&#31471;&#26411;&#24341;&#12365;&#32153;&#12366;</h4>
-      <p class="share-help" id="editorBackupInfo">&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;&#12434;&#30330;&#34892;&#12377;&#12427;&#12392;&#12289;&#21029;&#31471;&#26411;&#12408;&#21488;&#26412;&#12487;&#12540;&#12479;&#12434;&#24341;&#12365;&#32153;&#12370;&#12414;&#12377;&#12290;</p>
-      <p class="share-help backup-warning">&#12371;&#12398;&#12467;&#12540;&#12489;&#12434;&#30693;&#12387;&#12390;&#12356;&#12427;&#20154;&#12399;&#12289;&#21488;&#26412;&#12487;&#12540;&#12479;&#12434;&#35501;&#12415;&#36796;&#12417;&#12414;&#12377;&#12290;&#20182;&#20154;&#12395;&#20844;&#38283;&#12375;&#12394;&#12356;&#12391;&#12367;&#12384;&#12373;&#12356;&#12290;</p>
-      <label id="editorBackupCodeTextLabel" class="backup-code-output-label hidden" for="editorBackupCodeText">&#30330;&#34892;&#28168;&#12415;&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;</label>
-      <textarea id="editorBackupCodeText" class="share-url-textarea share-url-output hidden" readonly placeholder="&#30330;&#34892;&#28168;&#12415;&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;"></textarea>
+      <h4>バックアップ・端末引き継ぎ</h4>
+      <p class="share-help" id="editorBackupInfo">バックアップコードを発行すると、別端末へ台本データを引き継げます。</p>
+      <p class="share-help backup-warning">このコードを知っている人は、台本データを読み込めます。他人に公開しないでください。</p>
+      <label id="editorBackupCodeTextLabel" class="backup-code-output-label hidden" for="editorBackupCodeText">発行済みバックアップコード</label>
+      <textarea id="editorBackupCodeText" class="share-url-textarea share-url-output hidden" readonly placeholder="発行済みバックアップコード"></textarea>
       <div class="modal-row backup-import-row">
-        <label for="editorBackupCodeInput">&#21029;&#31471;&#26411;&#12398;&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;&#12434;&#20837;&#21147;</label>
+        <label for="editorBackupCodeInput">別端末のバックアップコードを入力</label>
         <input id="editorBackupCodeInput" type="text" placeholder="SM-7K4P-X9Q2-M6RT-W8CN-3FJD" oninput="this.value = normalizeBackupCode(this.value)">
         <input id="editorBackupQrInput" class="hidden" type="file" accept="image/*" onchange="readBackupQrImage(this)">
       </div>
@@ -375,15 +403,15 @@
       <div class="share-meta share-status" id="editorBackupStatus"></div>
       <div id="editorBackupDeviceList" class="backup-device-list"></div>
       <div class="modal-actions cloud-sync-actions">
-        <button class="btn-modal-confirm" type="button" onclick="issueEditorBackupCode()">&#12496;&#12483;&#12463;&#12450;&#12483;&#12503;&#12467;&#12540;&#12489;&#12434;&#33258;&#21205;&#30330;&#34892;</button>
-        <button class="btn-modal-confirm" type="button" onclick="loadBackupCodeFromInput()">&#12467;&#12540;&#12489;&#12434;&#35501;&#12415;&#36796;&#12416;</button>
-        <button class="btn-modal-cancel" type="button" onclick="openBackupQrImagePicker()">QR&#30011;&#20687;&#12434;&#35501;&#12415;&#36796;&#12416;</button>
-        <button class="btn-modal-confirm backup-copy-button" type="button" onclick="copyEditorBackupCode()">&#12467;&#12540;&#12489;&#12434;&#12467;&#12500;&#12540;</button>
-        <button class="btn-modal-cancel" type="button" onclick="saveEditorBackupNow({ skipReschedule: true })">&#20170;&#12377;&#12368;&#21516;&#26399;</button>
-        <button class="btn-modal-cancel" type="button" onclick="loadEditorBackupCloudState(true)">&#26368;&#26032;&#12487;&#12540;&#12479;&#12434;&#35501;&#12415;&#36796;&#12416;</button>
-        <button class="btn-modal-cancel" type="button" onclick="regenerateEditorBackupCode()">&#12467;&#12540;&#12489;&#12434;&#20877;&#30330;&#34892;</button>
-        <button class="btn-modal-cancel" type="button" onclick="unlinkEditorBackupDevice()">&#12371;&#12398;&#31471;&#26411;&#12398;&#36899;&#25658;&#12434;&#35299;&#38500;</button>
-        <button class="btn-modal-cancel" type="button" onclick="closeModal('editorBackupModal')">&#38281;&#12376;&#12427;</button>
+        <button class="btn-modal-confirm" type="button" onclick="issueEditorBackupCode()">バックアップコードを自動発行</button>
+        <button class="btn-modal-confirm" type="button" onclick="loadBackupCodeFromInput()">コードを読み込む</button>
+        <button class="btn-modal-cancel" type="button" onclick="openBackupQrImagePicker()">QR画像を読み込む</button>
+        <button class="btn-modal-confirm backup-copy-button" type="button" onclick="copyEditorBackupCode()">コードをコピー</button>
+        <button class="btn-modal-cancel" type="button" onclick="saveEditorBackupNow({ skipReschedule: true })">今すぐ同期</button>
+        <button class="btn-modal-cancel" type="button" onclick="loadEditorBackupCloudState(true)">最新データを読み込む</button>
+        <button class="btn-modal-cancel" type="button" onclick="regenerateEditorBackupCode()">コードを再発行</button>
+        <button class="btn-modal-cancel" type="button" onclick="unlinkEditorBackupDevice()">この端末の連携を解除</button>
+        <button class="btn-modal-cancel" type="button" onclick="closeModal('editorBackupModal')">閉じる</button>
       </div>
     </div>
   </div>

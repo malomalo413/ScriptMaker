@@ -5,21 +5,38 @@
 ## ファイル構成
 
 ```text
-pwa/
-  index.html
-  manifest.json
-  service-worker.js
-  css/
-    styles.css
-  js/
-    app.js
-  assets/
-    icons/
-      icon-192.png
-      icon-512.png
-    images/
-      opening-background.png
+index.html            Editor（GitHub Pagesのトップ）
+Editor/index.html     Editor（/Editor/ 用。中身は index.html と同じ）
+Viewer/               閲覧専用ページ（Firebase Hostingで公開）
+css/styles.css
+js/
+  app/                Editor本体（機能ごとに分割。index.html の順番で読み込む）
+    01-core-auth.js          定数・状態・起動パスワード
+    02-backup-sync.js        バックアップコードによる端末間同期
+    03-data-import.js        データ正規化・キャラクターライブラリ・台本読み込み
+    04-storage-projects.js   画像保存・保存処理・元に戻す・プロジェクト一覧
+    05-wallpaper.js          壁紙・シーン壁紙・範囲指定の壁紙
+    06-characters-display.js キャラクター・表示モード・色設定
+    07-timeline-editing.js   トーク表示・編集・ト書き・文字数カウント
+    08-share-cloud.js        出力・共有・クラウド同期
+    09-ui-startup.js         ドラッグ操作・メニュー・起動処理
+  share-crypto.js     共有の暗号化（Viewer/js/share-crypto.js と同じ内容にすること）
+  firebase-share.js   Firestoreへの保存・読み込み
+  vendor/             外部ライブラリ（SortableJS）
+tests/                自動テスト（ブラウザで tests/index.html を開く）
+firestore.rules       Firestoreルール（段階1）
+firestore.rules.auth  Firestoreルール（段階2：上書き防止）
+SECURITY-SETUP.md     セキュリティ設定の反映手順
 ```
+
+## 自動テスト
+
+ローカルでサーバーを起動し（GitHub Pages上でも可）、`tests/index.html` を開くと自動でテストが実行されます。
+すべて緑色で「合格」と表示されれば正常です。コードを変更したら、公開前に一度開いて確認してください。
+
+## セキュリティ設定
+
+Firebase側で行う作業があります。`SECURITY-SETUP.md` を参照してください。
 
 ## GitHub Pagesで公開する方法
 

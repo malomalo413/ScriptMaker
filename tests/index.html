@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ScriptMaker テスト</title>
+  <style>
+    body { font-family: -apple-system, "Segoe UI", sans-serif; margin: 16px; color: #1e293b; background: #f8fafc; }
+    h1 { font-size: 20px; }
+    #summary { font-size: 18px; font-weight: bold; margin: 12px 0; }
+    .pass { color: #15803d; }
+    .fail { color: #b91c1c; }
+    li { margin: 4px 0; font-size: 14px; }
+    pre { white-space: pre-wrap; font-size: 12px; background: #fee2e2; padding: 6px; border-radius: 6px; }
+  </style>
+  <!-- アプリ本体と同じ順番で読み込む（起動処理は run-tests.js で止める） -->
+  <script src="../js/share-crypto.js" defer></script>
+  <script src="../js/app/01-core-auth.js" defer></script>
+  <script src="../js/app/02-backup-sync.js" defer></script>
+  <script src="../js/app/03-data-import.js" defer></script>
+  <script src="../js/app/04-storage-projects.js" defer></script>
+  <script src="../js/app/05-wallpaper.js" defer></script>
+  <script src="../js/app/06-characters-display.js" defer></script>
+  <script src="../js/app/07-timeline-editing.js" defer></script>
+  <script src="../js/app/08-share-cloud.js" defer></script>
+  <script src="../js/app/09-ui-startup.js" defer></script>
+  <script src="./run-tests.js" defer></script>
+</head>
+<body>
+  <h1>ScriptMaker 自動テスト</h1>
+  <p>このページを開くと自動でテストが実行されます。すべて緑色なら合格です。</p>
+  <div id="summary">実行中...</div>
+  <ul id="results"></ul>
+</body>
+</html>

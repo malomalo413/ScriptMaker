@@ -1,5 +1,5 @@
-const CACHE_NAME = 'scriptmaker-editor-v58';
-const APP_SHELL = ['./','./index.html','./manifest.json','../css/styles.css?v=62','../js/firebase-config.js?v=30','../js/firebase-share.js?v=38','../js/app.js?v=76','../assets/icons/icon-192.png','../assets/icons/icon-512.png','../assets/images/opening-background.png'];
+const CACHE_NAME = 'scriptmaker-editor-v59';
+const APP_SHELL = ['./','./index.html','./manifest.json','../css/styles.css?v=63','../js/firebase-config.js?v=30','../js/vendor/Sortable.min.js?v=1.15.0','../js/firebase-share.js?v=39','../js/share-crypto.js?v=1','../js/app/01-core-auth.js?v=77','../js/app/02-backup-sync.js?v=77','../js/app/03-data-import.js?v=77','../js/app/04-storage-projects.js?v=77','../js/app/05-wallpaper.js?v=77','../js/app/06-characters-display.js?v=77','../js/app/07-timeline-editing.js?v=77','../js/app/08-share-cloud.js?v=77','../js/app/09-ui-startup.js?v=77','../assets/icons/icon-192.png','../assets/icons/icon-512.png','../assets/images/opening-background.png'];
 self.addEventListener('install', event => { event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', event => { event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))); self.clients.claim(); });
 self.addEventListener('fetch', event => {

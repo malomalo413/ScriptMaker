@@ -11,7 +11,9 @@ ScriptMaker/
 
 ## Editor
 
-`Editor/` is the editing app. It reuses the existing production editor code in `css/styles.css` and `js/app.js` so existing behavior and localStorage data remain compatible.
+`Editor/` is the editing app. It reuses the existing production editor code in `css/styles.css` and `js/app/*.js` so existing behavior and localStorage data remain compatible.
+
+The editor code was split from a single `js/app.js` into feature files under `js/app/` (01–09). They are classic scripts that share the global scope, so they must be loaded in numeric order; start-up code (`window.onload`, `initEditorAuthGate`) lives at the end of `09-ui-startup.js`. Saved data carries `schemaVersion`; add migrations in `migrateStateSchema()` (`03-data-import.js`).
 
 The legacy root `index.html` is also kept for backward compatibility.
 

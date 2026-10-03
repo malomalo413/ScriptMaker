@@ -60,7 +60,7 @@ function renderProjects() {
   const select = document.getElementById('projectSelect');
   const projects = state.projects || {};
   select.innerHTML = Object.keys(projects).map(id => '<option value="' + escapeAttr(id) + '">' + escapeHtml(projects[id].title || id) + '</option>').join('');
-  if (!select.innerHTML) select.innerHTML = '<option value="">Editor\u306b\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u304c\u3042\u308a\u307e\u305b\u3093</option>';
+  if (!select.innerHTML) select.innerHTML = '<option value="">Editorにプロジェクトがありません</option>';
 }
 
 function createShare() {
@@ -72,7 +72,7 @@ function createShare() {
   shares[shareId] = {
     id: shareId,
     sourceProjectId: projectId,
-    title: state.projects[projectId].title || '\u53f0\u672c',
+    title: state.projects[projectId].title || '台本',
     project: clone(state.projects[projectId]),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -95,7 +95,7 @@ function updateShare(id) {
 }
 
 function deleteShare(id) {
-  if (!confirm('\u3053\u306e\u5171\u6709\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f')) return;
+  if (!confirm('この共有を削除しますか？')) return;
   const shares = readShares();
   delete shares[id];
   saveShares(shares);
@@ -107,9 +107,9 @@ async function copyShare(id) {
   const url = viewerUrl(shares[id]);
   try {
     await navigator.clipboard.writeText(url);
-    alert('\u5171\u6709URL\u3092\u30b3\u30d4\u30fc\u3057\u307e\u3057\u305f');
+    alert('共有URLをコピーしました');
   } catch (error) {
-    prompt('\u5171\u6709URL', url);
+    prompt('共有URL', url);
   }
 }
 
@@ -122,12 +122,12 @@ function renderShares() {
   const list = document.getElementById('shareList');
   const values = Object.values(readShares()).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
   if (!values.length) {
-    list.innerHTML = '<p>\u307e\u3060\u5171\u6709\u306f\u3042\u308a\u307e\u305b\u3093\u3002</p>';
+    list.innerHTML = '<p>まだ共有はありません。</p>';
     return;
   }
   list.innerHTML = values.map(share => {
     const url = viewerUrl(share);
-    return '<article class="share-item"><h3>' + escapeHtml(share.title) + '</h3><p>\u66f4\u65b0: ' + escapeHtml(new Date(share.updatedAt).toLocaleString()) + '</p><div class="share-actions"><input readonly value="' + escapeAttr(url) + '"><button onclick="copyShare(\'' + escapeAttr(share.id) + '\')">URL\u30b3\u30d4\u30fc</button><button onclick="updateShare(\'' + escapeAttr(share.id) + '\')">\u66f4\u65b0</button><button onclick="openShare(\'' + escapeAttr(share.id) + '\')">Viewer</button><button class="danger" onclick="deleteShare(\'' + escapeAttr(share.id) + '\')">\u524a\u9664</button></div></article>';
+    return '<article class="share-item"><h3>' + escapeHtml(share.title) + '</h3><p>更新: ' + escapeHtml(new Date(share.updatedAt).toLocaleString()) + '</p><div class="share-actions"><input readonly value="' + escapeAttr(url) + '"><button onclick="copyShare(\'' + escapeAttr(share.id) + '\')">URLコピー</button><button onclick="updateShare(\'' + escapeAttr(share.id) + '\')">更新</button><button onclick="openShare(\'' + escapeAttr(share.id) + '\')">Viewer</button><button class="danger" onclick="deleteShare(\'' + escapeAttr(share.id) + '\')">削除</button></div></article>';
   }).join('');
 }
 

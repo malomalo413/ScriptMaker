@@ -2511,3 +2511,147 @@
       color: #4338ca;
       font-size: 12px;
     }
+
+    /* 上部メニュー：色を統一し、使用頻度の低い操作は「⋯」メニューへ */
+    .nav-btn {
+      background: #eef2f7;
+      color: #1e293b;
+    }
+    .btn-nav-share,
+    .btn-nav-wallpaper {
+      background: #eef2f7;
+      color: #1d4ed8;
+    }
+    .btn-nav-mode {
+      background: var(--primary-color);
+      color: #fff;
+    }
+    .btn-nav-mode.editing {
+      background: var(--danger-color);
+      color: #fff;
+    }
+    .nav-menu-wrap {
+      position: relative;
+    }
+    .nav-menu-btn {
+      min-width: 34px;
+      font-size: 16px;
+      line-height: 1;
+    }
+    .nav-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 50;
+      min-width: 200px;
+      padding: 6px;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+      display: flex;
+      flex-direction: column;
+    }
+    .nav-menu button {
+      border: none;
+      background: transparent;
+      padding: 11px 12px;
+      border-radius: 6px;
+      text-align: left;
+      font-size: 14px;
+      font-weight: bold;
+      color: #1e293b;
+      cursor: pointer;
+    }
+    .nav-menu button:hover,
+    .nav-menu button:focus-visible {
+      background: #f1f5f9;
+    }
+    .nav-menu .nav-menu-danger {
+      color: #b91c1c;
+      border-top: 1px solid var(--border-color);
+      border-radius: 0 0 6px 6px;
+    }
+    .nav-narrow-only {
+      display: none;
+    }
+    @media (max-width: 600px) {
+      .nav-wide-only {
+        display: none;
+      }
+      .nav-menu .nav-narrow-only {
+        display: block;
+      }
+      .nav-bar .save-status {
+        max-width: 64px;
+      }
+    }
+
+    /* 文字サイズ設定 */
+    .chat-bubble .message-text { font-size: calc(15px * var(--talk-font-scale, 1)); }
+    .chat-bubble .stage-direction-display { font-size: calc(12px * var(--talk-font-scale, 1)); }
+    .script-row .script-text { font-size: calc(16px * var(--talk-font-scale, 1)); }
+    .script-row .script-stage { font-size: calc(14px * var(--talk-font-scale, 1)); }
+    .display-settings-label {
+      margin: 0 0 10px;
+      font-size: 13px;
+      color: #475569;
+    }
+    .font-scale-options {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .font-scale-option {
+      padding: 10px 0;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #fff;
+      font-size: 14px;
+      font-weight: bold;
+      color: #334155;
+      cursor: pointer;
+    }
+    .font-scale-option.active {
+      border-color: var(--primary-color);
+      background: #eff6ff;
+      color: #1d4ed8;
+    }
+    .font-scale-preview {
+      margin: 14px 0 4px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: #f1f5f9;
+      font-size: calc(15px * var(--talk-font-scale, 1));
+      line-height: 1.4;
+    }
+
+    /* スマホの編集モード：各セリフの操作ボタンは「⋯ 操作」を押したときだけ表示 */
+    .talk-tools-toggle {
+      display: none;
+      margin-top: 6px;
+      border: none;
+      border-radius: 6px;
+      padding: 5px 10px;
+      background: #e2e8f0;
+      color: #334155;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    @media (max-width: 600px) {
+      body.edit-mode-active .talk-tools-toggle {
+        display: inline-block;
+      }
+      body.edit-mode-active .chat-bubble:not(.tools-open) .talk-edit-tools {
+        display: none;
+      }
+      body.edit-mode-active .chat-bubble.tools-open .talk-tools-toggle {
+        background: #cbd5e1;
+      }
+    }
+
+    /* 「⋯」メニューが下の表示モード欄より手前に出るようにする */
+    .editor-view > .nav-bar {
+      z-index: 30;
+    }
