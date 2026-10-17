@@ -315,19 +315,32 @@ html, body {
   border-radius: 4px;
   box-shadow: none;
 }
+/* 吹き出しとト書きを縦に並べる列。ト書きは話者側（左右）に寄せる */
+.viewer-message-column {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+.viewer-talk.right .viewer-message-column { align-items: flex-end; }
+.viewer-talk.scene .viewer-message-column { align-items: center; }
+/* ト書き：Editorの .stage-direction-display と同じ配色 */
 .viewer-stage-direction {
-  margin-top: 6px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  background: rgba(100, 116, 139, .18);
-  color: #475569;
+  width: fit-content;
+  max-width: min(100%, 34em);
+  margin-top: 5px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  background: rgba(191, 219, 254, 0.78);
+  color: #1e3a8a;
   font-size: 12px;
-  line-height: 1.5;
+  font-weight: 700;
+  line-height: 1.45;
   text-align: left;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  border: 1px solid rgba(100, 116, 139, .18);
 }
+.viewer-talk.scene .viewer-stage-direction { text-align: center; }
 .viewer-name {
   display: block;
   margin-bottom: 2px;

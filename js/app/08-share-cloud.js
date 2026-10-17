@@ -492,7 +492,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>${escapeHtml(payload.title || 'ScriptMaker Viewer')}</title>
 <style>
-*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f3f4f6;color:#172033}.app{position:relative;min-height:100dvh;overflow:hidden}.wallpaper{position:fixed;inset:0;background:#f3f4f6 center/cover no-repeat;transition:opacity .45s ease;z-index:0}.wallpaper.next{opacity:0}.header{position:sticky;top:0;z-index:3;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);padding:14px 16px;border-bottom:1px solid rgba(15,23,42,.08)}.label{font-size:12px;color:#64748b;margin:0 0 2px}.title{font-size:19px;margin:0;font-weight:800}.timeline{position:relative;z-index:1;height:calc(100dvh - 62px);overflow:auto;padding:18px 14px 42px}.talk{display:flex;gap:8px;margin:13px 0;align-items:flex-end}.talk.right{justify-content:flex-end}.talk.center{justify-content:center}.avatar{width:44px;height:44px;border-radius:50%;background:#cbd5e1 center/cover no-repeat;flex:0 0 auto;border:2px solid rgba(255,255,255,.85)}.name{font-size:12px;color:#64748b;margin:0 0 3px}.bubble{max-width:min(74vw,520px);padding:11px 14px;border-radius:16px;background:#fff;box-shadow:0 2px 10px rgba(15,23,42,.08);line-height:1.65;white-space:pre-wrap;word-break:break-word}.right .bubble{background:#dff3ff}.scene .bubble{background:rgba(229,231,235,.94);text-align:center;border-radius:4px;color:#374151;max-width:min(86vw,620px)}.stage{margin-top:6px;padding:7px 10px;border-radius:8px;background:rgba(100,116,139,.18);color:#475569;font-size:12px;line-height:1.5;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid rgba(100,116,139,.18)}.number{display:block;font-size:11px;color:#94a3b8;margin-bottom:2px}.password{position:fixed;inset:0;z-index:9;display:flex;align-items:center;justify-content:center;background:#f8fafc;padding:20px}.password.hidden{display:none}.password-box{width:min(420px,100%);background:#fff;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(15,23,42,.16)}.password-box input{width:100%;font-size:16px;padding:12px;border:1px solid #cbd5e1;border-radius:8px}.password-box button{margin-top:12px;width:100%;font-size:16px;font-weight:700;padding:12px;border:0;border-radius:8px;background:#2563eb;color:white}.error{color:#b91c1c;font-size:13px;min-height:18px}</style>
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f3f4f6;color:#172033}.app{position:relative;min-height:100dvh;overflow:hidden}.wallpaper{position:fixed;inset:0;background:#f3f4f6 center/cover no-repeat;transition:opacity .45s ease;z-index:0}.wallpaper.next{opacity:0}.header{position:sticky;top:0;z-index:3;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);padding:14px 16px;border-bottom:1px solid rgba(15,23,42,.08)}.label{font-size:12px;color:#64748b;margin:0 0 2px}.title{font-size:19px;margin:0;font-weight:800}.timeline{position:relative;z-index:1;height:calc(100dvh - 62px);overflow:auto;padding:18px 14px 42px}.talk{display:flex;gap:8px;margin:13px 0;align-items:flex-end}.talk.right{justify-content:flex-end}.talk.center{justify-content:center}.avatar{width:44px;height:44px;border-radius:50%;background:#cbd5e1 center/cover no-repeat;flex:0 0 auto;border:2px solid rgba(255,255,255,.85)}.name{font-size:12px;color:#64748b;margin:0 0 3px}.bubble{max-width:min(74vw,520px);padding:11px 14px;border-radius:16px;background:#fff;box-shadow:0 2px 10px rgba(15,23,42,.08);line-height:1.65;white-space:pre-wrap;word-break:break-word}.right .bubble{background:#dff3ff}.scene .bubble{background:rgba(229,231,235,.94);text-align:center;border-radius:4px;color:#374151;max-width:min(86vw,620px)}.col{display:flex;flex-direction:column;align-items:flex-start;min-width:0}.right .col{align-items:flex-end}.stage{width:fit-content;max-width:min(100%,34em);margin-top:5px;padding:6px 10px;border-radius:9px;background:rgba(191,219,254,.78);color:#1e3a8a;font-size:12px;font-weight:700;line-height:1.45;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere}.scene .stage{margin:6px auto 0;text-align:center}.number{display:block;font-size:11px;color:#94a3b8;margin-bottom:2px}.password{position:fixed;inset:0;z-index:9;display:flex;align-items:center;justify-content:center;background:#f8fafc;padding:20px}.password.hidden{display:none}.password-box{width:min(420px,100%);background:#fff;border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(15,23,42,.16)}.password-box input{width:100%;font-size:16px;padding:12px;border:1px solid #cbd5e1;border-radius:8px}.password-box button{margin-top:12px;width:100%;font-size:16px;font-weight:700;padding:12px;border:0;border-radius:8px;background:#2563eb;color:white}.error{color:#b91c1c;font-size:13px;min-height:18px}</style>
 </head>
 <body>
 <div class="app"><div id="wallpaperA" class="wallpaper"></div><div id="wallpaperB" class="wallpaper next"></div><header class="header"><p class="label">ScriptMaker Viewer</p><h1 id="title" class="title"></h1></header><main id="timeline" class="timeline"></main></div>
@@ -516,7 +516,7 @@ function wallpaperForTalk(talkId){return sceneForTalk(talkId)||project().wallpap
 function wallpaperKey(w){return w&&w.image?[w.image.slice(0,60),w.size||100,w.offsetX??50,w.offsetY??50].join("|"):"none"}
 function applyWallpaper(w){const key=wallpaperKey(w);if(key===currentWallpaperKey)return;const layers=[document.getElementById("wallpaperA"),document.getElementById("wallpaperB")];const next=layers[1-activeWallpaper];const current=layers[activeWallpaper];if(w&&w.image){next.style.backgroundImage="url("+w.image+")";next.style.backgroundSize=(w.size||100)===100?"cover":(w.size||100)+"%";next.style.backgroundPosition=(w.offsetX??50)+"% "+(w.offsetY??50)+"%"}else{next.style.backgroundImage=""}next.classList.remove("next");current.classList.add("next");activeWallpaper=1-activeWallpaper;currentWallpaperKey=key}
 function currentTalkId(){const items=[...document.querySelectorAll("[data-talk-id]")];const mid=innerHeight/2;let best=null;let dist=Infinity;for(const item of items){const r=item.getBoundingClientRect();const d=Math.abs((r.top+r.bottom)/2-mid);if(d<dist){dist=d;best=item}}return best?.dataset.talkId||""}
-function render(){const p=project();document.getElementById("title").textContent=p.title||SHARE_PAYLOAD.title||"台本";const talks=p.talks||[];document.getElementById("timeline").innerHTML=talks.map((talk,index)=>{const special=isSpecial(talk);const side=special?"center":(isRight(talk.charName)?"right":"left");const num=String(index+1).padStart(3,"0");const name=esc(talk.charName||"");const text=esc(talk.text||"");if(special)return '<section class="talk center scene" data-talk-id="'+esc(talk.id||"")+'"><div class="bubble"><span class="number">'+num+'</span>'+text+stageHtml(talk)+'</div></section>';return '<section class="talk '+side+'" data-talk-id="'+esc(talk.id||"")+'">'+(side==="right"?"":avatarHtml(talk.charName))+'<div><p class="name">'+name+'</p><div class="bubble"><span class="number">'+num+'</span>'+text+stageHtml(talk)+'</div></div>'+(side==="right"?avatarHtml(talk.charName):"")+'</section>'}).join("");applyWallpaper(wallpaperForTalk(talks[0]?.id));document.getElementById("timeline").addEventListener("scroll",()=>applyWallpaper(wallpaperForTalk(currentTalkId())),{passive:true})}
+function render(){const p=project();document.getElementById("title").textContent=p.title||SHARE_PAYLOAD.title||"台本";const talks=p.talks||[];document.getElementById("timeline").innerHTML=talks.map((talk,index)=>{const special=isSpecial(talk);const side=special?"center":(isRight(talk.charName)?"right":"left");const num=String(index+1).padStart(3,"0");const name=esc(talk.charName||"");const text=esc(talk.text||"");if(special)return '<section class="talk center scene" data-talk-id="'+esc(talk.id||"")+'"><div class="bubble"><span class="number">'+num+'</span>'+text+stageHtml(talk)+'</div></section>';return '<section class="talk '+side+'" data-talk-id="'+esc(talk.id||"")+'">'+(side==="right"?"":avatarHtml(talk.charName))+'<div class="col"><p class="name">'+name+'</p><div class="bubble"><span class="number">'+num+'</span>'+text+'</div>'+stageHtml(talk)+'</div>'+(side==="right"?avatarHtml(talk.charName):"")+'</section>'}).join("");applyWallpaper(wallpaperForTalk(talks[0]?.id));document.getElementById("timeline").addEventListener("scroll",()=>applyWallpaper(wallpaperForTalk(currentTalkId())),{passive:true})}
 async function decryptPayload(env,pw){const b=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));const m=await crypto.subtle.importKey("raw",new TextEncoder().encode(pw),"PBKDF2",false,["deriveKey"]);const k=await crypto.subtle.deriveKey({name:"PBKDF2",salt:b(env.salt),iterations:env.iter,hash:"SHA-256"},m,{name:"AES-GCM",length:256},false,["decrypt"]);const p=await crypto.subtle.decrypt({name:"AES-GCM",iv:b(env.iv)},k,b(env.ct));return JSON.parse(new TextDecoder().decode(p))}
 async function unlockEncrypted(){document.getElementById("passwordGate").classList.remove("hidden");document.getElementById("passwordButton").onclick=async()=>{const error=document.getElementById("passwordError");error.textContent="確認中...";try{SHARE_PAYLOAD=await decryptPayload(SHARE_PAYLOAD.encrypted,document.getElementById("passwordInput").value);error.textContent="";document.getElementById("passwordGate").classList.add("hidden");render()}catch(e){error.textContent="パスワードが違います"}}}
 async function unlock(){if(SHARE_PAYLOAD.encrypted){unlockEncrypted();return}const expected=SHARE_PAYLOAD.viewerPasswordHash||"";if(!expected){render();return}document.getElementById("passwordGate").classList.remove("hidden");document.getElementById("passwordButton").onclick=async()=>{const hash=await hashPasswordText(document.getElementById("passwordInput").value);if(hash===expected){document.getElementById("passwordGate").classList.add("hidden");render()}else{document.getElementById("passwordError").textContent="パスワードが違います"}}}
@@ -541,17 +541,51 @@ unlock();
       return pendingSharePayload;
     }
 
+    // 共有データの中身（セリフ・ト書き・キャラクター・壁紙など）の指紋。
+    // 保存のたびに変わる管理用の項目は除外し、「共有した時点から台本が変わったか」だけを判定する。
+    async function shareContentFingerprint(project) {
+      const copy = cloneProject(project);
+      Object.keys(copy).forEach(key => {
+        if (/^(share|cloud)/.test(key) || ['id', 'updatedAt', 'revision', 'updatedByDeviceId', 'folderId'].includes(key) || key.startsWith('__')) delete copy[key];
+      });
+      loadEditorScriptColorSettings();
+      const text = JSON.stringify(copy) + '|' + JSON.stringify(editorScriptColorSettings || {});
+      if (!window.crypto?.subtle) return 'len:' + text.length;
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+      return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    // 公開済みの共有データが、いまのEditorの内容より古いか（記録がない古い共有は「古い」とみなす）
+    async function isShareOutdated(project) {
+      if (!project?.shareId || !project.sharePublishedAt) return false;
+      if (!project.shareContentHash) return true;
+      return project.shareContentHash !== await shareContentFingerprint(project);
+    }
+
+    const SHARE_OUTDATED_MESSAGE = '⚠ Editorの内容（セリフ・ト書き・キャラクターなど）が、共有データより新しくなっています。「共有データを更新」を押すか、「Viewerで開く」を押すと自動で更新してから開きます（URLは変わりません）。';
+
+    // 「Viewerで開く」：共有データが古ければ、同じURLのまま最新内容を保存してから開く
     async function openSharedViewer() {
       ensureSharePayload();
-      if (!pendingSharePublished) {
-        await publishFirebaseShareUrl();
+      const project = state.projects[state.currentProjectId];
+      // 保存を待つ間にポップアップがブロックされないよう、先に空のタブを開いておく
+      const viewerWindow = window.open('', '_blank');
+      if (!pendingSharePublished || await isShareOutdated(project)) {
+        setShareStatus('最新の内容を共有データに保存してからViewerを開きます...', '');
+        const published = await publishFirebaseShareUrl();
+        if (!published) {
+          viewerWindow?.close();
+          return;
+        }
       }
       const url = currentShareUrl();
       if (!url) {
+        viewerWindow?.close();
         setShareStatus('Firebaseで共有URLを作成してからViewerを開いてください。', 'error');
         return;
       }
-      window.open(url, '_blank');
+      if (viewerWindow) viewerWindow.location.href = url;
+      else window.open(url, '_blank');
     }
 
     async function postShareToWorker(payload, workerUrl) {
@@ -596,9 +630,11 @@ unlock();
       if (output) output.value = isPublished ? buildViewerShareUrl(pendingSharePayload) : '';
       if (meta) meta.innerText = (pendingSharePayload.title || '台本') + ' / ' + pendingSharePayload.project.talks.length + '\u4ef6 / id: ' + pendingSharePayload.shareId;
       updateShareModalMode(isPublished);
-      setShareStatus(isPublished
-        ? '公開済みです。台本を変更した場合は「共有データを更新」を押してください。'
-        : '初回は「公開URLを作成」を押してください。Firestore保存が成功するまでURLは有効化されません。', '');
+      const outdated = isPublished && await isShareOutdated(project);
+      setShareStatus(outdated ? SHARE_OUTDATED_MESSAGE
+        : isPublished
+        ? '公開済みです。共有データは最新です。台本を変更した場合は「共有データを更新」を押してください。'
+        : '初回は「公開URLを作成」を押してください。Firestore保存が成功するまでURLは有効化されません。', outdated ? 'warning' : '');
       openModal('shareModal');
     }
 
@@ -685,6 +721,7 @@ unlock();
         project.shareId = shareId;
         project.shareCreatedAt = shareCreatedAt;
         project.sharePublishedAt = new Date().toISOString();
+        project.shareContentHash = await shareContentFingerprint(project);
         saveState();
         const url = buildViewerShareUrl(pendingSharePayload);
         if (output) {
@@ -700,6 +737,7 @@ unlock();
         setShareStatus((wasPublished
           ? '共有データを更新しました。このURLで最新版を見られます。'
           : '公開URLを作成しました。次に「公開URLをコピー」を押してください。') + encryptionNote, 'success');
+        return true;
       } catch (error) {
         console.error('Firebase share failed:', error);
         pendingSharePublished = previouslyPublished;
@@ -716,6 +754,7 @@ unlock();
           updateShareModalMode(false);
           setShareStatus('共有データの保存に失敗しました。Firestore Rulesを確認してから再度「公開URLを作成」を押してください。' + (error.message ? ' ' + error.message : ''), 'error');
         }
+        return false;
       }
     }
 

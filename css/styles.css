@@ -2691,3 +2691,6 @@
       content: " ← 開始";
       color: #4338ca;
     }
+
+    /* 共有データが古いときの注意表示 */
+    .share-status.is-warning { color: #b45309; font-weight: bold; }

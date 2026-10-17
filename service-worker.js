@@ -1,8 +1,8 @@
-const CACHE_NAME = 'script-assistant-pwa-v77';
+const CACHE_NAME = 'script-assistant-pwa-v78';
 const APP_SHELL = [
   './',
   './index.html',
-  './css/styles.css?v=64',
+  './css/styles.css?v=65',
   './js/firebase-config.js?v=30',
   './js/vendor/Sortable.min.js?v=1.15.0',
   './js/firebase-share.js?v=39',
@@ -14,7 +14,7 @@ const APP_SHELL = [
   './js/app/05-wallpaper.js?v=78',
   './js/app/06-characters-display.js?v=77',
   './js/app/07-timeline-editing.js?v=77',
-  './js/app/08-share-cloud.js?v=77',
+  './js/app/08-share-cloud.js?v=78',
   './js/app/09-ui-startup.js?v=77',
   './manifest.json',
   './assets/icons/icon-192.png',

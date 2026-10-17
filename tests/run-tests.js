@@ -116,6 +116,32 @@ test('範囲指定の壁紙：最初と最後に選んだトークの間がす�
   assertEqual(getSelectedTalkRange(), null);
 });
 
+test('共有データにト書き（stageDirection）がそのまま入る', async () => {
+  const project = sampleProject(3);
+  project.talks[0].stageDirection = '残念';
+  project.talks[2].note = '旧形式のト書き';
+  state = { projects: { p: project }, currentProjectId: 'p' };
+  const payload = await buildViewerSharePayload(project, '', 'share_test');
+  const talks = JSON.parse(JSON.stringify(payload)).project.talks;
+  assertEqual(talks.map(t => [t.id, t.charName, t.text]), project.talks.map(t => [t.id, t.charName, t.text]));
+  assertEqual(talks[0].stageDirection, '残念');
+  assertEqual(talks[2].note, '旧形式のト書き');
+});
+
+test('ト書きを変えると「共有データが古い」と判定され、記録後は最新になる', async () => {
+  const project = sampleProject(2);
+  state = { projects: { p: project }, currentProjectId: 'p' };
+  project.shareId = 'share_x';
+  project.sharePublishedAt = new Date().toISOString();
+  assert(await isShareOutdated(project), '記録がない古い共有は「古い」とみなす');
+  project.shareContentHash = await shareContentFingerprint(project);
+  assert(!(await isShareOutdated(project)), '記録直後は最新');
+  project.updatedAt = 'changed'; project.revision = 99;
+  assert(!(await isShareOutdated(project)), '管理用の項目だけの変更では古くならない');
+  project.talks[1].stageDirection = '笑いながら';
+  assert(await isShareOutdated(project), 'ト書きの変更で古くなる');
+});
+
 test('番号表示とHTMLエスケープ', () => {
   assertEqual(formatTalkNumber(0), '001');
   assertEqual(formatTalkNumber(41), '042');

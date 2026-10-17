@@ -655,7 +655,12 @@ function renderTimeline() {
     const row = document.createElement('article');
     row.className = 'viewer-talk ' + (isSpecial ? 'scene' : isRight ? 'right' : 'left');
     row.dataset.talkId = talk.id || String(index);
-    row.innerHTML = '<span class="viewer-number">' + formatNo(index) + '</span>' + avatarHtml(viewerProject, talk) + '<div class="viewer-bubble"><span class="viewer-name">' + escapeHtml(talk.charName || '') + '</span>' + escapeHtml(talk.text || '') + viewerStageDirectionHtml(talk) + '</div>';
+    // ト書き（talk.stageDirection）は吹き出しの中ではなく、吹き出しの直下に兄弟要素として置く（Editorと同じ見た目）
+    row.innerHTML = '<span class="viewer-number">' + formatNo(index) + '</span>' + avatarHtml(viewerProject, talk) +
+      '<div class="viewer-message-column">' +
+        '<div class="viewer-bubble"><span class="viewer-name">' + escapeHtml(talk.charName || '') + '</span>' + escapeHtml(talk.text || '') + '</div>' +
+        viewerStageDirectionHtml(talk) +
+      '</div>';
     timeline.appendChild(row);
   });
 }
