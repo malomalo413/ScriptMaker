@@ -1345,6 +1345,13 @@
     #editorBackupModal {
       z-index: 3200;
     }
+    #appConfirmModal {
+      z-index: 3300;
+    }
+    .app-confirm-message {
+      white-space: pre-wrap;
+      line-height: 1.6;
+    }
     .modal-content {
       background: white;
       padding: 20px;

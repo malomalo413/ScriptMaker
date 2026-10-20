@@ -515,6 +515,27 @@
       document.getElementById(id).classList.remove('hidden');
       document.body.classList.add('modal-open');
     }
+    // ブラウザ標準の confirm() の代わりに使うアプリ内の確認画面。確認ダイアログが出ない環境でも操作できる
+    function confirmInApp(message, okLabel = 'OK') {
+      const modal = document.getElementById('appConfirmModal');
+      if (!modal) return Promise.resolve(confirm(message));
+      document.getElementById('appConfirmMessage').textContent = message;
+      const okButton = document.getElementById('appConfirmOkButton');
+      const cancelButton = document.getElementById('appConfirmCancelButton');
+      okButton.textContent = okLabel;
+      openModal('appConfirmModal');
+      return new Promise(resolve => {
+        const finish = result => {
+          okButton.onclick = null;
+          cancelButton.onclick = null;
+          closeModal('appConfirmModal');
+          resolve(result);
+        };
+        okButton.onclick = () => finish(true);
+        cancelButton.onclick = () => finish(false);
+      });
+    }
+
     function closeModal(id) {
       document.getElementById(id).classList.add('hidden');
       if (!document.querySelector('.custom-modal:not(.hidden)')) document.body.classList.remove('modal-open');

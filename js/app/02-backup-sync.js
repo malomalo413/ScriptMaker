@@ -732,7 +732,7 @@
         const summary = summarizeBackupPayload(payload);
         const hasLocal = localEditorHasExistingData();
         const message = 'バックアップが見つかりました\n\nプロジェクト数: ' + summary.projects + '\u4ef6\nフォルダ数: ' + summary.folders + '\u4ef6\n最終更新: ' + (summary.updatedAt ? new Date(summary.updatedAt).toLocaleString('ja-JP') : '不明') + '\nデータ容量: ' + Math.ceil(summary.bytes / 1024) + 'KB\n\n' + (hasLocal ? 'この端末にも台本データがあります。OKで両方を残して読み込みます。' : 'この端末へ読み込みますか？');
-        if (!confirm(message)) return;
+        if (!(await confirmInApp(message, '読み込む'))) return;
         importBackupPayloadKeepingLocal(payload);
         try {
           await registerEditorBackupDevice(config, syncSpaceId, codeHash);

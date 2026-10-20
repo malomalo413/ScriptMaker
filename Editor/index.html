@@ -14,15 +14,15 @@
   <link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="../assets/icons/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="../assets/icons/icon-512.png">
-  <link rel="stylesheet" href="../css/styles.css?v=66">
+  <link rel="stylesheet" href="../css/styles.css?v=67">
   <script src="../js/vendor/Sortable.min.js?v=1.15.0" defer></script>
   <script src="../js/firebase-config.js?v=30" defer></script>
   <script src="../js/firebase-share.js?v=39" defer></script>
   <script src="../js/share-crypto.js?v=1" defer></script>
   <script src="../js/app/01-core-auth.js?v=79" defer></script>
-  <script src="../js/app/02-backup-sync.js?v=79" defer></script>
+  <script src="../js/app/02-backup-sync.js?v=80" defer></script>
   <script src="../js/app/03-data-import.js?v=80" defer></script>
-  <script src="../js/app/04-storage-projects.js?v=77" defer></script>
+  <script src="../js/app/04-storage-projects.js?v=80" defer></script>
   <script src="../js/app/05-wallpaper.js?v=78" defer></script>
   <script src="../js/app/06-characters-display.js?v=77" defer></script>
   <script src="../js/app/07-timeline-editing.js?v=77" defer></script>
@@ -420,6 +420,16 @@
         <button class="btn-modal-cancel" type="button" onclick="regenerateEditorBackupCode()">コードを再発行</button>
         <button class="btn-modal-cancel" type="button" onclick="unlinkEditorBackupDevice()">この端末の連携を解除</button>
         <button class="btn-modal-cancel" type="button" onclick="closeModal('editorBackupModal')">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="appConfirmModal" class="custom-modal hidden">
+    <div class="modal-content">
+      <p id="appConfirmMessage" class="app-confirm-message"></p>
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" id="appConfirmCancelButton" type="button">キャンセル</button>
+        <button class="btn-modal-confirm" id="appConfirmOkButton" type="button">OK</button>
       </div>
     </div>
   </div>
