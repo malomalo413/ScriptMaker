@@ -147,6 +147,7 @@ let state = {
       document.getElementById('editorAuthGate')?.classList.add('hidden');
       initEditorBackupSync();
       setTimeout(initCloudSyncFromUrl, 80);
+      setTimeout(initScriptImportFromUrl, 80);
     }
 
     function setEditorAuthGateMode(mode) {
@@ -282,6 +283,7 @@ let state = {
       document.getElementById('editorAuthGate')?.classList.add('hidden');
       setEditorSyncStatus('オフライン', 'offline', 'この端末のデータだけで続けます。');
       setTimeout(initCloudSyncFromUrl, 80);
+      setTimeout(initScriptImportFromUrl, 80);
     }
 
     function initEditorAuthControls() {

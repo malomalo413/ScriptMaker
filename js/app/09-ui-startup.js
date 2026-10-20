@@ -547,6 +547,7 @@ if ('serviceWorker' in navigator) {
       syncEditorOrientationForDisplayMode(false);
       initCloudSyncFromUrl();
       editorAppReady = true;
+      initScriptImportFromUrl();
       if (editorBackupMeta().syncSpaceId) loadEditorBackupCloudState();
     };
 

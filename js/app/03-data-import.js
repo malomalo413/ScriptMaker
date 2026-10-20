@@ -325,3 +325,137 @@
       closeModal('scriptImportModal');
       scrollToBottom();
     }
+
+    // ===== リンクからの台本取り込み =====
+    // Editor/#import=<base64url(UTF-8の台本テキスト)>&title=<プロジェクト名> を開くと、確認後に新規プロジェクトとして取り込む。
+    // テキストの形式は「台本読み込み」と同じ（1行＝話者名：セリフ（ト書き））。
+    const SCRIPT_URL_IMPORT_MAX_HASH_LENGTH = 60000;
+    const SCRIPT_URL_IMPORT_DEFAULT_TITLE = '取り込み台本';
+    let pendingUrlScriptImport = null;
+    let urlScriptImportHandled = false;
+
+    function decodeBase64UrlText(value) {
+      const base64 = String(value || '').replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
+      if (!/^[A-Za-z0-9+/]*$/.test(base64)) throw new Error('invalid base64url');
+      const binary = atob(base64 + '='.repeat((4 - base64.length % 4) % 4));
+      const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
+      return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    }
+
+    function readScriptImportFromUrl(href) {
+      const hash = String(href || '').split('#')[1] || '';
+      const params = {};
+      hash.split('&').forEach(part => {
+        const index = part.indexOf('=');
+        if (index > 0) params[part.slice(0, index)] = part.slice(index + 1);
+      });
+      if (params.import === undefined) return null;
+      if (hash.length > SCRIPT_URL_IMPORT_MAX_HASH_LENGTH) {
+        return { error: '取り込みリンクが長すぎます（' + hash.length + '文字 / 上限' + SCRIPT_URL_IMPORT_MAX_HASH_LENGTH + '文字）。台本を分けて取り込んでください。' };
+      }
+      let text = '';
+      let title = '';
+      try {
+        text = decodeBase64UrlText(params.import);
+        title = params.title ? decodeURIComponent(params.title) : '';
+      } catch (error) {
+        return { error: 'リンクの台本データを読み取れませんでした。リンクが途中で切れていないか確認してください。' };
+      }
+      const parsed = [];
+      const rejected = [];
+      text.split(/\r?\n/).forEach((line, index) => {
+        const result = parseScriptImportLine(line, index + 1);
+        if (!result) return;
+        if (result.rejected) rejected.push(result);
+        else parsed.push(result);
+      });
+      if (!parsed.length) return { error: 'リンクに取り込める台本の行がありませんでした。' };
+      return { title: title.trim().slice(0, 80) || SCRIPT_URL_IMPORT_DEFAULT_TITLE, parsed, rejected };
+    }
+
+    function clearScriptImportFromUrl() {
+      if (!/[#&]import=/.test(location.hash)) return;
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+
+    function initScriptImportFromUrl() {
+      if (urlScriptImportHandled || !editorAppReady || document.body.classList.contains('auth-locked')) return;
+      if (!document.getElementById('urlScriptImportModal')) return;
+      const result = readScriptImportFromUrl(location.href);
+      if (!result) return;
+      urlScriptImportHandled = true;
+      pendingUrlScriptImport = result.error ? null : result;
+      renderUrlScriptImportModal(result);
+      openModal('urlScriptImportModal');
+    }
+
+    function renderUrlScriptImportModal(result) {
+      const message = document.getElementById('urlScriptImportMessage');
+      const preview = document.getElementById('urlScriptImportPreview');
+      const confirmButton = document.getElementById('urlScriptImportConfirmButton');
+      if (confirmButton) confirmButton.classList.toggle('hidden', !!result.error);
+      if (result.error) {
+        if (message) message.textContent = result.error;
+        if (preview) preview.innerHTML = '';
+        return;
+      }
+      if (message) message.textContent = '『' + result.title + '』を新規作成して' + result.parsed.length + '行を取り込みます。';
+      const counts = new Map();
+      result.parsed.forEach(row => counts.set(row.charName, (counts.get(row.charName) || 0) + 1));
+      const speakers = Array.from(counts, ([name, count]) => escapeHtml(name) + '（' + count + '）').join(' / ');
+      const rowsHtml = result.parsed.map((row, index) =>
+        '<div class="script-import-row compact">' +
+          '<strong>' + (index + 1) + '</strong>' +
+          '<strong>' + escapeHtml(row.charName) + '</strong>' +
+          '<span>' + escapeHtml(row.text) + '</span>' +
+        '</div>'
+      ).join('');
+      const rejectedHtml = result.rejected.map(row =>
+        '<div class="script-import-row warning">' +
+          '<strong>' + row.lineNumber + '</strong>' +
+          '<span>' + escapeHtml(row.raw || '(空行)') + '<br>' + escapeHtml(row.reason) + '（取り込みません）</span>' +
+        '</div>'
+      ).join('');
+      if (preview) {
+        preview.innerHTML =
+          '<div class="script-import-summary">話者: ' + speakers +
+          (result.rejected.length ? '<br>解析できなかった行: ' + result.rejected.length + '件' : '') + '</div>' +
+          rowsHtml + rejectedHtml;
+      }
+    }
+
+    function cancelUrlScriptImport() {
+      pendingUrlScriptImport = null;
+      clearScriptImportFromUrl();
+      closeModal('urlScriptImportModal');
+    }
+
+    function confirmUrlScriptImport() {
+      const result = pendingUrlScriptImport;
+      if (!result) { cancelUrlScriptImport(); return; }
+      pendingUrlScriptImport = null;
+      clearScriptImportFromUrl();
+      closeModal('urlScriptImportModal');
+      const id = 'p_' + Date.now();
+      state.projects[id] = {
+        id,
+        title: result.title,
+        characters: [],
+        talks: [],
+        folderId: state.currentFolderId || UNCLASSIFIED_FOLDER_ID,
+        revision: 1,
+        updatedAt: new Date().toISOString(),
+        updatedByDeviceId: getEditorBackupDevice().id
+      };
+      openProject(id);
+      // 取り込み自体は「台本読み込み」と同じ処理（キャラクター追加・ト書き分離・保存・同期）を使う
+      pendingScriptImport = { parsed: result.parsed, rejected: result.rejected };
+      addParsedScriptToProject();
+      renderProjectList();
+    }
+
+    window.addEventListener('hashchange', () => {
+      if (!/[#&]import=/.test(location.hash)) return;
+      urlScriptImportHandled = false;
+      initScriptImportFromUrl();
+    });

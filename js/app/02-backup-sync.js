@@ -749,6 +749,7 @@
         document.body.classList.remove('auth-locked');
         renderProjectList();
         setEditorSyncStatus('同期済み ' + formatSyncTime(new Date().toISOString()), 'synced');
+        setTimeout(initScriptImportFromUrl, 80);
       } catch (error) { console.error('Backup import failed:', error); setEditorBackupStatus(error.message || 'データを読み込めませんでした。', 'error'); }
     }
 

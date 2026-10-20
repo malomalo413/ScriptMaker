@@ -148,6 +148,29 @@ test('番号表示とHTMLエスケープ', () => {
   assertEqual(escapeHtml('<b>"A&B"</b>'), '&lt;b&gt;&quot;A&amp;B&quot;&lt;/b&gt;');
 });
 
+// ---- リンクからの台本取り込み ----
+function encodeBase64UrlText(text) {
+  const bytes = new TextEncoder().encode(text);
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+test('取り込みリンクから題名と行を読み取れる', () => {
+  const text = 'さくら：おはよう！（手を振る）\n\n情景描写：朝の教室。\nこれは解析できない行';
+  const url = 'https://example.com/Editor/#import=' + encodeBase64UrlText(text) + '&title=' + encodeURIComponent('8話');
+  const result = readScriptImportFromUrl(url);
+  assertEqual(result.title, '8話');
+  assertEqual(result.parsed.map(row => row.charName), ['さくら', '情景描写']);
+  assertEqual(result.parsed[0].text, 'おはよう！（手を振る）');
+  assertEqual(result.rejected.length, 1);
+});
+
+test('取り込みリンクがない・壊れている・長すぎる場合', () => {
+  assertEqual(readScriptImportFromUrl('https://example.com/Editor/'), null);
+  assert(readScriptImportFromUrl('https://example.com/Editor/#import=%%%').error, '壊れたデータでエラーにならない');
+  assert(readScriptImportFromUrl('https://example.com/Editor/#import=' + 'A'.repeat(70000)).error.includes('長すぎ'), '長さ上限でエラーにならない');
+  assertEqual(readScriptImportFromUrl('https://example.com/Editor/#import=' + encodeBase64UrlText('さくら：やあ')).title, '取り込み台本');
+});
+
 // ---- 実行 ----
 window.addEventListener('load', async () => {
   const list = document.getElementById('results');

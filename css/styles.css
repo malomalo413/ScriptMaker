@@ -813,6 +813,9 @@
       font-weight: 900;
       white-space: nowrap;
     }
+    .script-import-row.compact {
+      grid-template-columns: 34px minmax(60px, 120px) 1fr;
+    }
     .script-import-row.warning {
       grid-template-columns: 44px 1fr;
       border-color: #fecaca;
@@ -825,7 +828,8 @@
         max-height: 90dvh;
         padding: 14px;
       }
-      .script-import-row {
+      .script-import-row,
+      .script-import-row.compact {
         grid-template-columns: 34px 1fr;
       }
       .script-import-row .script-import-badge {
