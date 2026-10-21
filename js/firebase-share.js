@@ -267,6 +267,23 @@
     return loadChunkedPayload(FIREBASE_EDITOR_PROJECT_COLLECTION, syncSpaceId, config);
   }
 
+  // 壁紙画像は端末ごとの IndexedDB にあるので、同期スペースの states/wallpaper_<画像ID> に別保存して他の端末へ届ける
+  function editorSyncImageDocId(imageId) {
+    const id = String(imageId || "");
+    if (!/^[A-Za-z0-9_-]{1,200}$/.test(id)) throw new Error("Invalid image id.");
+    return "wallpaper_" + id;
+  }
+
+  async function saveEditorSyncImage(syncSpaceId, imageId, payload, config) {
+    if (!payload || !payload.dataUrl) throw new Error("Missing image data.");
+    const docId = editorSyncImageDocId(imageId);
+    return saveChunkedPayload(editorSyncStateCollection(syncSpaceId), docId, { ...payload, id: docId, title: "wallpaper", schemaVersion: 1 }, config);
+  }
+
+  async function loadEditorSyncImage(syncSpaceId, imageId, config) {
+    return loadChunkedPayload(editorSyncStateCollection(syncSpaceId), editorSyncImageDocId(imageId), config);
+  }
+
   async function saveEditorRecoveryCode(codeHash, syncSpaceId, meta, config) {
     if (!codeHash || !syncSpaceId) throw new Error("Missing recovery code data.");
     const db = await dbForConfig(config);
@@ -368,6 +385,8 @@
     loadEditorProject,
     saveEditorBackupState,
     loadEditorBackupState,
+    saveEditorSyncImage,
+    loadEditorSyncImage,
     saveEditorRecoveryCode,
     disableEditorRecoveryCode,
     resolveEditorRecoveryCode,

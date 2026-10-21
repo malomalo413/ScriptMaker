@@ -171,6 +171,40 @@ test('取り込みリンクがない・壊れている・長すぎる場合', ()
   assertEqual(readScriptImportFromUrl('https://example.com/Editor/#import=' + encodeBase64UrlText('さくら：やあ')).title, '取り込み台本');
 });
 
+// ---- 壁紙画像の同期 ----
+test('手元の壁紙画像は同期スペースへ送り、手元にない画像は受け取って保存する', async () => {
+  const saved = {};
+  const localId = 'img_test_local_' + Date.now();
+  const remoteId = 'img_test_remote_' + Date.now();
+  const remoteBlob = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/webp' });
+  await putStoredImage({ id: localId, blob: new Blob([new Uint8Array([9, 8])], { type: 'image/webp' }), type: 'image/webp' });
+  const originals = { state, editorBackupMeta, editorBackupFirebaseConfig, helper: window.ScriptMakerFirebaseShare, uploaded: localStorage.getItem(SCRIPTMAKER_WALLPAPER_SYNC_UPLOADED_KEY) };
+  try {
+    state = { projects: { p1: { wallpaper: { imageId: localId }, sceneWallpaperSettings: { enabled: true, scenes: [{ id: 's1', imageId: remoteId, imageUrl: 'blob:other-device', talkIds: [] }] } } } };
+    editorBackupMeta = () => ({ syncSpaceId: 'space_test' });
+    editorBackupFirebaseConfig = async () => ({});
+    window.ScriptMakerFirebaseShare = {
+      saveEditorSyncImage: async (space, id, payload) => { saved[id] = payload; },
+      loadEditorSyncImage: async (space, id) => id === remoteId ? { dataUrl: await blobToDataUrl(remoteBlob), type: 'image/webp' } : null
+    };
+    await syncWallpaperImagesNow();
+    assert(saved[localId]?.dataUrl?.startsWith('data:image/webp'), '手元の画像が送られていない');
+    assert(!saved[remoteId], '手元にない画像を送ろうとした');
+    const record = await getStoredImage(remoteId);
+    assertEqual(record?.blob?.size, 3, '受け取った画像が保存されていない');
+    assert(!state.projects.p1.sceneWallpaperSettings.scenes[0].imageUrl, '別端末の blob: URL が残っている');
+    await syncWallpaperImagesNow();
+    assertEqual(Object.keys(saved).length, 1, '送信済みの画像をもう一度送った');
+  } finally {
+    state = originals.state;
+    editorBackupMeta = originals.editorBackupMeta;
+    editorBackupFirebaseConfig = originals.editorBackupFirebaseConfig;
+    window.ScriptMakerFirebaseShare = originals.helper;
+    if (originals.uploaded == null) localStorage.removeItem(SCRIPTMAKER_WALLPAPER_SYNC_UPLOADED_KEY);
+    else localStorage.setItem(SCRIPTMAKER_WALLPAPER_SYNC_UPLOADED_KEY, originals.uploaded);
+  }
+});
+
 // ---- 実行 ----
 window.addEventListener('load', async () => {
   const list = document.getElementById('results');

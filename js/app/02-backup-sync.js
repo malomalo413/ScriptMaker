@@ -460,6 +460,7 @@
         saveEditorBackupMeta({ lastSyncAt: editorLastSyncAt, pending: false, lastCloudUpdatedAt: payload.updatedAt });
         setEditorSyncStatus('同期済み ' + formatSyncTime(editorLastSyncAt), 'synced');
         updateEditorBackupModal();
+        scheduleWallpaperImageSync();
         return true;
       } catch (error) {
         console.error('Editor backup sync failed:', error);
@@ -495,6 +496,7 @@
           setEditorSyncStatus('同期済み ' + formatSyncTime(editorLastSyncAt), 'synced');
           updateEditorBackupModal();
           if (merge.localNewer) scheduleEditorBackupSync(SCRIPTMAKER_EDITOR_SYNC_DEBOUNCE_MS);
+          scheduleWallpaperImageSync();
           return true;
         }
         if (localEditorHasExistingData()) {
@@ -509,6 +511,95 @@
       } finally {
         editorCloudPullInFlight = false;
       }
+    }
+
+    // 壁紙・シーン壁紙の画像は IndexedDB（端末ごと）にあり、同期データには画像IDしか入らない。
+    // そこで画像本体を同期スペースに別保存し、手元にない画像は取ってくる。
+    const SCRIPTMAKER_WALLPAPER_SYNC_UPLOADED_KEY = 'scriptmaker_wallpaper_sync_uploaded_v1';
+    let wallpaperImageSyncTimer = null;
+    let wallpaperImageSyncInFlight = false;
+    let wallpaperImageSyncAgain = false;
+
+    function collectSyncedWallpaperObjects() {
+      const list = [];
+      Object.values(state.projects || {}).forEach(project => {
+        if (project?.wallpaper?.imageId) list.push(project.wallpaper);
+        (project?.sceneWallpaperSettings?.scenes || []).forEach(scene => { if (scene?.imageId) list.push(scene); });
+      });
+      return list;
+    }
+
+    function wallpaperSyncUploadedIds(syncSpaceId) {
+      try {
+        const data = JSON.parse(localStorage.getItem(SCRIPTMAKER_WALLPAPER_SYNC_UPLOADED_KEY) || '{}') || {};
+        return new Set(Array.isArray(data[syncSpaceId]) ? data[syncSpaceId] : []);
+      } catch (_) { return new Set(); }
+    }
+
+    function saveWallpaperSyncUploadedIds(syncSpaceId, ids) {
+      try {
+        const data = JSON.parse(localStorage.getItem(SCRIPTMAKER_WALLPAPER_SYNC_UPLOADED_KEY) || '{}') || {};
+        data[syncSpaceId] = [...ids];
+        localStorage.setItem(SCRIPTMAKER_WALLPAPER_SYNC_UPLOADED_KEY, JSON.stringify(data));
+      } catch (_) {}
+    }
+
+    function scheduleWallpaperImageSync(delay = 1200) {
+      if (!editorBackupMeta().syncSpaceId) return;
+      clearTimeout(wallpaperImageSyncTimer);
+      wallpaperImageSyncTimer = setTimeout(syncWallpaperImagesNow, delay);
+    }
+
+    async function syncWallpaperImagesNow() {
+      const meta = editorBackupMeta();
+      const helper = window.ScriptMakerFirebaseShare;
+      if (!meta.syncSpaceId || !helper?.saveEditorSyncImage || !navigator.onLine) return;
+      if (wallpaperImageSyncInFlight) { wallpaperImageSyncAgain = true; return; }
+      wallpaperImageSyncInFlight = true;
+      let downloaded = false;
+      try {
+        const config = await editorBackupFirebaseConfig();
+        const uploaded = wallpaperSyncUploadedIds(meta.syncSpaceId);
+        const cachedUrls = new Set(wallpaperObjectUrlCache.values());
+        const wallpapers = collectSyncedWallpaperObjects();
+        // 別の端末の blob: URL が同期で入ってきても、この端末では開けないので使わない
+        wallpapers.forEach(wallpaper => {
+          if (String(wallpaper.imageUrl || '').startsWith('blob:') && !cachedUrls.has(wallpaper.imageUrl)) delete wallpaper.imageUrl;
+        });
+        const ids = [...new Set(wallpapers.map(wallpaper => wallpaper.imageId))];
+        for (const id of ids) {
+          try {
+            const record = await getStoredImage(id);
+            if (record?.blob) {
+              if (uploaded.has(id)) continue;
+              const dataUrl = await blobToDataUrl(record.blob);
+              await helper.saveEditorSyncImage(meta.syncSpaceId, id, { dataUrl, type: record.type || record.blob.type || '', updatedByDeviceId: getEditorBackupDevice().id }, config);
+              uploaded.add(id);
+              continue;
+            }
+            const remote = await helper.loadEditorSyncImage(meta.syncSpaceId, id, config);
+            if (!remote?.dataUrl) continue;
+            const blob = dataUrlToBlob(remote.dataUrl);
+            if (!blob.size) continue;
+            await putStoredImage({ id, blob, type: remote.type || blob.type || 'image/webp', sourceName: 'synced-wallpaper', createdAt: new Date().toISOString() });
+            uploaded.add(id);
+            downloaded = true;
+          } catch (error) {
+            console.warn('Wallpaper image sync failed:', id, error);
+          }
+        }
+        saveWallpaperSyncUploadedIds(meta.syncSpaceId, uploaded);
+      } catch (error) {
+        console.warn('Wallpaper image sync skipped:', error);
+      } finally {
+        wallpaperImageSyncInFlight = false;
+      }
+      if (downloaded) {
+        applyProjectWallpaper(true);
+        const modal = document.getElementById('wallpaperModal');
+        if (modal && !modal.classList.contains('hidden')) resolveSceneWallpaperThumbs();
+      }
+      if (wallpaperImageSyncAgain) { wallpaperImageSyncAgain = false; scheduleWallpaperImageSync(500); }
     }
 
     function stopEditorBackupRealtimeListener() {
@@ -750,6 +841,7 @@
         renderProjectList();
         setEditorSyncStatus('同期済み ' + formatSyncTime(new Date().toISOString()), 'synced');
         setTimeout(initScriptImportFromUrl, 80);
+        scheduleWallpaperImageSync();
       } catch (error) { console.error('Backup import failed:', error); setEditorBackupStatus(error.message || 'データを読み込めませんでした。', 'error'); }
     }
 
