@@ -97,6 +97,7 @@
       ensureTalkIds(snapshot);
       normalizeSceneWallpaperSettings(snapshot);
       await hydrateProjectWallpapersForShare(snapshot);
+      await hydrateAvatarsForExport(snapshot);
       return {
         shareId: shareId || project.shareId || generateShareId(),
         title: snapshot.title || '台本',
@@ -296,8 +297,10 @@
       openModal('cloudSyncModal');
     }
 
-    function buildEditorCloudPayload(project, projectId) {
+    async function buildEditorCloudPayload(project, projectId) {
       const snapshot = cloneProject(project);
+      // 受け取る端末には画像がないので、アイコンは data: URL に戻して送る
+      await hydrateAvatarsForExport(snapshot);
       ensureTalkIds(snapshot);
       normalizeSceneWallpaperSettings(snapshot);
       const now = new Date().toISOString();
@@ -371,7 +374,7 @@
           }
         }
         setCloudSyncStatus('Firestoreへクラウド保存中...', '');
-        const payload = buildEditorCloudPayload(project, cloudId);
+        const payload = await buildEditorCloudPayload(project, cloudId);
         const config = editorCloudFirebaseConfig();
         await helper.saveEditorProject(payload, config);
         project.cloudProjectId = payload.id;

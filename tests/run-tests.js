@@ -205,6 +205,78 @@ test('手元の壁紙画像は同期スペースへ送り、手元にない画�
   }
 });
 
+// ---- キャラのアイコン画像 ----
+function sampleAvatarDataUrl(color) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64; canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = color; ctx.fillRect(0, 0, 64, 64);
+  return canvas.toDataURL('image/jpeg', 0.9);
+}
+
+async function withAvatarTestState(fn) {
+  const originals = { state, library: localStorage.getItem(SCRIPTMAKER_CHARACTER_LIBRARY_KEY), scheduleEditorBackupSync };
+  scheduleEditorBackupSync = () => {};
+  try {
+    localStorage.setItem(SCRIPTMAKER_CHARACTER_LIBRARY_KEY, '[]');
+    await fn();
+  } finally {
+    state = originals.state;
+    scheduleEditorBackupSync = originals.scheduleEditorBackupSync;
+    if (originals.library == null) localStorage.removeItem(SCRIPTMAKER_CHARACTER_LIBRARY_KEY);
+    else localStorage.setItem(SCRIPTMAKER_CHARACTER_LIBRARY_KEY, originals.library);
+  }
+}
+
+test('アイコン画像は1回だけ保存され、プロジェクトには画像IDだけが残る', async () => withAvatarTestState(async () => {
+  const sakura = sampleAvatarDataUrl('#f472b6');
+  const taku = sampleAvatarDataUrl('#38bdf8');
+  const p1 = sampleProject(2); const p2 = sampleProject(2);
+  p1.characters = [{ name: 'さくら', avatar: sakura }, { name: 'たく', avatar: taku }];
+  p2.characters = [{ name: 'さくら', avatar: sakura }, { name: 'さくら・たく', avatar: sakura }];
+  p2.talks[0].characterSnapshot = { name: '退場キャラ', avatar: taku };
+  state = { projects: { p1, p2 }, currentProjectId: 'p1' };
+  localStorage.setItem(SCRIPTMAKER_CHARACTER_LIBRARY_KEY, JSON.stringify([{ name: 'さくら', avatar: sakura }]));
+
+  assert(await migrateAvatarsToIndexedDB(), '移し替えが行われていない');
+  const ids = [p1.characters[0], p2.characters[0], p2.characters[1]].map(c => c.avatarImageId);
+  assert(ids[0] && ids.every(id => id === ids[0]), '同じ画像が同じIDにまとまっていない');
+  assert(p1.characters[1].avatarImageId && p1.characters[1].avatarImageId !== ids[0], '別の画像が別のIDになっていない');
+  assertEqual(p2.talks[0].characterSnapshot.avatarImageId, p1.characters[1].avatarImageId, 'セリフに残したキャラも移し替える');
+  assert(stateCharacterRecords().every(c => !c.avatar), 'data: URL が残っている');
+  assert(!JSON.stringify(cloneStateForLocalStorage()).includes('data:image'), '保存データに画像が入っている');
+  const library = JSON.parse(localStorage.getItem(SCRIPTMAKER_CHARACTER_LIBRARY_KEY));
+  assertEqual(library[0].avatarImageId, ids[0], 'ライブラリも画像IDになる');
+  assert(!JSON.stringify(library).includes('data:image'), 'ライブラリに画像が入っている');
+  assert(avatarDisplayUrl(p1.characters[0]).startsWith('blob:'), '表示用URLが用意されていない');
+  assert(!(await migrateAvatarsToIndexedDB()), '2回目は何も変わらないはず');
+}));
+
+test('共有・書き出しでは画像IDのアイコンを data: URL に戻す', async () => withAvatarTestState(async () => {
+  const sakura = sampleAvatarDataUrl('#a3e635');
+  const project = sampleProject(1);
+  project.characters = [{ name: 'さくら', avatar: sakura, isProtagonist: true }];
+  state = { projects: { p: project }, currentProjectId: 'p' };
+  await migrateAvatarsToIndexedDB();
+  assert(project.characters[0].avatarImageId);
+  const payload = await buildViewerSharePayload(project, '', 'share_avatar_test');
+  assertEqual(payload.project.characters[0].avatar, sakura, '共有データのアイコンが元の画像と違う');
+  assert(!payload.project.characters[0].avatarImageId, '共有データに画像IDが残っている');
+  assert(project.characters[0].avatarImageId && !project.characters[0].avatar, '元のプロジェクトを書き換えてしまった');
+  const cloud = await buildEditorCloudPayload(project, 'cloud_test');
+  assertEqual(cloud.data.characters[0].avatar, sakura, 'クラウド保存のアイコンが元の画像と違う');
+}));
+
+test('キャラ編集・ライブラリ・セリフのスナップショットで画像IDが引き継がれる', () => {
+  const character = { name: 'たく', avatar: '', avatarImageId: 'avatar_abc', isRound: true, zoom: 120 };
+  assertEqual(characterSnapshot(character).avatarImageId, 'avatar_abc');
+  assertEqual(cloneLibraryCharacterForProject(character, false).avatarImageId, 'avatar_abc');
+  assertEqual(normalizeLibraryCharacter(character).avatarImageId, 'avatar_abc');
+  assert(characterLibrarySignature(character).endsWith('avatar_abc'), 'ライブラリの同一判定に画像IDを使う');
+  const replaced = setCharacterAvatarFields({ ...character }, 'data:image/jpeg;base64,AAAA', '');
+  assert(replaced.avatar.startsWith('data:') && !replaced.avatarImageId, '新しい画像を選んだら画像IDは外す');
+});
+
 // ---- 実行 ----
 window.addEventListener('load', async () => {
   const list = document.getElementById('results');

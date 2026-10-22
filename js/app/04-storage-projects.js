@@ -214,6 +214,7 @@
         if (project.wallpaper) sanitizeWallpaperForLocalStorage(project.wallpaper);
         (project.sceneWallpaperSettings?.scenes || []).forEach(scene => sanitizeWallpaperForLocalStorage(scene));
       });
+      stateCharacterRecords(copy).forEach(sanitizeCharacterForStorage);
       return copy;
     }
 
@@ -222,6 +223,166 @@
       delete wallpaper.imageUrl;
       if (wallpaper.imageId && String(wallpaper.image || '').startsWith('blob:')) wallpaper.image = '';
       if (wallpaper.imageId && String(wallpaper.image || '').startsWith('data:')) wallpaper.image = '';
+    }
+
+    // ===== キャラのアイコン画像 =====
+    // 以前はプロジェクトごとのキャラに data: URL（1人約100KB）を丸ごと持たせていたため、
+    // localStorage の上限（約5MB）を超えて保存できなくなった。
+    // 画像は IndexedDB に1回だけ保存し、キャラには画像ID（avatarImageId）だけを持たせる。
+    // IDは画像の中身のハッシュなので、同じ画像はどのプロジェクト・どの端末でも同じIDになる。
+
+    // 画面表示用のURL（移し替え前の data: URL があればそれ、なければ保存済み画像の blob: URL）
+    function avatarDisplayUrl(character) {
+      if (!character) return '';
+      if (character.avatar) return character.avatar;
+      return character.avatarImageId ? (wallpaperObjectUrlCache.get(character.avatarImageId) || '') : '';
+    }
+
+    function hasAvatar(character) {
+      return !!(character && (character.avatar || character.avatarImageId));
+    }
+
+    // アイコンの指定をキャラにコピーする（画像IDがあれば data: URL は持たない）
+    function setCharacterAvatarFields(target, avatar, avatarImageId) {
+      if (!target) return target;
+      if (avatarImageId && !avatar) {
+        target.avatar = '';
+        target.avatarImageId = avatarImageId;
+      } else {
+        target.avatar = avatar || '';
+        delete target.avatarImageId;
+      }
+      return target;
+    }
+
+    async function avatarImageIdForDataUrl(dataUrl) {
+      if (!window.crypto?.subtle) return '';
+      const blob = dataUrlToBlob(dataUrl);
+      if (!blob.size) return '';
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()));
+      const id = 'avatar_' + Array.from(digest.slice(0, 20)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+      const existing = await getStoredImage(id);
+      if (!existing?.blob) {
+        await putStoredImage({ id, blob, type: blob.type || 'image/jpeg', sourceName: 'avatar', createdAt: new Date().toISOString() });
+      }
+      storedBlobToObjectUrl(id, existing?.blob || blob);
+      return id;
+    }
+
+    // プロジェクトのキャラと、キャラ削除時に各セリフへ残したスナップショット
+    function stateCharacterRecords(sourceState = state) {
+      const list = [];
+      Object.values(sourceState?.projects || {}).forEach(project => {
+        (project?.characters || []).forEach(character => { if (character && typeof character === 'object') list.push(character); });
+        (project?.talks || []).forEach(talk => { if (talk?.characterSnapshot && typeof talk.characterSnapshot === 'object') list.push(talk.characterSnapshot); });
+      });
+      return list;
+    }
+
+    async function migrateAvatarRecords(records, idByDataUrl) {
+      let changed = false;
+      for (const character of records) {
+        const avatar = String(character.avatar || '');
+        if (!avatar.startsWith('data:')) continue;
+        if (!idByDataUrl.has(avatar)) idByDataUrl.set(avatar, await avatarImageIdForDataUrl(avatar));
+        const id = idByDataUrl.get(avatar);
+        if (!id) continue;
+        setCharacterAvatarFields(character, '', id);
+        changed = true;
+      }
+      return changed;
+    }
+
+    // data: URL のアイコンを保存済み画像に移す。戻り値：state が変わったか
+    async function migrateAvatarsToIndexedDB() {
+      const idByDataUrl = new Map();
+      const stateChanged = await migrateAvatarRecords(stateCharacterRecords(), idByDataUrl);
+      const library = loadCharacterLibrary();
+      if (await migrateAvatarRecords(library, idByDataUrl)) saveCharacterLibrary(library);
+      return stateChanged;
+    }
+
+    function collectAvatarImageIds() {
+      const ids = new Set();
+      stateCharacterRecords().concat(loadCharacterLibrary()).forEach(character => { if (character.avatarImageId) ids.add(character.avatarImageId); });
+      return [...ids];
+    }
+
+    // 保存済み画像から表示用URLを用意する。戻り値：新しく用意できた数
+    async function preloadAvatarUrls(ids = collectAvatarImageIds()) {
+      let loaded = 0;
+      for (const id of ids) {
+        if (wallpaperObjectUrlCache.has(id)) continue;
+        const record = await getStoredImage(id).catch(() => null);
+        if (!record?.blob) continue;
+        storedBlobToObjectUrl(id, record.blob);
+        loaded++;
+      }
+      return loaded;
+    }
+
+    function refreshAvatarViews() {
+      const editorView = document.getElementById('editorView');
+      if (!editorView) return;
+      if (editorView.classList.contains('hidden')) {
+        renderProjectList();
+        return;
+      }
+      const anchor = captureTimelineViewport();
+      renderCharSelector();
+      renderTimeline();
+      restoreTimelineViewport(anchor);
+      if (!document.getElementById('charLibraryModal')?.classList.contains('hidden')) renderCharacterLibrary();
+    }
+
+    // 保存のたびに呼ぶ：新しく設定された data: URL のアイコンを移し替え、表示用URLを用意する
+    let avatarStorageTimer = null;
+    let avatarStorageRunning = false;
+    function scheduleAvatarStorageCheck(delay = 600) {
+      clearTimeout(avatarStorageTimer);
+      avatarStorageTimer = setTimeout(runAvatarStorageCheck, delay);
+    }
+
+    async function runAvatarStorageCheck() {
+      if (avatarStorageRunning) { scheduleAvatarStorageCheck(400); return; }
+      avatarStorageRunning = true;
+      try {
+        const changed = await migrateAvatarsToIndexedDB();
+        const loaded = await preloadAvatarUrls();
+        if (changed) saveState();
+        if (changed || loaded) refreshAvatarViews();
+        // 移し替えた画像は同期スペースへ送り、この端末にない画像は取ってくる
+        const missing = collectAvatarImageIds().some(id => !wallpaperObjectUrlCache.has(id));
+        if ((changed || missing) && typeof scheduleWallpaperImageSync === 'function') scheduleWallpaperImageSync();
+      } catch (error) {
+        console.warn('Avatar storage check failed:', error);
+      } finally {
+        avatarStorageRunning = false;
+      }
+    }
+
+    // 共有・書き出し用：画像IDのアイコンを data: URL に戻す（受け取る側の端末には画像がないため）
+    async function hydrateAvatarsForExport(project) {
+      const records = [];
+      (project?.characters || []).forEach(character => records.push(character));
+      (project?.talks || []).forEach(talk => { if (talk?.characterSnapshot) records.push(talk.characterSnapshot); });
+      const cache = new Map();
+      for (const character of records) {
+        if (!character?.avatarImageId) continue;
+        const id = character.avatarImageId;
+        if (!cache.has(id)) {
+          const record = await getStoredImage(id).catch(() => null);
+          cache.set(id, record?.blob ? await blobToDataUrl(record.blob) : '');
+        }
+        if (!cache.get(id)) continue;
+        character.avatar = cache.get(id);
+        delete character.avatarImageId;
+      }
+      return project;
+    }
+
+    function sanitizeCharacterForStorage(character) {
+      if (character?.avatarImageId && character.avatar) character.avatar = '';
     }
 
     function normalizeSceneWallpaperSettings(project) {
@@ -405,6 +566,9 @@
         setSaveStatus('error');
         alert("画像データが大きすぎるため保存できませんでした。別の画像を選ぶか、画像サイズを小さくしてください。");
         return false;
+      } finally {
+        // 新しく設定されたアイコン画像（data: URL）を画像保存に移す。保存に失敗したときも、移した後に保存し直す
+        scheduleAvatarStorageCheck();
       }
     }
 

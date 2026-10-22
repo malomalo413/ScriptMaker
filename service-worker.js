@@ -1,4 +1,4 @@
-const CACHE_NAME = 'script-assistant-pwa-v81';
+const CACHE_NAME = 'script-assistant-pwa-v82';
 const APP_SHELL = [
   './',
   './index.html',
@@ -7,15 +7,15 @@ const APP_SHELL = [
   './js/vendor/Sortable.min.js?v=1.15.0',
   './js/firebase-share.js?v=40',
   './js/share-crypto.js?v=1',
-  './js/app/01-core-auth.js?v=79',
-  './js/app/02-backup-sync.js?v=81',
-  './js/app/03-data-import.js?v=80',
-  './js/app/04-storage-projects.js?v=80',
+  './js/app/01-core-auth.js?v=82',
+  './js/app/02-backup-sync.js?v=82',
+  './js/app/03-data-import.js?v=82',
+  './js/app/04-storage-projects.js?v=82',
   './js/app/05-wallpaper.js?v=78',
-  './js/app/06-characters-display.js?v=77',
+  './js/app/06-characters-display.js?v=82',
   './js/app/07-timeline-editing.js?v=77',
-  './js/app/08-share-cloud.js?v=78',
-  './js/app/09-ui-startup.js?v=79',
+  './js/app/08-share-cloud.js?v=82',
+  './js/app/09-ui-startup.js?v=82',
   './manifest.json',
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',

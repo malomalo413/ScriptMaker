@@ -197,6 +197,8 @@
         updateMetaStats();
         applyProjectWallpaper(true);
       }
+      // 古い端末から届いた data: URL のアイコンを移し替え、保存済み画像を表示する
+      scheduleAvatarStorageCheck(200);
     }
 
     function applyEditorBackupPayload(payload) {
@@ -566,7 +568,8 @@
         wallpapers.forEach(wallpaper => {
           if (String(wallpaper.imageUrl || '').startsWith('blob:') && !cachedUrls.has(wallpaper.imageUrl)) delete wallpaper.imageUrl;
         });
-        const ids = [...new Set(wallpapers.map(wallpaper => wallpaper.imageId))];
+        // キャラのアイコン（avatarImageId）も同じしくみで端末間に届ける
+        const ids = [...new Set(wallpapers.map(wallpaper => wallpaper.imageId).concat(collectAvatarImageIds()))];
         for (const id of ids) {
           try {
             const record = await getStoredImage(id);
@@ -598,6 +601,7 @@
         applyProjectWallpaper(true);
         const modal = document.getElementById('wallpaperModal');
         if (modal && !modal.classList.contains('hidden')) resolveSceneWallpaperThumbs();
+        if (await preloadAvatarUrls()) refreshAvatarViews();
       }
       if (wallpaperImageSyncAgain) { wallpaperImageSyncAgain = false; scheduleWallpaperImageSync(500); }
     }

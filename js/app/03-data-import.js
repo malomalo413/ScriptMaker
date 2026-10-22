@@ -113,22 +113,21 @@
     }
 
     function characterLibrarySignature(character) {
-      return String(character?.name || '').trim() + '\u0000' + String(character?.avatar || '');
+      return String(character?.name || '').trim() + '\u0000' + String(character?.avatarImageId || character?.avatar || '');
     }
 
     function normalizeLibraryCharacter(character) {
       const name = String(character?.name || '').trim();
       if (!name || name === '情景描写' || name === 'システム') return null;
-      return {
+      return setCharacterAvatarFields({
         name,
-        avatar: character.avatar || '',
         isRound: character.isRound !== false,
         zoom: Number(character.zoom) || 100,
         offsetX: character.offsetX ?? 50,
         offsetY: character.offsetY ?? 50,
         createdAt: character.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
-      };
+      }, character.avatar, character.avatarImageId);
     }
 
     function loadCharacterLibrary() {
@@ -145,7 +144,14 @@
     }
 
     function saveCharacterLibrary(list) {
-      localStorage.setItem(SCRIPTMAKER_CHARACTER_LIBRARY_KEY, JSON.stringify(list || []));
+      (list || []).forEach(sanitizeCharacterForStorage);
+      try {
+        localStorage.setItem(SCRIPTMAKER_CHARACTER_LIBRARY_KEY, JSON.stringify(list || []));
+      } catch (error) {
+        // 容量オーバーでも起動処理を止めない（アイコンを画像保存へ移した後に保存し直される）
+        console.warn('Character library save failed:', error);
+        return;
+      }
       scheduleEditorBackupSync();
     }
 
@@ -189,15 +195,14 @@
     }
 
     function cloneLibraryCharacterForProject(character, isProtagonist) {
-      return {
+      return setCharacterAvatarFields({
         name: character.name,
-        avatar: character.avatar || '',
         isRound: character.isRound !== false,
         zoom: Number(character.zoom) || 100,
         offsetX: character.offsetX ?? 50,
         offsetY: character.offsetY ?? 50,
         isProtagonist: !!isProtagonist
-      };
+      }, character.avatar, character.avatarImageId);
     }
 
     function findLibraryCharacterByName(name) {

@@ -36,6 +36,7 @@ let state = {
     let charModalMode = 'project-add';
     let editingLibraryCharacterSignature = null;
     let selectedAvatarBase64 = "";
+    let selectedAvatarImageId = ""; // アイコンが保存済み画像のときの画像ID（selectedAvatarBase64 は空）
     let avatarOffsetX = 50;
     let avatarOffsetY = 50;
     let editingTalkIndex = null;

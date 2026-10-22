@@ -344,7 +344,7 @@
       if (!touchArea || !slider) return;
 
       touchArea.addEventListener('pointerdown', function(e) {
-        if (!selectedAvatarBase64) return;
+        if (!selectedAvatarBase64 && !selectedAvatarImageId) return;
         e.preventDefault();
         touchArea.setPointerCapture?.(e.pointerId);
         activePointers.push(e);
@@ -359,7 +359,7 @@
       });
 
       touchArea.addEventListener('pointermove', function(e) {
-        if (!selectedAvatarBase64) return;
+        if (!selectedAvatarBase64 && !selectedAvatarImageId) return;
         const idx = activePointers.findIndex(p => p.pointerId === e.pointerId);
         if (idx > -1) {
           activePointers[idx] = e;
@@ -532,6 +532,8 @@ if ('serviceWorker' in navigator) {
         renderTimeline();
       }).catch(error => console.warn('Wallpaper migration failed:', error));
       syncCharacterLibraryFromProjects();
+      // キャラのアイコン（data: URL）を画像保存へ移し、保存容量を減らす
+      runAvatarStorageCheck();
 
       renderProjectList();
       initSortableDragAndTrash();

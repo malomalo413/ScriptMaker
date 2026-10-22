@@ -51,12 +51,13 @@
         btn.dataset.characterName = char.name;
 
         let avatarHtml = '';
-        if (char.avatar) {
+        const avatarUrl = avatarDisplayUrl(char);
+        if (avatarUrl) {
           const radius = char.isRound !== false ? '50%' : '8px';
           const zoom = char.zoom || 100;
           const posX = char.offsetX ?? 50;
           const posY = char.offsetY ?? 50;
-          avatarHtml = `<div class="avatar" style="border-radius:${radius}; background-image:url(${char.avatar}); background-size:${zoom}%; background-position:${posX}% ${posY}%;"></div>`;
+          avatarHtml = `<div class="avatar" style="border-radius:${radius}; background-image:url(${avatarUrl}); background-size:${zoom}%; background-position:${posX}% ${posY}%;"></div>`;
         } else {
           avatarHtml = `<div class="avatar-dummy">${char.name.substring(0,2)}</div>`;
         }
@@ -352,6 +353,7 @@
       editingCharName = null;
       editingLibraryCharacterSignature = null;
       selectedAvatarBase64 = "";
+      selectedAvatarImageId = "";
       avatarOffsetX = 50;
       avatarOffsetY = 50;
       document.getElementById('charModalTitle').innerText = "キャラクター追加";
@@ -386,13 +388,14 @@
       document.getElementById('newCharName').disabled = false;
       
       selectedAvatarBase64 = char.avatar || "";
+      selectedAvatarImageId = char.avatar ? "" : (char.avatarImageId || "");
       document.getElementById('charRoundCheck').checked = char.isRound !== false;
       document.getElementById('charProtagonistCheck').checked = !!char.isProtagonist;
       document.getElementById('charZoomSlider').value = char.zoom || 100;
 
       const preview = document.getElementById('avatarPreview');
-      if (char.avatar) {
-        preview.style.backgroundImage = `url(${char.avatar})`;
+      if (avatarDisplayUrl(char)) {
+        preview.style.backgroundImage = `url(${avatarDisplayUrl(char)})`;
       } else {
         preview.style.backgroundImage = "";
       }
@@ -417,6 +420,7 @@
       document.getElementById('newCharAvatar').value = "";
       document.getElementById('newCharName').disabled = false;
       selectedAvatarBase64 = character.avatar || '';
+      selectedAvatarImageId = character.avatar ? '' : (character.avatarImageId || '');
       document.getElementById('charRoundCheck').checked = character.isRound !== false;
       document.getElementById('charProtagonistCheck').checked = false;
       document.getElementById('charZoomSlider').value = character.zoom || 100;
@@ -424,7 +428,7 @@
       avatarOffsetY = character.offsetY ?? 50;
 
       const preview = document.getElementById('avatarPreview');
-      preview.style.backgroundImage = character.avatar ? `url(${character.avatar})` : '';
+      preview.style.backgroundImage = avatarDisplayUrl(character) ? `url(${avatarDisplayUrl(character)})` : '';
       updatePreviewStyle();
       closeModal('charLibraryModal');
       openModal('charModal');
@@ -435,6 +439,7 @@
       if (!file) return;
       compressImageFile(file, 512, 0.86, function(dataUrl) {
         selectedAvatarBase64 = dataUrl;
+        selectedAvatarImageId = '';
         avatarOffsetX = 50;
         avatarOffsetY = 50;
         document.getElementById('avatarPreview').style.backgroundImage = `url(${selectedAvatarBase64})`;
@@ -483,6 +488,7 @@
         const updated = normalizeLibraryCharacter({
           name,
           avatar: selectedAvatarBase64,
+          avatarImageId: selectedAvatarImageId,
           isRound,
           zoom,
           offsetX: avatarOffsetX,
@@ -511,7 +517,7 @@
         }
         pushUndoSnapshot();
         if (isProtagonist) project.characters.forEach(c => c.isProtagonist = false);
-        const newCharacter = { name: name, avatar: selectedAvatarBase64, isRound: isRound, zoom: zoom, offsetX: avatarOffsetX, offsetY: avatarOffsetY, isProtagonist: isProtagonist };
+        const newCharacter = setCharacterAvatarFields({ name: name, isRound: isRound, zoom: zoom, offsetX: avatarOffsetX, offsetY: avatarOffsetY, isProtagonist: isProtagonist }, selectedAvatarBase64, selectedAvatarImageId);
         project.characters.push(newCharacter);
         registerCharacterInLibrary(newCharacter);
         currentCharacter = name;
@@ -530,22 +536,21 @@
             if (t.charName === editingCharName) {
               t.charName = name;
               if (t.characterSnapshot?.name === editingCharName) {
-                t.characterSnapshot = {
+                t.characterSnapshot = setCharacterAvatarFields({
                   ...t.characterSnapshot,
                   name,
-                  avatar: selectedAvatarBase64,
                   isRound,
                   zoom,
                   offsetX: avatarOffsetX,
                   offsetY: avatarOffsetY,
                   isProtagonist
-                };
+                }, selectedAvatarBase64, selectedAvatarImageId);
               }
             }
           });
 
           char.name = name;
-          char.avatar = selectedAvatarBase64;
+          setCharacterAvatarFields(char, selectedAvatarBase64, selectedAvatarImageId);
           char.isRound = isRound;
           char.isProtagonist = isProtagonist;
           char.zoom = zoom;
@@ -580,15 +585,14 @@
 
     function characterSnapshot(character) {
       if (!character) return null;
-      return {
+      return setCharacterAvatarFields({
         name: character.name || '',
-        avatar: character.avatar || '',
         isRound: character.isRound !== false,
         zoom: Number(character.zoom) || 100,
         offsetX: character.offsetX ?? 50,
         offsetY: character.offsetY ?? 50,
         isProtagonist: !!character.isProtagonist
-      };
+      }, character.avatar, character.avatarImageId);
     }
 
     function talkCharacterInfo(project, talk) {
@@ -602,12 +606,13 @@
     }
 
     function avatarHtmlForCharacterInfo(info, fallbackName) {
-      if (info && info.avatar) {
+      const avatarUrl = avatarDisplayUrl(info);
+      if (avatarUrl) {
         const radius = info.isRound !== false ? '50%' : '8px';
         const zoom = info.zoom || 100;
         const posX = info.offsetX ?? 50;
         const posY = info.offsetY ?? 50;
-        return `<div class="avatar" style="border-radius:${radius}; background-image:url(${info.avatar}); background-size:${zoom}%; background-position:${posX}% ${posY}%;"></div>`;
+        return `<div class="avatar" style="border-radius:${radius}; background-image:url(${avatarUrl}); background-size:${zoom}%; background-position:${posX}% ${posY}%;"></div>`;
       }
       const short = fallbackName ? fallbackName.substring(0, 2) : "??";
       return `<div class="avatar-dummy">${escapeHtml(short)}</div>`;
@@ -681,12 +686,13 @@
       const info = project.characters.find(character => character.name === name) ||
         project.talks.find(talk => talk.charName === name && talk.characterSnapshot)?.characterSnapshot ||
         { name };
-      if (info && info.avatar) {
+      const avatarUrl = avatarDisplayUrl(info);
+      if (avatarUrl) {
         const radius = info.isRound !== false ? '50%' : '8px';
         const zoom = info.zoom || 100;
         const posX = info.offsetX ?? 50;
         const posY = info.offsetY ?? 50;
-        return '<span class="script-color-avatar" style="border-radius:' + radius + ';background-image:url(' + info.avatar + ');background-size:' + zoom + '%;background-position:' + posX + '% ' + posY + '%"></span>';
+        return '<span class="script-color-avatar" style="border-radius:' + radius + ';background-image:url(' + avatarUrl + ');background-size:' + zoom + '%;background-position:' + posX + '% ' + posY + '%"></span>';
       }
       return '<span class="script-color-avatar script-color-avatar-dummy">' + escapeHtml((name || '?').slice(0, 2)) + '</span>';
     }
@@ -779,11 +785,12 @@
     }
 
     function libraryAvatarHtml(character) {
-      if (character.avatar) {
+      const avatarUrl = avatarDisplayUrl(character);
+      if (avatarUrl) {
         const size = Number(character.zoom) || 100;
         const posX = character.offsetX ?? 50;
         const posY = character.offsetY ?? 50;
-        return '<div class="character-library-avatar" style="background-image:url(' + character.avatar + ');background-size:' + size + '%;background-position:' + posX + '% ' + posY + '%;"></div>';
+        return '<div class="character-library-avatar" style="background-image:url(' + avatarUrl + ');background-size:' + size + '%;background-position:' + posX + '% ' + posY + '%;"></div>';
       }
       return '<div class="character-library-avatar">' + escapeHtml((character.name || '?').slice(0, 2)) + '</div>';
     }
