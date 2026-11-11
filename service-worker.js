@@ -1,4 +1,4 @@
-const CACHE_NAME = 'script-assistant-pwa-v83';
+const CACHE_NAME = 'script-assistant-pwa-v84';
 const APP_SHELL = [
   './',
   './index.html',
@@ -8,9 +8,9 @@ const APP_SHELL = [
   './js/firebase-share.js?v=40',
   './js/share-crypto.js?v=1',
   './js/app/01-core-auth.js?v=82',
-  './js/app/02-backup-sync.js?v=83',
+  './js/app/02-backup-sync.js?v=84',
   './js/app/03-data-import.js?v=82',
-  './js/app/04-storage-projects.js?v=83',
+  './js/app/04-storage-projects.js?v=84',
   './js/app/05-wallpaper.js?v=78',
   './js/app/06-characters-display.js?v=82',
   './js/app/07-timeline-editing.js?v=77',

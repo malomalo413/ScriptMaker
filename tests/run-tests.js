@@ -321,6 +321,73 @@ test('一覧からフォルダ移動・名前変更したプロジェクトは�
   }
 });
 
+async function withSyncTestState(fn) {
+  const originals = { state, saveState, renderProjectList, renderEditorAfterCloudApply, saved: localStorage.getItem('script_assistant_data_v21') };
+  try {
+    saveState = () => true;
+    renderProjectList = () => {};
+    renderEditorAfterCloudApply = () => {};
+    window.confirm = () => true;
+    await fn();
+  } finally {
+    state = originals.state; saveState = originals.saveState; renderProjectList = originals.renderProjectList;
+    renderEditorAfterCloudApply = originals.renderEditorAfterCloudApply;
+    if (originals.saved == null) localStorage.removeItem('script_assistant_data_v21');
+    else localStorage.setItem('script_assistant_data_v21', originals.saved);
+  }
+}
+
+function syncTestBase(extra = {}) {
+  const old = '2026-11-01T00:00:00.000Z';
+  return {
+    projects: {
+      p5: { ...sampleProject(1), id: 'p5', title: '5話', folderId: UNCLASSIFIED_FOLDER_ID, updatedAt: old, revision: 2 },
+      p6: { ...sampleProject(1), id: 'p6', title: '6話', folderId: 'fMain', updatedAt: old, revision: 2 }
+    },
+    folders: { [UNCLASSIFIED_FOLDER_ID]: { id: UNCLASSIFIED_FOLDER_ID, name: '未分類' }, fMain: { id: 'fMain', name: '本編' }, fHold: { id: 'fHold', name: '保留' } },
+    currentProjectId: 'p5', currentFolderId: UNCLASSIFIED_FOLDER_ID,
+    editorUpdatedAt: old, editorRevision: 10, deletedProjects: {}, ...extra
+  };
+}
+
+test('フォルダの名前変更と削除が、もう一方の端末にも届く', () => withSyncTestState(() => {
+  const pc = syncTestBase();
+  state = pc;
+  const originalPrompt = window.prompt;
+  window.prompt = () => 'メイン';
+  try { renameFolder({ stopPropagation() {} }, 'fMain'); } finally { window.prompt = originalPrompt; }
+  deleteFolder({ stopPropagation() {} }, 'fHold');
+  state = syncTestBase();
+  mergeEditorBackupPayload({ data: { state: JSON.parse(JSON.stringify(pc)) } });
+  assertEqual(state.folders.fMain.name, 'メイン', 'フォルダ名の変更が届いていない');
+  assert(!state.folders.fHold, '削除したフォルダが残っている');
+  // 逆向き：古い端末のフォルダが、削除済みのフォルダを復活させない
+  state = pc;
+  mergeEditorBackupPayload({ data: { state: syncTestBase() } });
+  assert(!state.folders.fHold, '古い端末から削除済みフォルダが復活した');
+  assertEqual(state.folders.fMain.name, 'メイン', '古い端末の名前で上書きされた');
+}));
+
+test('同じ更新時刻のまま分類が食い違ったプロジェクトは、両方の端末で同じ側にそろう', () => withSyncTestState(() => {
+  // PC：5話は未分類・6話は本編。スマホ：5話は本編・6話は保留（時刻・版は同じ）
+  const pc = syncTestBase();
+  const phone = syncTestBase();
+  phone.projects.p5.folderId = 'fMain';
+  phone.projects.p6.folderId = 'fHold';
+  state = JSON.parse(JSON.stringify(pc));
+  const pcResult = mergeEditorBackupPayload({ data: { state: JSON.parse(JSON.stringify(phone)) } });
+  const pcAfter = JSON.parse(JSON.stringify(state));
+  state = JSON.parse(JSON.stringify(phone));
+  const phoneResult = mergeEditorBackupPayload({ data: { state: JSON.parse(JSON.stringify(pc)) } });
+  assertEqual(pcAfter.projects.p5.folderId, 'fMain', '未分類より分類済みを優先する');
+  assertEqual(pcAfter.projects.p5.folderId, state.projects.p5.folderId, '5話が端末ごとに違う');
+  assertEqual(pcAfter.projects.p6.folderId, state.projects.p6.folderId, '6話が端末ごとに違う');
+  assert(pcResult.applied && pcResult.localNewer && phoneResult.localNewer, 'そろえた結果を相手に送る合図が出ていない');
+  // そろった後は何も変わらない（同期が行ったり来たりしない）
+  const again = mergeEditorBackupPayload({ data: { state: pcAfter } });
+  assert(!again.applied && !again.localNewer, 'そろった後も変化ありと判定された');
+}));
+
 // ---- 実行 ----
 window.addEventListener('load', async () => {
   const list = document.getElementById('results');

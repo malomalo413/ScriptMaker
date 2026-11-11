@@ -171,6 +171,72 @@
       return 0;
     }
 
+    // 更新時刻と版が同じ2つのプロジェクトで、フォルダ・題名が違うときにどちらを採るか。
+    // どの端末でも同じ答えになるので、食い違いは1回の同期でそろう。
+    // フォルダは「分類してある方」を優先（未分類は何もしていない状態のため）。
+    function resolveProjectTie(localProject, remoteProject) {
+      const localFolder = localProject?.folderId || UNCLASSIFIED_FOLDER_ID;
+      const remoteFolder = remoteProject?.folderId || UNCLASSIFIED_FOLDER_ID;
+      if (localFolder !== remoteFolder) {
+        if (localFolder === UNCLASSIFIED_FOLDER_ID) return 'remote';
+        if (remoteFolder === UNCLASSIFIED_FOLDER_ID) return 'local';
+        return remoteFolder > localFolder ? 'remote' : 'local';
+      }
+      const localTitle = String(localProject?.title || '');
+      const remoteTitle = String(remoteProject?.title || '');
+      if (localTitle !== remoteTitle) return remoteTitle > localTitle ? 'remote' : 'local';
+      return 'same';
+    }
+
+    function folderRecordKey(folder) {
+      return JSON.stringify([folder?.name || '', folder?.updatedAt || '']);
+    }
+
+    function mergeFolderRecords(localState, remoteState) {
+      const localFolders = localState.folders || {};
+      const remoteFolders = remoteState.folders || {};
+      const deletedFolders = { ...(localState.deletedFolders || {}) };
+      Object.entries(remoteState.deletedFolders || {}).forEach(([id, tombstone]) => {
+        deletedFolders[id] = newerDeletedProject(deletedFolders[id], tombstone);
+      });
+      const folders = {};
+      new Set([...Object.keys(localFolders), ...Object.keys(remoteFolders)]).forEach(id => {
+        const local = localFolders[id];
+        const remote = remoteFolders[id];
+        let chosen = local || remote;
+        if (local && remote) {
+          const comparison = compareSyncRecords(remote, local);
+          if (comparison > 0) chosen = remote;
+          else if (comparison === 0 && folderRecordKey(remote) > folderRecordKey(local)) chosen = remote;
+        }
+        const tombstone = deletedFolders[id];
+        if (id !== UNCLASSIFIED_FOLDER_ID && tombstone && syncRecordTime(tombstone) >= syncRecordTime(chosen)) return;
+        folders[id] = chosen;
+      });
+      if (!folders[UNCLASSIFIED_FOLDER_ID]) folders[UNCLASSIFIED_FOLDER_ID] = localFolders[UNCLASSIFIED_FOLDER_ID] || { id: UNCLASSIFIED_FOLDER_ID, name: '未分類' };
+      const sameAs = (a, b) => {
+        const keys = Object.keys(a);
+        return keys.length === Object.keys(b).length && keys.every(id => b[id] && folderRecordKey(a[id]) === folderRecordKey(b[id]));
+      };
+      return {
+        folders,
+        deletedFolders,
+        remoteChanged: !sameAs(folders, localFolders),
+        localChanged: !sameAs(folders, remoteFolders)
+      };
+    }
+
+    function recordFolderDeletion(folderId) {
+      if (!state.deletedFolders || typeof state.deletedFolders !== 'object') state.deletedFolders = {};
+      state.deletedFolders[folderId] = { id: folderId, deletedAt: new Date().toISOString(), deletedByDeviceId: getEditorBackupDevice().id };
+    }
+
+    function touchFolderSyncMetadata(folder) {
+      if (!folder || typeof folder !== 'object') return;
+      folder.updatedAt = new Date().toISOString();
+      folder.revision = (Number(folder.revision) || 0) + 1;
+    }
+
     function newerDeletedProject(a, b) {
       if (!a) return b || null;
       if (!b) return a;
@@ -321,12 +387,19 @@
 
       const merged = JSON.parse(JSON.stringify(localState));
       merged.projects = { ...(localState.projects || {}) };
-      merged.folders = { ...(remote.folders || {}), ...(localState.folders || {}) };
       merged.deletedProjects = { ...(localState.deletedProjects || {}) };
 
       let applied = false;
       let localNewer = false;
       let remoteNewer = false;
+
+      // フォルダは1つずつ新しい方を採用し、削除（deletedFolders）も相手に伝える。
+      // 以前は手元のフォルダが常に優先だったため、他端末での名前変更・削除が届かなかった。
+      const folderMerge = mergeFolderRecords(localState, remote);
+      merged.folders = folderMerge.folders;
+      merged.deletedFolders = folderMerge.deletedFolders;
+      if (folderMerge.remoteChanged) { applied = true; remoteNewer = true; }
+      if (folderMerge.localChanged) localNewer = true;
 
       Object.entries(remote.deletedProjects || {}).forEach(([id, tombstone]) => {
         const current = merged.deletedProjects[id];
@@ -350,6 +423,22 @@
           remoteNewer = true;
         } else if (comparison < 0) {
           localNewer = true;
+        } else {
+          // 更新時刻も版も同じなのに分類・題名だけ違う＝過去の不具合で食い違ったまま。
+          // どの端末でも同じ側を選ぶ決まりで片方にそろえる。
+          const pick = resolveProjectTie(localProject, remoteProject);
+          if (pick === 'remote') {
+            merged.projects[id] = remoteProject;
+            applied = true;
+            remoteNewer = true;
+          } else if (pick === 'local') {
+            localNewer = true;
+          }
+        }
+      });
+      Object.values(merged.projects).forEach(project => {
+        if (project && project.folderId && project.folderId !== UNCLASSIFIED_FOLDER_ID && !merged.folders[project.folderId]) {
+          project.folderId = UNCLASSIFIED_FOLDER_ID;
         }
       });
 

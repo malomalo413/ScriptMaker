@@ -519,6 +519,7 @@
       if (!name || !name.trim()) return;
       const id = 'folder_' + Date.now();
       state.folders[id] = { id, name: name.trim() };
+      touchFolderSyncMetadata(state.folders[id]);
       state.currentFolderId = id;
       saveState();
       renderProjectList();
@@ -531,6 +532,7 @@
       const name = prompt('フォルダ名', folder.name);
       if (!name || !name.trim()) return;
       folder.name = name.trim();
+      touchFolderSyncMetadata(folder);
       saveState();
       renderProjectList();
     }
@@ -544,6 +546,7 @@
         touchProjectSyncMetadata(project);
       });
       delete state.folders[id];
+      recordFolderDeletion(id);
       if (state.currentFolderId === id) state.currentFolderId = UNCLASSIFIED_FOLDER_ID;
       saveState();
       renderProjectList();
