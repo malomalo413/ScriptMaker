@@ -128,6 +128,16 @@
       }
     }
 
+    // 開いていないプロジェクトを一覧から変更したとき（フォルダ移動・名前変更など）に、
+    // そのプロジェクト自体を「更新済み」にする。saveState() は開いているプロジェクトしか
+    // 更新扱いにしないため、これがないと他の端末の古い内容と同じ新しさとみなされ同期されない。
+    function touchProjectSyncMetadata(project) {
+      if (!project || typeof project !== 'object' || editorApplyingCloudState) return;
+      project.updatedAt = new Date().toISOString();
+      project.revision = (Number(project.revision) || 0) + 1;
+      project.updatedByDeviceId = getEditorBackupDevice().id;
+    }
+
     function buildProjectSyncIndex(sourceState) {
       const projects = sourceState?.projects || {};
       const index = {};

@@ -538,7 +538,11 @@
       event.stopPropagation();
       if (id === UNCLASSIFIED_FOLDER_ID) return;
       if (!confirm('このフォルダを削除しますか？\nプロジェクトは未分類に移動します。')) return;
-      Object.values(state.projects).forEach(project => { if (project.folderId === id) project.folderId = UNCLASSIFIED_FOLDER_ID; });
+      Object.values(state.projects).forEach(project => {
+        if (project.folderId !== id) return;
+        project.folderId = UNCLASSIFIED_FOLDER_ID;
+        touchProjectSyncMetadata(project);
+      });
       delete state.folders[id];
       if (state.currentFolderId === id) state.currentFolderId = UNCLASSIFIED_FOLDER_ID;
       saveState();
@@ -548,7 +552,10 @@
       event.stopPropagation();
       const project = state.projects[projectId];
       if (!project) return;
-      project.folderId = event.target.value || UNCLASSIFIED_FOLDER_ID;
+      const nextFolderId = event.target.value || UNCLASSIFIED_FOLDER_ID;
+      if (project.folderId === nextFolderId) return;
+      project.folderId = nextFolderId;
+      touchProjectSyncMetadata(project);
       saveState();
       renderProjectList();
     }
@@ -663,6 +670,7 @@
       if (!nextTitle) return;
       if (nextTitle !== project.title) {
         project.title = nextTitle;
+        touchProjectSyncMetadata(project);
         saveState();
       }
       renamingProjectId = null;

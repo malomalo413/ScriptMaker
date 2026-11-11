@@ -277,6 +277,50 @@ test('キャラ編集・ライブラリ・セリフのスナップショット�
   assert(replaced.avatar.startsWith('data:') && !replaced.avatarImageId, '新しい画像を選んだら画像IDは外す');
 });
 
+// ---- 開いていないプロジェクトの変更も同期される ----
+test('一覧からフォルダ移動・名前変更したプロジェクトは、他の端末の古い内容より新しいと判定される', async () => {
+  const originals = { state, saveState, renderProjectList, renderEditorAfterCloudApply, saved: localStorage.getItem('script_assistant_data_v21') };
+  try {
+    saveState = () => true;
+    renderProjectList = () => {};
+    renderEditorAfterCloudApply = () => {};
+    const old = '2026-11-01T00:00:00.000Z';
+    const base = () => ({
+      projects: {
+        p1: { ...sampleProject(1), id: 'p1', folderId: UNCLASSIFIED_FOLDER_ID, updatedAt: old, revision: 3 },
+        p2: { ...sampleProject(1), id: 'p2', folderId: UNCLASSIFIED_FOLDER_ID, updatedAt: old, revision: 3 },
+        p3: { ...sampleProject(1), id: 'p3', title: '旧題', folderId: UNCLASSIFIED_FOLDER_ID, updatedAt: old, revision: 3 }
+      },
+      folders: { [UNCLASSIFIED_FOLDER_ID]: { id: UNCLASSIFIED_FOLDER_ID, name: '未分類' } },
+      currentProjectId: 'p1', currentFolderId: UNCLASSIFIED_FOLDER_ID,
+      editorUpdatedAt: old, editorRevision: 10, deletedProjects: {}
+    });
+    // PC：開いているのは p1。一覧から p2 をフォルダへ移動し、p3 の名前を変える
+    const pc = base();
+    pc.folders.f10 = { id: 'f10', name: '10月分' };
+    state = pc;
+    moveProjectToFolder({ stopPropagation() {}, target: { value: 'f10' } }, 'p2');
+    renamingProjectId = 'p3';
+    const input = document.createElement('input'); input.id = 'projectRenameInput_p3'; input.value = '新題';
+    document.body.appendChild(input);
+    try { confirmProjectRename({ stopPropagation() {} }, 'p3'); } finally { input.remove(); }
+    assert(pc.projects.p2.updatedAt > old && pc.projects.p2.revision === 4, 'フォルダ移動したプロジェクトが更新扱いになっていない');
+    assert(pc.projects.p3.updatedAt > old, '名前を変えたプロジェクトが更新扱いになっていない');
+    // スマホ：古いまま。PCの内容を受け取る
+    state = base();
+    const result = mergeEditorBackupPayload({ data: { state: JSON.parse(JSON.stringify(pc)) } });
+    assert(result.applied, '同期が反映されていない');
+    assertEqual(state.projects.p2.folderId, 'f10', 'フォルダ移動がスマホに届いていない');
+    assertEqual(state.projects.p3.title, '新題', '名前変更がスマホに届いていない');
+    assert(state.folders.f10, 'フォルダがスマホに届いていない');
+  } finally {
+    state = originals.state; saveState = originals.saveState; renderProjectList = originals.renderProjectList;
+    renderEditorAfterCloudApply = originals.renderEditorAfterCloudApply; renamingProjectId = null;
+    if (originals.saved == null) localStorage.removeItem('script_assistant_data_v21');
+    else localStorage.setItem('script_assistant_data_v21', originals.saved);
+  }
+});
+
 // ---- 実行 ----
 window.addEventListener('load', async () => {
   const list = document.getElementById('results');
